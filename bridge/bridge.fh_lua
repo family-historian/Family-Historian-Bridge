@@ -1,0 +1,124 @@
+-- FH MCP Bridge
+--
+-- IUP dialog with Start/Stop buttons. Start binds a local TCP listener and polls it via
+-- an IUP timer (not a manual while-loop — see docs/adr's prototype-era findings on why
+-- fhExhibitResponsiveness()+while-loop doesn't work). Stop unbinds it. Closing the
+-- dialog window ends the plugin and cleans up.
+--
+-- Confirmed in testing (prototype phase): while a session is running, FH's main window
+-- is locked. This is a deliberate "Session" (see CONTEXT.md) — start it to hand control
+-- to Claude for a bit, Stop when you want FH back.
+--
+-- Install: this file plus jsonEncode.lua, sandbox.lua, and runScript.lua must all be
+-- copied together into FH's Plugins folder (so require() can find the sibling modules) —
+-- see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/. This
+-- file itself is then loaded via Tools -> Plugins in FH, same as any other plugin.
+
+socket = require("socket")
+require("iuplua")
+iup.SetGlobal("CUSTOMQUITMESSAGE", "YES") -- avoids known FH/IUP interaction issue on quit
+
+local runScript = require("runScript")
+local json = require("jsonEncode")
+
+local PORT = 8734
+local server = nil
+
+local lblStatus = iup.label{title="Not listening.", padding="10x10"}
+local btnStart  = iup.button{title="Start", padding="4x4"}
+local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
+
+local dlg = iup.dialog{
+    iup.vbox{lblStatus, iup.hbox{btnStart, btnStop, gap="8"}, margin="10x10", gap="10"},
+    title="FH Bridge",
+    resize="NO", maxbox="NO", minbox="NO",
+    topmost="YES", size="220x"
+}
+
+local timPoll = iup.timer{time=100, run="NO"}
+
+-- Request framing: the bridge reads one line first.
+--   STOP           -- ends the Session immediately, same as clicking Stop.
+--   LUA <n>        -- followed by exactly n bytes: the script body, read via receive(n).
+-- This replaces the prototype's single-line-only receive("*l") read, which could not
+-- carry a multi-line Lua script.
+function timPoll:action_cb()
+    if not server then return end
+    local client = server:accept()
+    if not client then return end
+
+    client:settimeout(5)
+    local header = client:receive("*l")
+    if not header then
+        client:close()
+        return
+    end
+
+    if header:upper() == "STOP" then
+        client:send("STOPPING\n")
+        client:close()
+        -- treat a socket STOP the same as clicking the Stop button
+        return btnStop:action()
+    end
+
+    local byteCountStr = header:match("^LUA (%d+)$")
+    if not byteCountStr then
+        client:send(json.encode({ error = "expected STOP or LUA <n>" }) .. "\n")
+        client:close()
+        return
+    end
+
+    local n = tonumber(byteCountStr)
+    local script = client:receive(n)
+    if not script then
+        client:send(json.encode({ error = "expected " .. n .. " script bytes, connection closed early" }) .. "\n")
+        client:close()
+        return
+    end
+
+    local response = runScript.run(script)
+    client:send(response .. "\n")
+    client:close()
+
+    lblStatus.title = "Listening on 127.0.0.1:" .. PORT ..
+        "\nLast request handled at " .. os.date("%H:%M:%S")
+end
+
+function btnStart:action()
+    local bindErr
+    server, bindErr = socket.bind("127.0.0.1", PORT)
+    if not server then
+        lblStatus.title = "Failed to bind port " .. PORT .. ":\n" .. tostring(bindErr)
+        return
+    end
+    server:settimeout(0)
+    timPoll.run = "YES"
+    btnStart.active = "NO"
+    btnStop.active = "YES"
+    lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. "\nWaiting for a connection..."
+end
+
+function btnStop:action()
+    timPoll.run = "NO"
+    if server then
+        server:close()
+        server = nil
+    end
+    btnStart.active = "YES"
+    btnStop.active = "NO"
+    lblStatus.title = "Not listening."
+end
+
+function dlg:close_cb()
+    if server then
+        server:close()
+        server = nil
+    end
+    return iup.CLOSE
+end
+
+dlg:show()
+if (iup.MainLoopLevel() == 0) then
+    iup.MainLoop()
+end
+dlg:destroy()
