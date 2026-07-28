@@ -1,0 +1,147 @@
+# FH MCP Bridge — User Guide
+
+Ask Claude natural-language questions about your own Family Historian (FH) project —
+"who died between 1914 and 1918 in France or Belgium", "how many Munros are in the tree",
+"who are so-and-so's grandparents" — and get answers grounded in your actual, currently
+open FH data. No GEDCOM export, no separate app.
+
+This is **Stage 1: read-only**. Claude can look up and count things in your tree, but
+cannot create or edit anything yet (see [What it can do right now](#what-it-can-do-right-now)).
+
+## How it works, in short
+
+Two pieces talk to each other over your own machine only (nothing goes over the internet
+except your normal conversation with Claude):
+
+- A small **Bridge plugin** runs inside FH itself, with Start/Stop buttons.
+- An **MCP server** runs alongside Claude Desktop and forwards Claude's questions to the
+  Bridge as scripts, then hands the answers back.
+
+You start a **Session** in FH (click Start) before asking Claude anything; FH's main
+window is locked for the duration — that's expected, not a bug — and you get it back the
+moment you click Stop.
+
+## Requirements
+
+- Family Historian, installed and working (Windows natively, or via CrossOver on a Mac).
+- [Claude Desktop](https://claude.ai/download).
+- [Node.js](https://nodejs.org) (any current LTS release) — only needed to build the MCP
+  server once; nothing to install FH-side beyond copying files.
+
+## Install (clean machine)
+
+### 1. Get the project files
+
+Copy or clone this whole project folder onto the machine running FH.
+
+### 2. Build the MCP server
+
+In a terminal, from the project's `server` folder:
+
+```bash
+cd server
+npm install
+npm run build
+```
+
+This produces `server/dist/index.js` — the file Claude Desktop will run.
+
+### 3. Install the Bridge plugin into FH
+
+Copy these five files from the project's `bridge` folder into FH's Plugins folder:
+
+- `bridge.fh_lua`
+- `jsonEncode.lua`
+- `sandbox.lua`
+- `runScript.lua`
+- `watchdog.lua`
+
+All five must sit together in the same folder, so the plugin can find its own supporting
+files.
+
+**Where FH's Plugins folder is:**
+- Native Windows: `C:\ProgramData\Calico Pie\Family Historian\Plugins\`
+- Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
+
+In FH: **Tools -> Plugins -> New**, open `bridge.fh_lua` from that folder, click **Run**. A
+small "FH Bridge" dialog appears — leave it there; you'll use it every time you want
+Claude to look at your tree.
+
+### 4. Connect Claude Desktop to the server
+
+Open (or create) Claude Desktop's MCP config file:
+
+- Mac: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Add an entry for the server, using the **absolute path** to the file built in step 2:
+
+```json
+{
+  "mcpServers": {
+    "fh-mcp-bridge": {
+      "command": "node",
+      "args": ["/absolute/path/to/server/dist/index.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. You should now be able to ask it to use the `run_lua` tool (it'll
+usually pick it up automatically when you ask a genealogy question).
+
+## Using it
+
+1. **Open your project in FH**, then in the "FH Bridge" dialog:
+   - Pick **Read-only** or **Read-write** (Read-write is present but doesn't currently
+     grant anything extra — Stage 1 is read-only regardless of which you pick).
+   - Click **Start**. The dialog shows "Listening..." and FH's main window locks — this is
+     expected.
+2. **Ask Claude your question**, in plain English, in your normal conversation. No fixed
+   command list — ask however you'd ask a person.
+3. If your question is genuinely ambiguous (an unclear place-name spelling, an unspecified
+   number of generations), Claude will ask you to clarify rather than guess.
+4. **Click Stop** when you're done to get FH back. If you forget, the Session
+   auto-Stops after 5 minutes of no activity — the dialog returns to "Not listening."
+   automatically.
+
+## What it can do right now
+
+Stage 1 is read-only: Claude can look things up and count/list/cross-reference, but cannot
+create, edit, or delete anything in your project. In particular it can:
+
+- Iterate every Individual and Family record.
+- Read names, dates, places, and any Fact (birth, death, occupation, residence, etc.).
+- Follow family relationships (parents, children, spouses) to answer ancestor/descendant
+  questions.
+- Check whether a Fact has a source citation attached.
+
+It cannot yet: create or edit records, facts, source citations, or notes. The Read-write
+toggle exists in the dialog ahead of that work, but doesn't do anything extra yet.
+
+## Troubleshooting
+
+**"No FH Bridge Session is running"** — click Start in the FH Bridge dialog. Claude can't
+start a Session itself; there's no way around clicking Start yourself.
+
+**Session ended on its own** — either you clicked Stop, or 5 minutes passed with no
+question sent (the idle auto-Stop). Just click Start again.
+
+**Bridge won't Start / "Failed to bind port 8734"** — something else already has port 8734
+open, most likely an earlier copy of the plugin still running in FH's Plugin Editor. Close
+any other running instance and try again.
+
+**Claude's answer looks wrong** — Claude runs a fresh Lua script per question, so an
+unusual question can occasionally expose a scripting bug rather than a data problem. Ask
+it to double-check or explain how it got the number; it has full context on the script it
+just ran.
+
+## Privacy and security notes
+
+- The Bridge only listens on `127.0.0.1` (your own machine) — nothing your data touches
+  leaves your computer except your normal Claude conversation itself.
+- No password or login is required to talk to the Bridge; anything on your machine that
+  can reach `127.0.0.1:8734` while a Session is running could, in principle, do so too.
+  This is an accepted trade-off for a single-user local tool, not an oversight.
+- Scripts run in a restricted sandbox — even a buggy or unexpected script can only read
+  FH data, never touch your filesystem, network, or anything outside FH's own read API.
