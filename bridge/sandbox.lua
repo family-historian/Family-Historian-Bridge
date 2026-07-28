@@ -34,6 +34,7 @@ function M.build()
   env.fhGetDisplayText = fhGetDisplayText
   env.fhGetContextInfo = fhGetContextInfo
   env.fhGetAppVersion = fhGetAppVersion
+  env.fhGetTag = fhGetTag
 
   env.fhu = require('fhUtils')
 
