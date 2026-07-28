@@ -40,6 +40,21 @@ local usesAllowed = runScript.run("return { doubled = 21 * 2, greeting = string.
 check(contains(usesAllowed, '"doubled":42') and contains(usesAllowed, '"greeting":"HI"'),
   'script can use allowlisted math/string operations')
 
+-- Integration-level watchdog check, using the real default INSTRUCTION_LIMIT (not
+-- lowered, unlike watchdog.test.lua's own unit tests) — proves the wiring in runScript
+-- itself, not just watchdog.lua in isolation. Bounded by this file's own wall-clock
+-- check, plus the caller's process-level timeout as a hard backstop.
+local watchdogStart = os.clock()
+local runaway = runScript.run('while true do end')
+local watchdogElapsed = os.clock() - watchdogStart
+check(contains(runaway, '"error"') and contains(runaway, 'instruction limit'),
+  'an infinite-loop script is aborted with a JSON error instead of hanging')
+check(watchdogElapsed < 10, 'the watchdog aborts within a bounded wall-clock time')
+
+-- A normal script run immediately after a watchdog abort must be unaffected — proves
+-- the hook is cleared, not just that the aborted script itself terminated.
+check(runScript.run('return 99') == '99', 'a normal script after a watchdog abort still runs correctly')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

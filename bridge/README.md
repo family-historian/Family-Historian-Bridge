@@ -5,17 +5,20 @@ The FH-side half of the MCP bridge — see the repo root `CONTEXT.md` and
 implements.
 
 - `bridge.fh_lua` — the plugin itself: IUP dialog, TCP listener, request framing.
-- `runScript.lua` — compiles and runs a submitted script inside the sandbox, returns a
-  JSON-encoded result or error.
+- `runScript.lua` — compiles and runs a submitted script inside the sandbox (guarded by
+  the watchdog), returns a JSON-encoded result or error.
 - `sandbox.lua` — builds the allowlist `_ENV` a script executes inside.
 - `jsonEncode.lua` — hand-rolled JSON encoder (FH's Lua ships none).
+- `watchdog.lua` — aborts a script that exceeds an instruction budget, so an accidental
+  infinite loop can't hang FH with no recovery path.
 
-`runScript.lua`, `sandbox.lua`, and `jsonEncode.lua` have standalone unit tests
-(`*.test.lua`, run with a plain `lua` interpreter — no FH dependency):
+`runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, and `watchdog.lua` have standalone unit
+tests (`*.test.lua`, run with a plain `lua` interpreter — no FH dependency):
 
 ```bash
 lua bridge/jsonEncode.test.lua
 lua bridge/sandbox.test.lua
+lua bridge/watchdog.test.lua
 lua bridge/runScript.test.lua
 ```
 
@@ -24,7 +27,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
 
 ## Manual test
 
-1. Copy all four files in this folder into FH's Plugins folder (so `require()` can find
+1. Copy all five files in this folder into FH's Plugins folder (so `require()` can find
    the sibling modules) — `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native
    Windows, or the equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `bridge.fh_lua` from that folder, click Run.
@@ -56,5 +59,20 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    "
    ```
    Expected output: a JSON object containing `"error"` and `"deliberate test failure"`.
-6. Click Stop (or send `STOP\n` the same way as the prototype's original test) — FH
+6. Try a deliberately runaway script and confirm the watchdog aborts it — the dialog
+   should stay responsive, and this should return within a few seconds rather than
+   hanging FH:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'while true do end'
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a JSON object containing `"error"` and `"instruction limit"`.
+7. Click Stop (or send `STOP\n` the same way as the prototype's original test) — FH
    should become interactive again immediately.

@@ -5,6 +5,7 @@
 
 local sandbox = require('sandbox')
 local json = require('jsonEncode')
+local watchdog = require('watchdog')
 
 local M = {}
 
@@ -15,7 +16,10 @@ function M.run(scriptText)
     return json.encode({ error = 'script failed to compile: ' .. tostring(loadErr) })
   end
 
+  watchdog.start()
   local ok, result = pcall(chunk)
+  watchdog.stop()
+
   if not ok then
     return json.encode({ error = tostring(result) })
   end
