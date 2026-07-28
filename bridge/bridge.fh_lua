@@ -1,18 +1,25 @@
 -- FH MCP Bridge
 --
--- IUP dialog with Start/Stop buttons. Start binds a local TCP listener and polls it via
--- an IUP timer (not a manual while-loop — see docs/adr's prototype-era findings on why
--- fhExhibitResponsiveness()+while-loop doesn't work). Stop unbinds it. Closing the
--- dialog window ends the plugin and cleans up.
+-- IUP dialog with an Access-mode selector and Start/Stop buttons. Start binds a local TCP
+-- listener and polls it via an IUP timer (not a manual while-loop — see docs/adr's
+-- prototype-era findings on why fhExhibitResponsiveness()+while-loop doesn't work). Stop
+-- unbinds it. Closing the dialog window ends the plugin and cleans up. The same poll timer
+-- also watches for an idle Session (no accepted request for IDLE_TIMEOUT_SECONDS) and
+-- auto-Stops it, so a forgotten Session doesn't lock FH indefinitely.
 --
 -- Confirmed in testing (prototype phase): while a session is running, FH's main window
 -- is locked. This is a deliberate "Session" (see CONTEXT.md) — start it to hand control
 -- to Claude for a bit, Stop when you want FH back.
 --
--- Install: this file plus jsonEncode.lua, sandbox.lua, and runScript.lua must all be
--- copied together into FH's Plugins folder (so require() can find the sibling modules) —
--- see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/. This
--- file itself is then loaded via Tools -> Plugins in FH, same as any other plugin.
+-- Access mode (read-only / read-write) is chosen once at Start and fixed for the whole
+-- Session (see CONTEXT.md "Access mode"). Read-write is wired up here but grants no extra
+-- Sandbox capability yet — no write-side fh... functions exist in either allowlist this
+-- stage (see docs/adr/0001-arbitrary-sandboxed-lua-execution.md).
+--
+-- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, and watchdog.lua
+-- must all be copied together into FH's Plugins folder (so require() can find the sibling
+-- modules) — see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/.
+-- This file itself is then loaded via Tools -> Plugins in FH, same as any other plugin.
 
 socket = require("socket")
 require("iuplua")
@@ -22,18 +29,27 @@ local runScript = require("runScript")
 local json = require("jsonEncode")
 
 local PORT = 8734
+local IDLE_TIMEOUT_SECONDS = 300 -- auto-Stop a Session this long after its last accepted request
 local server = nil
+local lastActivityTime = nil
 
 local lblStatus = iup.label{title="Not listening.", padding="10x10"}
+local togReadOnly  = iup.toggle{title="Read-only", value="ON"}
+local togReadWrite = iup.toggle{title="Read-write"}
+local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
 local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
 
 local dlg = iup.dialog{
-    iup.vbox{lblStatus, iup.hbox{btnStart, btnStop, gap="8"}, margin="10x10", gap="10"},
+    iup.vbox{lblStatus, radAccessMode, iup.hbox{btnStart, btnStop, gap="8"}, margin="10x10", gap="10"},
     title="FH Bridge",
     resize="NO", maxbox="NO", minbox="NO",
     topmost="YES", size="220x"
 }
+
+local function currentAccessMode()
+    return togReadWrite.value == "ON" and "read-write" or "read-only"
+end
 
 local timPoll = iup.timer{time=100, run="NO"}
 
@@ -44,6 +60,11 @@ local timPoll = iup.timer{time=100, run="NO"}
 -- carry a multi-line Lua script.
 function timPoll:action_cb()
     if not server then return end
+
+    if lastActivityTime and os.time() - lastActivityTime > IDLE_TIMEOUT_SECONDS then
+        return btnStop:action()
+    end
+
     local client = server:accept()
     if not client then return end
 
@@ -55,6 +76,7 @@ function timPoll:action_cb()
     end
 
     if header:upper() == "STOP" then
+        lastActivityTime = os.time()
         client:send("STOPPING\n")
         client:close()
         -- treat a socket STOP the same as clicking the Stop button
@@ -63,10 +85,13 @@ function timPoll:action_cb()
 
     local byteCountStr = header:match("^LUA (%d+)$")
     if not byteCountStr then
+        -- malformed framing, not an accepted request — doesn't reset the idle timer
         client:send(json.encode({ error = "expected STOP or LUA <n>" }) .. "\n")
         client:close()
         return
     end
+
+    lastActivityTime = os.time()
 
     local n = tonumber(byteCountStr)
     local script = client:receive(n)
@@ -80,7 +105,7 @@ function timPoll:action_cb()
     client:send(response .. "\n")
     client:close()
 
-    lblStatus.title = "Listening on 127.0.0.1:" .. PORT ..
+    lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
         "\nLast request handled at " .. os.date("%H:%M:%S")
 end
 
@@ -92,10 +117,14 @@ function btnStart:action()
         return
     end
     server:settimeout(0)
+    lastActivityTime = os.time()
     timPoll.run = "YES"
     btnStart.active = "NO"
     btnStop.active = "YES"
-    lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. "\nWaiting for a connection..."
+    togReadOnly.active = "NO"
+    togReadWrite.active = "NO"
+    lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
+        "\nWaiting for a connection..."
 end
 
 function btnStop:action()
@@ -104,8 +133,11 @@ function btnStop:action()
         server:close()
         server = nil
     end
+    lastActivityTime = nil
     btnStart.active = "YES"
     btnStop.active = "NO"
+    togReadOnly.active = "YES"
+    togReadWrite.active = "YES"
     lblStatus.title = "Not listening."
 end
 
