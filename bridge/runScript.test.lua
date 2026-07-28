@@ -21,6 +21,18 @@ local function contains(haystack, needle)
   return haystack:find(needle, 1, true) ~= nil
 end
 
+-- Sandbox construction is now fallible (it requires fhUtils, an FH-shipped module not
+-- resolvable on this plain-lua test process's package.path) — a build failure must
+-- surface as a JSON error, not crash the caller, same as a compile/runtime error does.
+local buildFailure = runScript.run('return 1')
+check(contains(buildFailure, '"error"') and contains(buildFailure, 'fhUtils'),
+  'a sandbox construction failure (e.g. missing fhUtils) surfaces as a JSON error, not a crash')
+
+-- Stub fhUtils via package.loaded so require('fhUtils') inside sandbox.build() resolves
+-- without a real FH install, the same mechanism it'll use for real inside FH. Needed as a
+-- prerequisite for every assertion below, not something under test itself.
+package.loaded.fhUtils = { records = function(tag) end }
+
 check(runScript.run('return {ok=true}') == '{"ok":true}', 'trivial script returns encoded result')
 check(runScript.run('return 42') == '42', 'script returning a bare number')
 check(runScript.run('return nil') == 'null', 'script returning nil')

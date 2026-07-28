@@ -4,9 +4,11 @@
 -- exists in the real global environment. See CONTEXT.md "Sandbox" and
 -- docs/adr/0001-arbitrary-sandboxed-lua-execution.md.
 --
--- This ticket populates only the basic-Lua subset. FH's own read API (fhNewItemPtr,
--- fhGetItemText, etc.) and fhUtils are added by a later ticket (Bridge: real FH read
--- allowlist) once the sandbox mechanism itself is proven.
+-- Read-only allowlist: basic Lua, plus FH's read-side primitives and fhUtils. Both are
+-- wired through by reference from the real global environment, not reimplemented —
+-- FH's own Lua host installs the primitives as globals, and fhUtils ships with every FH
+-- install (require('fhUtils'), not bundled by this project). No write-side fh...
+-- functions are populated here yet (Stage 1 is read-only — see CONTEXT.md "Access mode").
 
 local M = {}
 
@@ -23,6 +25,17 @@ function M.build()
   env.pcall = pcall
   env.error = error
   env.os = { date = os.date }
+
+  env.fhNewItemPtr = fhNewItemPtr
+  env.MoveToFirstRecord = MoveToFirstRecord
+  env.MoveNext = MoveNext
+  env.IsNull = IsNull
+  env.fhGetItemText = fhGetItemText
+  env.fhGetDisplayText = fhGetDisplayText
+  env.fhGetContextInfo = fhGetContextInfo
+  env.fhGetAppVersion = fhGetAppVersion
+
+  env.fhu = require('fhUtils')
 
   return env
 end

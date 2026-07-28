@@ -10,7 +10,11 @@ local watchdog = require('watchdog')
 local M = {}
 
 function M.run(scriptText)
-  local env = sandbox.build()
+  local envOk, env = pcall(sandbox.build)
+  if not envOk then
+    return json.encode({ error = 'failed to build sandbox: ' .. tostring(env) })
+  end
+
   local chunk, loadErr = load(scriptText, 'run_lua', 't', env)
   if not chunk then
     return json.encode({ error = 'script failed to compile: ' .. tostring(loadErr) })

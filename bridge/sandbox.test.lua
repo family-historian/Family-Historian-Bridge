@@ -16,6 +16,25 @@ local function check(condition, label)
   end
 end
 
+-- FH installs its read primitives as globals in the real host process; stand in with
+-- dummies here so the test can verify sandbox.build() wires them through by reference,
+-- without needing a real FH.
+fhNewItemPtr = function() end
+MoveToFirstRecord = function() end
+MoveNext = function() end
+IsNull = function() end
+fhGetItemText = function() end
+fhGetDisplayText = function() end
+fhGetContextInfo = function() end
+fhGetAppVersion = function() end
+
+-- fhUtils ships with FH and isn't resolvable via package.path in this plain-lua test
+-- process; register a stub as a real Lua module so require('fhUtils') inside
+-- sandbox.build() resolves it via package.loaded, the same mechanism it'll use for real
+-- inside FH.
+local fakeFhu = { records = function(tag) end }
+package.loaded.fhUtils = fakeFhu
+
 local env = sandbox.build()
 
 -- Allowed basics are present and are the real thing (not stand-ins).
@@ -29,6 +48,21 @@ check(env.tonumber == tonumber, 'tonumber present')
 check(env.pcall == pcall, 'pcall present')
 check(env.error == error, 'error present (pure control flow, same risk profile as pcall)')
 check(type(env.os) == 'table' and type(env.os.date) == 'function', 'os.date present')
+
+-- FH's read-side primitives (raw record-iteration/field-read functions installed as
+-- globals by FH's own Lua host) are wired through by reference, not reimplemented.
+check(env.fhNewItemPtr == fhNewItemPtr, 'fhNewItemPtr present')
+check(env.MoveToFirstRecord == MoveToFirstRecord, 'MoveToFirstRecord present')
+check(env.MoveNext == MoveNext, 'MoveNext present')
+check(env.IsNull == IsNull, 'IsNull present')
+check(env.fhGetItemText == fhGetItemText, 'fhGetItemText present')
+check(env.fhGetDisplayText == fhGetDisplayText, 'fhGetDisplayText present')
+check(env.fhGetContextInfo == fhGetContextInfo, 'fhGetContextInfo present')
+check(env.fhGetAppVersion == fhGetAppVersion, 'fhGetAppVersion present')
+
+-- fhUtils (require('fhUtils')) is present, including its records(tag) iteration helper.
+check(env.fhu == fakeFhu, 'fhu (require("fhUtils")) present')
+check(type(env.fhu.records) == 'function', 'fhu.records present')
 
 -- Dangerous globals must be absent — the whole point of an allowlist sandbox.
 check(env.os.execute == nil, 'os.execute absent')

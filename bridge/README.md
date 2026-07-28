@@ -89,3 +89,23 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    auto-returns to "Not listening." and the selector becomes clickable again, with no
    request sent and without clicking Stop. Restore `IDLE_TIMEOUT_SECONDS` to its real value
    (`300`) afterward.
+9. FH read allowlist: with a real FH project open and a Session started (read-only),
+   confirm `fhu.records("INDI")` and the raw primitives are actually wired up against
+   real data — count every `INDI` record and cross-check against FH's own count (e.g.
+   Tools -> Reports, or the project's Individual count shown elsewhere in FH's UI). The
+   script below assumes `fhu.records(tag)` is a for-in iterator, per fhUtils' own docs
+   (this repo doesn't bundle fhUtils — it ships with every FH install, see issue #1's
+   "fhUtils dependency" note) — adjust the loop shape if that's wrong:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'local n = 0; for indi in fhu.records(\"INDI\") do n = n + 1 end; return n'
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a bare number matching FH's own count of Individuals in the open
+   project.
