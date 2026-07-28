@@ -71,7 +71,7 @@ function timPoll:action_cb()
     local n = tonumber(byteCountStr)
     local script = client:receive(n)
     if not script then
-        client:send(json.encode({ error = "expected " .. n .. " script bytes, connection closed early" }) .. "\n")
+        client:send(json.encode({ error = "expected " .. n .. " script bytes but the read failed (timeout or connection closed early)" }) .. "\n")
         client:close()
         return
     end
