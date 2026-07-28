@@ -24,12 +24,13 @@ function M.build()
   env.tonumber = tonumber
   env.pcall = pcall
   env.error = error
+  env.type = type
   env.os = { date = os.date }
 
+  -- MoveToFirstRecord/MoveNext/IsNull are FH item-pointer methods (ptr:MoveToFirstRecord
+  -- (tag)), not free globals — copying same-named globals here would only ever copy nil,
+  -- so they're deliberately absent. Confirmed against a real FH project, see #7.
   env.fhNewItemPtr = fhNewItemPtr
-  env.MoveToFirstRecord = MoveToFirstRecord
-  env.MoveNext = MoveNext
-  env.IsNull = IsNull
   env.fhGetItemText = fhGetItemText
   env.fhGetDisplayText = fhGetDisplayText
   env.fhGetContextInfo = fhGetContextInfo

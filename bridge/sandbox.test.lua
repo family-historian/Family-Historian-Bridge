@@ -20,9 +20,6 @@ end
 -- dummies here so the test can verify sandbox.build() wires them through by reference,
 -- without needing a real FH.
 fhNewItemPtr = function() end
-MoveToFirstRecord = function() end
-MoveNext = function() end
-IsNull = function() end
 fhGetItemText = function() end
 fhGetDisplayText = function() end
 fhGetContextInfo = function() end
@@ -48,14 +45,17 @@ check(env.tostring == tostring, 'tostring present')
 check(env.tonumber == tonumber, 'tonumber present')
 check(env.pcall == pcall, 'pcall present')
 check(env.error == error, 'error present (pure control flow, same risk profile as pcall)')
+check(env.type == type, 'type present')
 check(type(env.os) == 'table' and type(env.os.date) == 'function', 'os.date present')
 
 -- FH's read-side primitives (raw record-iteration/field-read functions installed as
 -- globals by FH's own Lua host) are wired through by reference, not reimplemented.
+-- MoveToFirstRecord/MoveNext/IsNull are deliberately NOT wired here even though an
+-- earlier ticket's allowlist listed them: FH exposes them only as colon-methods on the
+-- pointer object fhNewItemPtr() returns (ptr:MoveToFirstRecord(tag)), never as free
+-- globals, so copying a same-named global into env would only ever copy nil. Confirmed
+-- against a real FH project — see #7.
 check(env.fhNewItemPtr == fhNewItemPtr, 'fhNewItemPtr present')
-check(env.MoveToFirstRecord == MoveToFirstRecord, 'MoveToFirstRecord present')
-check(env.MoveNext == MoveNext, 'MoveNext present')
-check(env.IsNull == IsNull, 'IsNull present')
 check(env.fhGetItemText == fhGetItemText, 'fhGetItemText present')
 check(env.fhGetDisplayText == fhGetDisplayText, 'fhGetDisplayText present')
 check(env.fhGetContextInfo == fhGetContextInfo, 'fhGetContextInfo present')
