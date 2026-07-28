@@ -1,0 +1,80 @@
+import net from "node:net";
+
+// Matches the Bridge's hardcoded port (bridge/bridge.fh_lua) — see the spec's
+// "Port" decision: not configurable in Stage 1.
+export const DEFAULT_BRIDGE_HOST = "127.0.0.1";
+export const DEFAULT_BRIDGE_PORT = 8734;
+
+/** Thrown when the Bridge isn't listening — i.e. no FH Session is running. */
+export class BridgeConnectionRefusedError extends Error {
+  constructor() {
+    super("Connection refused — no FH Bridge Session is listening");
+    this.name = "BridgeConnectionRefusedError";
+  }
+}
+
+export interface RunLuaOnBridgeOptions {
+  host?: string;
+  port?: number;
+  timeoutMs?: number;
+}
+
+/**
+ * Sends a Lua script to the Bridge under the LUA <n> length-prefixed framing
+ * (see bridge/bridge.fh_lua) and resolves with the raw response body once the Bridge
+ * closes the connection. Does not parse the response — the caller (the run_lua tool)
+ * decides how to interpret it.
+ */
+export function runLuaOnBridge(
+  script: string,
+  options: RunLuaOnBridgeOptions = {},
+): Promise<string> {
+  const host = options.host ?? DEFAULT_BRIDGE_HOST;
+  const port = options.port ?? DEFAULT_BRIDGE_PORT;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+
+  return new Promise((resolve, reject) => {
+    const socket = net.connect({ host, port });
+    const chunks: Buffer[] = [];
+    let settled = false;
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(err);
+    };
+
+    const succeed = (value: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    socket.setTimeout(timeoutMs, () => {
+      fail(new Error(`Timed out waiting for the FH Bridge after ${timeoutMs}ms`));
+    });
+
+    socket.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "ECONNREFUSED") {
+        fail(new BridgeConnectionRefusedError());
+      } else {
+        fail(err);
+      }
+    });
+
+    socket.on("connect", () => {
+      const scriptBytes = Buffer.from(script, "utf8");
+      const header = Buffer.from(`LUA ${scriptBytes.byteLength}\n`, "utf8");
+      socket.end(Buffer.concat([header, scriptBytes]));
+    });
+
+    socket.on("data", (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "utf8"));
+    });
+
+    socket.on("close", () => {
+      succeed(Buffer.concat(chunks).toString("utf8"));
+    });
+  });
+}
