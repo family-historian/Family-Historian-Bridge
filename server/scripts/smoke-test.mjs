@@ -23,6 +23,24 @@ console.log(
   tools.tools.map((t) => t.name),
 );
 
+const resources = await client.listResources();
+console.log(`FH help resources listed: ${resources.resources.length}`);
+console.log("First resource:", resources.resources[0]);
+
+const searchResult = await client.callTool({
+  name: "search_fh_help",
+  arguments: { query: "merge" },
+});
+console.log("search_fh_help result:", searchResult.content[0].text);
+
+const [firstMatch] = JSON.parse(searchResult.content[0].text);
+if (firstMatch) {
+  const page = await client.readResource({ uri: firstMatch.uri });
+  console.log(
+    `Read resource ${firstMatch.uri}: ${page.contents[0].text.length} chars`,
+  );
+}
+
 const result = await client.callTool({
   name: "run_lua",
   arguments: { script: "return {ok=true, echoed=42}" },

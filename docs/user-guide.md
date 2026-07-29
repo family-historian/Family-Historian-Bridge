@@ -11,7 +11,9 @@ cannot create or edit anything yet (see [What it can do right now](#what-it-can-
 ## How it works, in short
 
 Two pieces talk to each other over your own machine only (nothing goes over the internet
-except your normal conversation with Claude):
+except your normal conversation with Claude and one deliberate exception: Claude can, if
+you ask it to, check family-historian.co.uk for an updated copy of the bundled FH8 help
+content — see [What it can do right now](#what-it-can-do-right-now)):
 
 - A small **Bridge plugin** runs inside FH itself, with Start/Stop buttons.
 - An **MCP server** runs alongside Claude Desktop and forwards Claude's questions to the
@@ -115,6 +117,12 @@ create, edit, or delete anything in your project. In particular it can:
 - Follow family relationships (parents, children, spouses) to answer ancestor/descendant
   questions.
 - Check whether a Fact has a source citation attached.
+- Search Family Historian 8's own official help documentation (menus, features, dialogs,
+  plugin authoring) and ground its answers in it, even with no Bridge Session running —
+  this doesn't touch your tree data at all. The help content is bundled with the server;
+  ask Claude to check for an update if you think it's stale and it'll fetch a fresh copy
+  from family-historian.co.uk — the one thing this server ever does over the internet,
+  and only when you ask for it.
 
 It cannot yet: create or edit records, facts, source citations, or notes. The Read-write
 toggle exists in the dialog ahead of that work, but doesn't do anything extra yet.

@@ -8,7 +8,14 @@ implements.
   bytes, reads the response until the Bridge closes the connection.
 - `src/runLuaTool.ts` — the `run_lua` MCP tool: translates a Bridge response (or a
   connection failure) into a tool result Claude can act on.
-- `src/index.ts` — entry point; registers the tool and connects over stdio.
+- `src/fhHelp.ts` — the bundled FH8 help corpus: `search_fh_help` tool and one MCP
+  Resource per help topic, served from `data/fh-help-corpus.jsonl`.
+- `src/fhHelpUpdate.ts` — `check_fh_help_updates`, the one tool that reaches the network:
+  fetches a fresh corpus from family-historian.co.uk if one exists, explicit-trigger only.
+- `src/index.ts` — entry point; registers the tools/resources and connects over stdio.
+- `data/fh-help-corpus.jsonl` — bundled copy of the FH8 help corpus (built by the sibling
+  `fh-help/fh8-help-site` project). `data/fh-help-corpus.meta.json` (gitignored) tracks
+  the ETag/Last-Modified of the last successful update check.
 
 ## Setup
 
