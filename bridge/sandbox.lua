@@ -36,6 +36,7 @@ function M.build()
   env.fhGetContextInfo = fhGetContextInfo
   env.fhGetAppVersion = fhGetAppVersion
   env.fhGetTag = fhGetTag
+  env.fhCallBuiltInFunction = fhCallBuiltInFunction
 
   env.fhu = require('fhUtils')
 
