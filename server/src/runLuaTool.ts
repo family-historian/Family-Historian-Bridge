@@ -20,6 +20,8 @@ Requires an active Bridge Session (the user clicks Start in the Bridge's dialog 
 
 Before calling this tool, resolve any ambiguity in the user's question yourself: an unspecified generation depth, an ambiguous place-name spelling, or an unclear date boundary should be confirmed with the user first, rather than guessing and running a script against an assumed interpretation.
 
+If you're unsure of the exact signature, argument shape, or calling convention of an FH function or item-pointer method you're about to use (e.g. what MoveToFirstChildItem takes, whether a parameter is optional, what fhGetItemText's data-reference syntax looks like), call search_fh_help for it BEFORE writing the script — the bundled FH8 API reference documents this precisely. Guessing and then fixing the guess by running it against the user's real, live project wastes round-trips on questions the help corpus already answers; only the project's own data (custom fact tags, field values) genuinely requires probing live.
+
 The script runs inside a restricted, allowlist-only Lua environment (no filesystem or network access beyond FH's own read API). Write a fresh script tailored to each question — there is no fixed set of predefined queries.`;
 
 function textResult(text: string, isError = false): CallToolResult {

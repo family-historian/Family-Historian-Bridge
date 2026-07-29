@@ -98,6 +98,8 @@ export function getFhHelpPage(corpus: FhHelpTopic[], url: string): string | unde
 // Steers Claude's own behavior when it uses this tool.
 export const SEARCH_FH_HELP_DESCRIPTION = `Search Family Historian 8's official help documentation (both the main FH8 help and the plugin-authoring help) for topics matching a query. Use this for questions about how Family Historian itself works — menus, features, dialogs, where something lives, how to write a plugin — as opposed to questions about the user's own tree data (use run_lua for that).
 
+Also use this BEFORE writing a run_lua script, any time you're not certain of an FH API function's exact signature, an item-pointer method's calling convention, or a data-reference syntax detail (e.g. "MoveToFirstChildItem", "fhGetItemText data reference syntax") — the corpus includes the full function reference. Cheaper and more reliable than guessing the shape and fixing it by trial and error against the user's real, live project.
+
 Returns a ranked list of matching topics, each with a "uri" — read that uri as an MCP resource to get the topic's full text. This search is a simple keyword match, not semantic search: try the FH feature/menu name a user would recognize, not a paraphrase.`;
 
 function searchResult(matches: FhHelpSearchResult[]): CallToolResult {
