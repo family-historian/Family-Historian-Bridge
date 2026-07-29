@@ -72,8 +72,38 @@ describe("searchFhHelp", () => {
     expect(results[0]?.url).toBe("/help/fh8/mapwindow.html");
   });
 
-  it("returns an empty array when nothing matches", () => {
+  it("returns an empty array when nothing matches, even after the token fallback", () => {
     expect(searchFhHelp(corpus, "xyzzy nonsense query")).toEqual([]);
+  });
+
+  it("falls back to individual-word matching when the full phrase isn't a literal substring anywhere", () => {
+    // Beta feedback, 2026-07-29: "merge individuals" returned 0 hits pre-fallback even
+    // though "merge" alone matches — a natural-language phrasing shouldn't dead-end.
+    const results = searchFhHelp(corpus, "merge individuals");
+    expect(results.map((r) => r.url)).toContain("/help/fh8/mergingpeople.html");
+  });
+
+  it("strips filler words so a full question still reduces to its meaningful terms", () => {
+    // "how", "do", "i" are stopwords; only "write" and "plugins" should drive the match.
+    const results = searchFhHelp(corpus, "how do I write plugins");
+    expect(results.map((r) => r.url)).toContain("/help/fh8plugins/tutorial/tutorial.htm");
+  });
+
+  it("ranks a topic matching more of the query's words above one matching fewer", () => {
+    const results = searchFhHelp(corpus, "map window shapes merge");
+    // "Map Window" text contains both "map"/"window" and "shapes"; the merge page only
+    // contains "merge" — the map page should rank first under the token fallback.
+    expect(results[0]?.url).toBe("/help/fh8/mapwindow.html");
+  });
+
+  it("weighs a single title match above several body-only matches on other topics", () => {
+    // "window" hits the Map Window page's title (one token); "select"/"records"/"choose"/
+    // "menu" all hit the merging page's body only (four tokens, zero in its title). A flat
+    // token count would rank the merging page first (4 hits vs 1); title/breadcrumb
+    // matches must outweigh raw body-match count, mirroring the primary search's own
+    // title > breadcrumb > text ordering.
+    const results = searchFhHelp(corpus, "window select records choose menu");
+    expect(results[0]?.url).toBe("/help/fh8/mapwindow.html");
   });
 
   it("returns the resource uri and an excerpt for each match", () => {

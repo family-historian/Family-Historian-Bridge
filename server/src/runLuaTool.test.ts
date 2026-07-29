@@ -66,4 +66,19 @@ describe("handleRunLua", () => {
 
     expect(result.isError).toBe(true);
   });
+
+  it("names the stale bridge_prototype_v2 plugin when its handshake answers instead of the current Bridge", async () => {
+    const result = await handleRunLua(
+      { script: "return 1" },
+      {
+        runLuaOnBridge: async () =>
+          "PROJECT_NAME: Lichfield Memorial\nPROJECT_FILE: C:\\...\nGEDCOM_FILE: \nAPP_MODE: \nAPP_VERSION: 8\nEND\n",
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/bridge_prototype_v2/);
+    expect(text).toMatch(/bridge\.fh_lua/);
+  });
 });

@@ -55,7 +55,10 @@ Short version:
 3. **Install the Bridge plugin into FH** — copy `bridge.fh_lua`, `jsonEncode.lua`,
    `sandbox.lua`, `runScript.lua`, and `watchdog.lua` (all five, together) from `bridge/`
    into FH's Plugins folder:
-   - Native Windows: `C:\ProgramData\Calico Pie\Family Historian\Plugins\`
+   - Native Windows, FH8: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` —
+     note the `8`. A same-machine FH7 install has its own `Family Historian\Plugins\`
+     (no version number) sitting right next to it, already populated with real plugins,
+     and it's easy to copy into the wrong one (confirmed on a beta install).
    - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
 
    Then in FH: **Tools -> Plugins -> New**, open `bridge.fh_lua` from that folder, click

@@ -62,7 +62,10 @@ All five must sit together in the same folder, so the plugin can find its own su
 files.
 
 **Where FH's Plugins folder is:**
-- Native Windows: `C:\ProgramData\Calico Pie\Family Historian\Plugins\`
+- Native Windows, **FH8**: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` — note
+  the `8`. If you also have FH7 installed, it has its own `Family Historian\Plugins\` (no
+  version number) sitting right next to this one, already populated with real plugins —
+  easy to copy into by mistake, and FH won't tell you if you do.
 - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
 
 In FH: **Tools -> Plugins -> New**, open `bridge.fh_lua` from that folder, click **Run**. A
@@ -90,7 +93,10 @@ Add an entry for the server, using the **absolute path** to the file built in st
 ```
 
 Restart Claude Desktop. You should now be able to ask it to use the `run_lua` tool (it'll
-usually pick it up automatically when you ask a genealogy question).
+usually pick it up automatically when you ask a genealogy question). If you're using
+Claude Code rather than Claude Desktop, a session started *before* the server was
+registered in its config won't have `run_lua` in its tool list — start a fresh session (or
+restart Claude Desktop) after adding the config, not before.
 
 ## Using it
 
@@ -117,6 +123,12 @@ create, edit, or delete anything in your project. In particular it can:
 - Follow family relationships (parents, children, spouses) to answer ancestor/descendant
   questions.
 - Check whether a Fact has a source citation attached.
+- Read your project's own custom fact types (e.g. a military-history project's
+  `_ATTR-REGIMENT`, `EVEN-ENLISTED`) as their real, resolved tags — not as a raw GEDCOM
+  `FACT`/`EVEN` plus a `TYPE` subtag the way they'd sit in an export. This is what makes a
+  question like "who died while serving in the armed forces" answerable at all, since that
+  filter depends entirely on your project's own custom facts, which no fixed command could
+  have anticipated.
 - Search Family Historian 8's own official help documentation (menus, features, dialogs,
   plugin authoring) and ground its answers in it, even with no Bridge Session running —
   this doesn't touch your tree data at all. The help content is bundled with the server;
@@ -138,6 +150,14 @@ question sent (the idle auto-Stop). Just click Start again.
 **Bridge won't Start / "Failed to bind port 8734"** — something else already has port 8734
 open, most likely an earlier copy of the plugin still running in FH's Plugin Editor. Close
 any other running instance and try again.
+
+**Claude reports "the old bridge_prototype_v2 plugin is answering, not the current
+Bridge"** — an earlier prototype plugin (title bar: "FH Bridge (prototype)", Start/Stop
+only, no Read-only/Read-write toggle) is still running and holding port 8734. Its dialog
+is **modal**, so while it's up you can't reach Tools -> Plugins to load the real
+`bridge.fh_lua` — Stop *and close* its window first, then load and Run `bridge.fh_lua`.
+The current Bridge's dialog is titled plainly "FH Bridge" and has the Read-only/Read-write
+selector.
 
 **Claude's answer looks wrong** — Claude runs a fresh Lua script per question, so an
 unusual question can occasionally expose a scripting bug rather than a data problem. Ask
