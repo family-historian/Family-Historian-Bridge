@@ -26,6 +26,7 @@ fhGetContextInfo = function() end
 fhGetAppVersion = function() end
 fhGetTag = function() end
 fhCallBuiltInFunction = function() end
+fhGetValueAsLink = function() end
 
 -- fhUtils ships with FH and isn't resolvable via package.path in this plain-lua test
 -- process; register a stub as a real Lua module so require('fhUtils') inside
@@ -63,6 +64,7 @@ check(env.fhGetContextInfo == fhGetContextInfo, 'fhGetContextInfo present')
 check(env.fhGetAppVersion == fhGetAppVersion, 'fhGetAppVersion present')
 check(env.fhGetTag == fhGetTag, 'fhGetTag present (needed to tell Facts apart from FAMC/FAMS/NAME/NOTE/OBJE children when walking an Individual\'s child items)')
 check(env.fhCallBuiltInFunction == fhCallBuiltInFunction, 'fhCallBuiltInFunction present (needed to call FH\'s built-in report functions, e.g. FactSentence, Lifedates, from a script)')
+check(env.fhGetValueAsLink == fhGetValueAsLink, 'fhGetValueAsLink present (needed to resolve a FAMS/FAMC link field to the linked Family/Individual record pointer)')
 
 -- fhUtils (require('fhUtils')) is present, including its records(tag) iteration helper.
 check(env.fhu == fakeFhu, 'fhu (require("fhUtils")) present')
