@@ -22,8 +22,13 @@ _Avoid_: Connection (a session can span many short-lived socket connections, one
 
 **Access mode**:
 The read-only/read-write toggle set by the user at session Start. Read-only exposes only
-FH's read API inside the sandbox; read-write additionally exposes FH's write API
-(`fhCreateItem`, `fhSetValueAsText`, etc.).
+FH's read API inside the sandbox; read-write additionally exposes FH's full write API —
+`fhSetLabelledText`, every `fhSetValueAs*` setter (`Age`/`Date`/`Integer`/`Link`/
+`RichText`/`Text`), `fhCreateItem`, `fhDeleteItem`, `fhMoveItemAfter`/`fhMoveItemBefore`,
+`fhSrcEnableAutoTitle`, and `fhGetFactTag`/`fhGetFlagTag` (including their
+`bCreateIfNone=true` schema-creating path) — all at once; there is no further staging
+within read-write. See docs/adr/0005-write-mode-errors-rethrown-for-fh-auto-undo.md for
+how a write script's own runtime errors are handled.
 _Avoid_: Permission level, mode (alone)
 
 **Sandbox**:
@@ -31,6 +36,16 @@ The restricted Lua environment (`_ENV` table passed to `load()`) that a submitte
 runs inside. Built as an allowlist — only explicitly added globals are visible — rather
 than starting from the real environment and stripping known-dangerous ones.
 _Avoid_: Denylist, restricted mode
+
+**FH auto-undo**:
+FH's own native safety net for project-data changes any Lua plugin makes — entirely
+outside this project's code. The user can always manually revert via FH's Ctrl-Z; FH also
+automatically undoes a plugin's changes if an uncaught Lua error escapes the plugin. This
+project implements no undo logic of its own anywhere in the bridge or server — see
+docs/adr/0005-write-mode-errors-rethrown-for-fh-auto-undo.md for how `run_lua` avoids
+swallowing a write script's error so this safety net gets a chance to fire.
+_Avoid_: Rollback (this project has no rollback code of its own — the mechanism is FH's,
+not ours)
 
 **run_lua**:
 The one MCP tool this server exposes to Claude. Takes a freshly-authored Lua script per
@@ -43,7 +58,10 @@ The MCP tool (issue #10) that runs a fixed, built-in Lua script — not a Claude
 one — returning record counts per record type plus a distinct-tag census (INDI and FAM
 child items, SOUR record child items, and Source template definitions), each tag paired
 with its occurrence count. Recomputed on every call; see
-docs/adr/0002-describe-project-no-server-cache.md for why it isn't cached.
+docs/adr/0002-describe-project-no-server-cache.md for why it isn't cached. Always executes
+in the Read-only sandbox regardless of the Session's own Access mode — its script is
+fixed and known to never call a write function, so there's no reason to ever run it with
+write capability available even during a read-write Session.
 _Avoid_: Census tool, project summary (there is exactly one tool with this name and shape)
 
 **author_fh_plugin**:
