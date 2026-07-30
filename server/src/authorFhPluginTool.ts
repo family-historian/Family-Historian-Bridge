@@ -1,0 +1,151 @@
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+
+// Steers Claude's own behavior when it uses this tool — see CONTEXT.md's
+// "author_fh_plugin" entry and docs/adr/0004-author-fh-plugin-text-only-flag-risky-calls.md.
+export const AUTHOR_FH_PLUGIN_DESCRIPTION = `Scaffold a standalone FH Report or Query plugin from Lua logic you author, wrapped in that plugin type's required boilerplate, and return it as plugin source text for the user to save and install themselves.
+
+This is a distinct trust mode from run_lua, not a variant of it. run_lua executes a script immediately, live, inside the user's own open FH process, under this Bridge's read-only sandbox allowlist. author_fh_plugin's output is never executed by the Bridge at all — it's unreviewed-until-installed text that only ever runs once the user saves it as a .fh_lua file and installs it themselves (double-click on Windows, or FH's own Tools -> Plugins -> New/Import), under FH's own trust boundary. Because of that, functions run_lua's sandbox excludes (fhShellExecute, filesystem functions like fhLoadTextFile/fhSaveTextFile, fhMessageBox, fhPromptUserForDate and the other fhPromptUserFor* dialogs, fhOutputResultSetColumn/fhOutputResultSetTitles, etc.) are fair game here — they are excluded from run_lua's sandbox, not forbidden knowledge, and this tool is exactly the other, human-reviewed path to them.
+
+Because installing a plugin file is a weaker review checkpoint than reading an inline chat answer, any call to one of these otherwise-excluded functions is flagged inline in the returned source with a "-- FLAGGED" comment, so the user notices it even if they only skim before installing.
+
+Plugin types (pass one as pluginType):
+- "report": generates a report displayed in FH's Report Window. Wraps your logic in the required \`@Type: report\` header and an \`FH_GetRecordSectionContent(snTop, rec, index, count)\` entry-point function — build the report body with snTop:SetHeading/SetBodyText and fhNewRichText, per the bundled FH8 help corpus's "Report Plugins" and "Sample Plugin Scripts" pages. Report plugins are read-only in FH's own sense: FH will error if the logic calls fhSetValue... functions, fhCreateItem, fhDeleteItem, fhMoveItemAfter, or fhMoveItemBefore — don't supply logic that does this for a Report plugin.
+- "query": produces a listing in FH's Query Window, e.g. a surname census or a list of records matching some condition. Unlike Report plugins, ordinary/query-style plugins have no required header field and no special entry-point function in FH's own plugin architecture — your logic runs top-to-bottom as the whole plugin body, ending in one or more fhOutputResultSetColumn calls (optionally preceded by fhOutputResultSetTitles) per the bundled help corpus's "Sample Plugin Scripts" page (e.g. Surname Summary, Find Date Phrases). This tool deliberately does not invent a header or entry point for this type — their absence is what makes an ordinary plugin structurally distinct from a Report plugin.
+
+This tool's output is text only — it never writes the plugin file to disk itself. The user saves it themselves wherever they want, then installs it under FH's own permission model.`;
+
+// Functions run_lua's sandbox (bridge/sandbox.lua) never wires into its allowlist — kept
+// in sync by hand with bridge/sandbox.test.lua's own exclusion-assertion list, the single
+// authoritative enumeration of what run_lua excludes. author_fh_plugin's output sits
+// outside that trust boundary entirely (see CONTEXT.md "author_fh_plugin" and
+// docs/adr/0004-author-fh-plugin-text-only-flag-risky-calls.md), so these are legitimate
+// to use here — they're flagged for the user's review, not blocked.
+export const SANDBOX_EXCLUDED_FUNCTIONS = [
+  "fhCreateItem",
+  "fhDeleteItem",
+  "fhMoveItemAfter",
+  "fhMoveItemBefore",
+  "fhSrcEnableAutoTitle",
+  "fhGetFactTag",
+  "fhGetFlagTag",
+  "fhSetStringEncoding",
+  "fhSetConversionLossFlag",
+  "fhShellExecute",
+  "fhLoadTextFile",
+  "fhSaveTextFile",
+  "fhGetIniFileValue",
+  "fhSetIniFileValue",
+  "fhGetClipboardData",
+  "fhSleep",
+  "fhOverridePreference",
+  "fhMessageBox",
+  "fhDisplayRichTextBox",
+  "fhPromptUserForDate",
+  "fhPromptUserForRecordSel",
+  "fhPromptUserForRichText",
+  "fhUpdateDisplay",
+  "fhOutputResultSetColumn",
+  "fhOutputResultSetTitles",
+  "fhGetValueAsBlob",
+  "fhSetValueAsBlob",
+  "fhGetPluginDataFileName",
+  "fhExhibitResponsiveness",
+  "fhInitialise",
+] as const;
+
+// Text match, not an AST-based call-site check — can also match the name inside a string
+// literal or a pre-existing comment in the supplied logic. That's an acceptable direction
+// to err in: a false-positive flag just adds one harmless extra review comment, whereas a
+// false negative would silently hide a real excluded call.
+const EXCLUDED_CALL_PATTERN = new RegExp(
+  `\\b(${SANDBOX_EXCLUDED_FUNCTIONS.join("|")})\\b`,
+  "g",
+);
+
+function flagExcludedCalls(logic: string): string {
+  return logic
+    .split("\n")
+    .flatMap((line) => {
+      const matches = new Set<string>();
+      for (const match of line.matchAll(EXCLUDED_CALL_PATTERN)) {
+        matches.add(match[1]);
+      }
+      if (matches.size === 0) {
+        return [line];
+      }
+      // A standalone comment line ahead of the match, never appended to the match's own
+      // line: an excluded call's arguments can themselves span multiple physical lines
+      // (a comma-continued call is valid Lua), and a trailing `--` comment on just the
+      // first of those lines would silently truncate the statement.
+      const indent = line.match(/^\s*/)?.[0] ?? "";
+      const flag = `${indent}-- FLAGGED: excluded from run_lua's sandbox (${[...matches].join(", ")}) — reviewed here, not forbidden. See author_fh_plugin's tool description.`;
+      return [flag, line];
+    })
+    .join("\n");
+}
+
+function buildReportPlugin(logic: string): string {
+  const indentedLogic = flagExcludedCalls(logic)
+    .split("\n")
+    .map((line) => (line.length > 0 ? `  ${line}` : line))
+    .join("\n");
+
+  return `--[[
+@Type: report
+]]
+
+function FH_GetRecordSectionContent(snTop, rec, index, count)
+${indentedLogic}
+end`;
+}
+
+function buildQueryPlugin(logic: string): string {
+  return `--[[
+@Description: Generated by author_fh_plugin. An ordinary FH plugin producing a Query Window result set — no @Type header and no entry-point function, unlike a Report plugin (see "Special Plugin Types" / "Sample Plugin Scripts" in the bundled FH8 help corpus).
+]]
+
+${flagExcludedCalls(logic)}`;
+}
+
+export interface AuthorFhPluginInput {
+  pluginType: "report" | "query";
+  logic: string;
+}
+
+export async function handleAuthorFhPlugin(input: AuthorFhPluginInput): Promise<CallToolResult> {
+  const pluginSource =
+    input.pluginType === "report" ? buildReportPlugin(input.logic) : buildQueryPlugin(input.logic);
+
+  const text = `${pluginSource}
+
+---
+Save this as a .fh_lua file yourself and install it under FH's own permission model — this tool never writes it to disk. Double-click the file to install on Windows, or use FH's own Tools -> Plugins -> New/Import option.
+
+Any line above marked "-- FLAGGED" calls a function excluded from run_lua's sandbox. That's expected here, not a problem to fix — but review each flagged line before installing, the same way you'd review any other line in a plugin you're about to run.`;
+
+  return { content: [{ type: "text", text }] };
+}
+
+export function registerAuthorFhPluginTool(server: McpServer): void {
+  server.registerTool(
+    "author_fh_plugin",
+    {
+      description: AUTHOR_FH_PLUGIN_DESCRIPTION,
+      inputSchema: {
+        pluginType: z
+          .enum(["report", "query"])
+          .describe(
+            "Which kind of standalone FH plugin to scaffold: \"report\" (displayed in the Report Window, via FH_GetRecordSectionContent) or \"query\" (a Query Window result set, via fhOutputResultSetColumn).",
+          ),
+        logic: z
+          .string()
+          .describe(
+            "The plugin's query/report logic in Lua, authored by you. For pluginType \"report\", this is the body of FH_GetRecordSectionContent (snTop/rec/index/count are in scope). For pluginType \"query\", this is the whole top-level plugin body, ending in one or more fhOutputResultSetColumn calls.",
+          ),
+      },
+    },
+    (input) => handleAuthorFhPlugin(input),
+  );
+}

@@ -48,15 +48,21 @@ _Avoid_: Census tool, project summary (there is exactly one tool with this name 
 
 **author_fh_plugin**:
 The MCP tool (issue #9) that scaffolds a standalone FH Report/Query plugin: Claude authors
-the query/report logic, the tool wraps it in the plugin type's required boilerplate
-(header directive, entry-point signature) and returns it as text for the user to save
-themselves as a `.fh_lua` file. Distinct trust model from `run_lua`: this output is never
-executed by the bridge — it's unreviewed-until-installed, run under FH's own trust
-boundary once the user installs it (double-click on Windows, or FH's Import option), so
-functions `run_lua`'s sandbox excludes (`fhShellExecute`, filesystem functions,
-`fhMessageBox`, `fhPromptUserFor*`, etc.) are fair game here. Any such function used in
-the generated script is flagged inline in the output, since installing a plugin is a
-weaker review step than reviewing an inline chat answer.
+the query/report logic, the tool wraps it in the plugin type's required boilerplate, and
+returns it as text for the user to save themselves as a `.fh_lua` file. The two plugin
+types get different treatment, not just different headers: a Report plugin gets the
+required `@Type: report` header plus an `FH_GetRecordSectionContent` entry-point function
+wrapped around the logic; a Query plugin gets neither, since ordinary/query-style plugins
+have no required header field or entry-point function in FH's own plugin architecture —
+that absence is what structurally distinguishes it from a Report plugin, not an
+oversight. Distinct trust model from `run_lua`: this output is never executed by the
+bridge — it's unreviewed-until-installed, run under FH's own trust boundary once the user
+installs it (double-click on Windows, or FH's Import option), so functions `run_lua`'s
+sandbox excludes (`fhShellExecute`, filesystem functions, `fhMessageBox`,
+`fhPromptUserFor*`, `fhOutputResultSetColumn`/`fhOutputResultSetTitles`, etc.) are fair
+game here. Any such function used in the generated script is flagged inline in the
+output, since installing a plugin is a weaker review step than reviewing an inline chat
+answer.
 _Avoid_: Plugin generator (alone, without the trust-model distinction from `run_lua` —
 that distinction is the point of this tool existing separately)
 

@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerRunLuaTool } from "./runLuaTool.js";
 import { registerDescribeProjectTool } from "./describeProjectTool.js";
+import { registerAuthorFhPluginTool } from "./authorFhPluginTool.js";
 import { loadCorpusFromFile, registerFhHelpTools } from "./fhHelp.js";
 import type { FhHelpCorpusStore } from "./fhHelp.js";
 import { makeDefaultFhHelpUpdateDeps, registerCheckFhHelpUpdatesTool } from "./fhHelpUpdate.js";
@@ -33,6 +34,7 @@ const server = new McpServer({
 
 registerRunLuaTool(server);
 registerDescribeProjectTool(server);
+registerAuthorFhPluginTool(server);
 
 const fhHelpStore: FhHelpCorpusStore = { topics: loadCorpusFromFile(FH_HELP_CORPUS_PATH) };
 registerFhHelpTools(server, fhHelpStore);
