@@ -119,8 +119,14 @@ describe("SANDBOX_EXCLUDED_FUNCTIONS", () => {
 
     // sandbox.test.lua asserts each excluded FH function absent with `env.fhX == nil`;
     // allowed functions are instead asserted `== <realGlobal>`, so this pattern picks out
-    // exactly the excluded set without needing to parse the whole file.
-    const excludedInLua = [...sandboxTestLua.matchAll(/env\.(fh\w+) == nil/g)].map((m) => m[1]);
+    // exactly the excluded set without needing to parse the whole file. fhBridge is gated
+    // the same read-write-only way (env.fhBridge == nil under read-only, issue #18) but
+    // isn't a real FH API function — it's this project's own sourceHelper.lua module alias,
+    // never something a hand-authored plugin would call — so it doesn't belong in
+    // SANDBOX_EXCLUDED_FUNCTIONS and must be filtered back out here.
+    const excludedInLua = [...sandboxTestLua.matchAll(/env\.(fh\w+) == nil/g)]
+      .map((m) => m[1])
+      .filter((name) => name !== "fhBridge");
 
     expect(excludedInLua.length).toBeGreaterThan(0);
     expect(new Set(SANDBOX_EXCLUDED_FUNCTIONS)).toEqual(new Set(excludedInLua));
