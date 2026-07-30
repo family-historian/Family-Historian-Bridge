@@ -1,10 +1,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import {
-  BridgeConnectionRefusedError,
-  runLuaOnBridge as defaultRunLuaOnBridge,
-} from "./bridgeClient.js";
+import { runLuaOnBridge as defaultRunLuaOnBridge } from "./bridgeClient.js";
+import { describeBridgeConnectionError, interpretBridgeResponse } from "./bridgeResponse.js";
 
 export interface RunLuaDeps {
   runLuaOnBridge: (script: string) => Promise<string>;
@@ -32,30 +30,6 @@ A few call shapes that never vary and are easy to get wrong on a first guess:
 
 The script runs inside a restricted, allowlist-only Lua environment (no filesystem or network access beyond FH's own read API). Write a fresh script tailored to each question — there is no fixed set of predefined queries.`;
 
-function textResult(text: string, isError = false): CallToolResult {
-  return { content: [{ type: "text", text }], isError };
-}
-
-// bridge_prototype_v2.fh_lua (an earlier, superseded prototype plugin) answers any
-// connection on the same port with a "PROJECT_NAME: ...\n...\nEND" handshake block
-// instead of the current Bridge's JSON framing. Left running, it silently steals the
-// port from bridge.fh_lua and every run_lua call fails with a raw JSON-parse error that
-// doesn't name the actual cause — beta feedback, 2026-07-29.
-function isStalePrototypeHandshake(raw: string): boolean {
-  const trimmed = raw.trim();
-  return trimmed.startsWith("PROJECT_NAME:") && trimmed.endsWith("END");
-}
-
-function isLuaErrorShape(value: unknown): value is { error: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
-    typeof (value as Record<string, unknown>).error === "string"
-  );
-}
-
 export async function handleRunLua(
   input: { script: string },
   deps: RunLuaDeps = defaultDeps,
@@ -64,42 +38,10 @@ export async function handleRunLua(
   try {
     raw = await deps.runLuaOnBridge(input.script);
   } catch (err) {
-    if (err instanceof BridgeConnectionRefusedError) {
-      return textResult(
-        "No FH Bridge Session is running — ask the user to click Start in the FH Bridge dialog before retrying.",
-        true,
-      );
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    return textResult(`Bridge communication error: ${message}`, true);
+    return describeBridgeConnectionError(err);
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    if (isStalePrototypeHandshake(raw)) {
-      return textResult(
-        "This is the old bridge_prototype_v2 plugin answering on port 8734, not the current Bridge. Tell the user to Stop and close its dialog (it's modal, so it blocks Tools -> Plugins until closed), then load and Run bridge.fh_lua instead.",
-        true,
-      );
-    }
-    return textResult(
-      `Bridge returned a response that could not be parsed as JSON: ${raw}`,
-      true,
-    );
-  }
-
-  // A script's own error path (compile error, runtime error) is wrapped by the Bridge
-  // as exactly {"error": "<message>"} — see bridge/runScript.lua. A script that
-  // legitimately returns a single-key {error: "..."} object as its own data would be
-  // (mis)read the same way; accepted as a rare edge case of this wire shape rather than
-  // a reason to redesign an already-shipped, manually-verified protocol (ticket #2).
-  if (isLuaErrorShape(parsed)) {
-    return textResult(`Script error: ${parsed.error}`, true);
-  }
-
-  return textResult(JSON.stringify(parsed));
+  return interpretBridgeResponse(raw);
 }
 
 export function registerRunLuaTool(
