@@ -40,12 +40,24 @@ local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
 local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
 
+lblStatus.expand = "HORIZONTAL"
+
 local dlg = iup.dialog{
-    iup.vbox{lblStatus, radAccessMode, iup.hbox{btnStart, btnStop, gap="8"}, margin="10x10", gap="10"},
+    iup.vbox{
+        lblStatus, radAccessMode,
+        iup.fill{expand="YES"},
+        iup.hbox{btnStart, btnStop, gap="8"},
+        margin="10x10", gap="10"
+    },
     title="FH Bridge",
-    resize="NO", maxbox="NO", minbox="NO",
-    topmost="YES", size="220x"
+    resize="YES", maxbox="NO", minbox="NO",
+    topmost="YES", size="320x"
 }
+-- Map first so RASTERSIZE reflects the natural layout size, then use that as the
+-- floor for MINSIZE -- otherwise a user could resize the dialog small enough to
+-- push the Start/Stop buttons off-screen, the same failure this fix is for.
+dlg:map()
+dlg.minsize = dlg.rastersize
 
 local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"

@@ -39,7 +39,12 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    Click Stop and confirm the selector becomes clickable again. Select Read-write, click
    Start again, and confirm the status label now shows "(read-write)" — Sandbox behavior
    is unchanged either way this stage, so only the label/lock differs. Click Stop.
-4. From a terminal, send a trivial script and confirm the JSON comes back correctly:
+4. Resize: drag the dialog wider and taller. Confirm the status label's text isn't
+   truncated at the new width, and that the Start/Stop buttons stay pinned to the bottom
+   of the dialog rather than floating in the middle. Try shrinking it back down and
+   confirm it stops shrinking while the buttons are still fully visible (the MINSIZE
+   floor) instead of letting them go off-screen (issue #12).
+5. From a terminal, send a trivial script and confirm the JSON comes back correctly:
    ```bash
    python3 -c "
    import socket
@@ -52,7 +57,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    "
    ```
    Expected output: `{"ok":true,"echoed":42}`
-5. Try a script that errors, and confirm it comes back as a JSON error instead of
+6. Try a script that errors, and confirm it comes back as a JSON error instead of
    crashing the Session (the dialog should still show "Listening..." afterward):
    ```bash
    python3 -c "
@@ -66,7 +71,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    "
    ```
    Expected output: a JSON object containing `"error"` and `"deliberate test failure"`.
-6. Try a deliberately runaway script and confirm the watchdog aborts it — the dialog
+7. Try a deliberately runaway script and confirm the watchdog aborts it — the dialog
    should stay responsive, and this should return within a few seconds rather than
    hanging FH:
    ```bash
@@ -81,15 +86,15 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    "
    ```
    Expected output: a JSON object containing `"error"` and `"instruction limit"`.
-7. Click Stop (or send `STOP\n` the same way as the prototype's original test) — FH
+8. Click Stop (or send `STOP\n` the same way as the prototype's original test) — FH
    should become interactive again immediately.
-8. Idle-timeout auto-Stop: temporarily lower `IDLE_TIMEOUT_SECONDS` near the top of
+9. Idle-timeout auto-Stop: temporarily lower `IDLE_TIMEOUT_SECONDS` near the top of
    `bridge.fh_lua` (e.g. to `10`) for a fast test, reload the plugin, click Start, then
    leave the Session idle (no request sent) past that duration. Confirm the dialog
    auto-returns to "Not listening." and the selector becomes clickable again, with no
    request sent and without clicking Stop. Restore `IDLE_TIMEOUT_SECONDS` to its real value
    (`300`) afterward.
-9. FH read allowlist: with a real FH project open and a Session started (read-only),
+10. FH read allowlist: with a real FH project open and a Session started (read-only),
    confirm `fhu.records("INDI")` and the raw primitives are actually wired up against
    real data — count every `INDI` record and cross-check against FH's own count (e.g.
    Tools -> Reports, or the project's Individual count shown elsewhere in FH's UI). The
