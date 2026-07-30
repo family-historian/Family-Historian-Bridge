@@ -52,15 +52,17 @@ This produces `server/dist/index.js` — the file Claude Desktop will run.
 
 ### 3. Install the Bridge plugin into FH
 
-Copy these five files from the project's `bridge` folder into FH's Plugins folder:
+Copy these seven files from the project's `bridge` folder into FH's Plugins folder:
 
 - `bridge.fh_lua`
 - `jsonEncode.lua`
 - `sandbox.lua`
 - `runScript.lua`
 - `watchdog.lua`
+- `requestFraming.lua`
+- `sourceHelper.lua`
 
-All five must sit together in the same folder, so the plugin can find its own supporting
+All seven must sit together in the same folder, so the plugin can find its own supporting
 files.
 
 **Where FH's Plugins folder is:**

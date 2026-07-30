@@ -59,8 +59,8 @@ Short version:
    ```
    This produces `server/dist/index.js`.
 3. **Install the Bridge plugin into FH** — copy `bridge.fh_lua`, `jsonEncode.lua`,
-   `sandbox.lua`, `runScript.lua`, `watchdog.lua`, and `requestFraming.lua` (all six,
-   together) from `bridge/` into FH's Plugins folder:
+   `sandbox.lua`, `runScript.lua`, `watchdog.lua`, `requestFraming.lua`, and
+   `sourceHelper.lua` (all seven, together) from `bridge/` into FH's Plugins folder:
    - Native Windows, FH8: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` —
      note the `8`. A same-machine FH7 install has its own `Family Historian\Plugins\`
      (no version number) sitting right next to it, already populated with real plugins,

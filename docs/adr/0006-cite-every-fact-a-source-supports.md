@@ -1,6 +1,6 @@
 # Cite every fact a source supports, and offer a shared citeSource helper
 
-Working a real certificate (issue: Nellie Record's birth certificate, Source #41) showed
+Working a real certificate (case: Nellie Record's birth certificate, Source #41) showed
 two gaps in how this project handles sources. First, only the Fact the user explicitly
 asked about (Nellie's `BIRT`) got a citation — the same certificate also names her
 parents and states her father's occupation, none of which were cited or even entered,
