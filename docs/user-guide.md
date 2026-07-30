@@ -129,6 +129,9 @@ create, edit, or delete anything in your project. In particular it can:
   question like "who died while serving in the armed forces" answerable at all, since that
   filter depends entirely on your project's own custom facts, which no fixed command could
   have anticipated.
+- Give you a quick census of the whole project — record counts per record type, plus how
+  often each tag and custom fact appears — a good first question when you haven't asked
+  Claude anything about this project yet ("give me an overview of this project").
 - Search Family Historian 8's own official help documentation (menus, features, dialogs,
   plugin authoring) and ground its answers in it, even with no Bridge Session running —
   this doesn't touch your tree data at all. The help content is bundled with the server;
@@ -136,8 +139,38 @@ create, edit, or delete anything in your project. In particular it can:
   from family-historian.co.uk — the one thing this server ever does over the internet,
   and only when you ask for it.
 
-It cannot yet: create or edit records, facts, source citations, or notes. The Read-write
-toggle exists in the dialog ahead of that work, but doesn't do anything extra yet.
+It cannot yet: create or edit records, facts, source citations, or notes *while answering
+a live question*. The Read-write toggle exists in the dialog ahead of that work, but
+doesn't do anything extra yet. This is separate from asking for a standalone plugin (see
+below), which is not bound by the same read-only rule.
+
+## Getting a standalone plugin written for you
+
+Separately from asking live questions, you can ask Claude to write you a complete,
+installable FH plugin — for example:
+
+- "Write me a Report plugin that lists everyone's occupation next to their name."
+- "Write me a Query plugin that counts how many people have each surname."
+
+This is a different mode from the live Q&A above, not an extension of it:
+
+- Claude doesn't run this script itself. It hands back the complete plugin as plain
+  text, for you to save yourself as a `.fh_lua` file and install the normal FH way —
+  double-click it on Windows, or use FH's own **Tools -> Plugins -> New** (or **Import**).
+- No Bridge Session is needed for this — it doesn't touch your live project at all
+  until you choose to install and run the plugin yourself, under FH's own permission
+  model.
+- Because you're the one reviewing and running it, it isn't limited by Stage 1's
+  read-only rule the way a live question is — a generated plugin can do things (show a
+  message box, read/write a file, edit your project) that asking Claude a question never
+  can. This is intentional, not a gap in the read-only guarantee above.
+- Any line that uses one of those otherwise-off-limits functions is marked with a
+  `-- FLAGGED` comment directly above it in the returned text. Read those lines before
+  you install — that's the entire purpose of the flag, so don't skip past them just
+  because "an AI wrote it."
+
+Tell Claude which kind you want — a **Report** plugin (shows in FH's Report Window) or a
+**Query** plugin (shows a list in FH's Query Window) — and what it should do.
 
 ## Troubleshooting
 

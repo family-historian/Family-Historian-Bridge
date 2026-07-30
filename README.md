@@ -8,8 +8,11 @@ scripts to a companion FH plugin over a local TCP socket.
 
 - Let Claude answer natural-language genealogy questions grounded in the user's actual,
   currently open FH data ("who died between 1914 and 1918 in France or Belgium", "how many
-  Munros are in the tree", "who are so-and-so's grandparents", "write a narrative report
-  for this person with sources").
+  Munros are in the tree", "who are so-and-so's grandparents").
+- Let Claude write the user a complete, standalone FH Report or Query plugin to install
+  and run themselves — a separate, human-reviewed path that isn't bound by Stage 1's
+  read-only rule, since the user runs it under FH's own permission model, not the
+  Bridge's.
 - Keep everything local: both halves talk to each other on `127.0.0.1` only. The one
   deliberate exception is an explicit, user-triggered check for an updated copy of FH8's
   bundled help content from family-historian.co.uk.
@@ -86,7 +89,9 @@ only needed to build the server once).
 
 Open the FH project, click **Start** in the "FH Bridge" dialog, then ask Claude a
 genealogy question in plain English. See
-[docs/user-guide.md](docs/user-guide.md#using-it) for the full walkthrough.
+[docs/user-guide.md](docs/user-guide.md#using-it) for the full walkthrough, and
+[docs/user-guide.md#getting-a-standalone-plugin-written-for-you](docs/user-guide.md#getting-a-standalone-plugin-written-for-you)
+for asking Claude to write you a standalone plugin instead (no Bridge Session needed).
 
 ## Development
 
