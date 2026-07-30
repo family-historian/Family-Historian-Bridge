@@ -27,6 +27,8 @@ A few call shapes that never vary and are easy to get wrong on a first guess:
 - Custom facts are usually not reachable by a data-reference string (~.FACT[1].TYPE and similar return empty) — walk child items with MoveToFirstChildItem/MoveNext and read each one's fhGetTag() instead.
 - SEX resolves to the string "Male"/"Female", not "M"/"F" — a sex == "M" test silently matches nothing.
 - Family Historian resolves custom facts to their own real tags (e.g. _ATTR-REGIMENT, EVEN-ENLISTED), not a generic FACT/EVEN plus a TYPE subtag the way they'd sit in a raw GEDCOM export — walking the tree gives you the resolved tag directly.
+- A fact's Rejected flag always overrides its Preferred flag — a fact flagged both Rejected and Preferred is never treated as preferred. Don't read Preferred alone as "this is the one FH would display by default."
+- fhGetItemText/fhGetValueAsText on a Notes (or other rich-text) field returns raw FTF markup literally (e.g. a table shows up as \`<table="800|800|800"> <row> apple | pear </row> </table>\`), not clean prose — use fhGetValueAsRichText(ptr):GetPlainText() instead when you need readable text. Call search_gedcom_knowledge for the fuller FTF/domain reference (Shared Facts, Source Template fields, Sentence templates, etc.) beyond what's inlined here.
 
 The script runs inside a restricted, allowlist-only Lua environment (no filesystem or network access beyond FH's own read API). Write a fresh script tailored to each question — there is no fixed set of predefined queries.`;
 

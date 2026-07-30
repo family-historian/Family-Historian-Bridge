@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { searchEntries } from "./corpusSearch.js";
 
 export interface FhHelpTopic {
   url: string;
@@ -26,7 +27,6 @@ export interface FhHelpCorpusStore {
   topics: FhHelpTopic[];
 }
 
-const EXCERPT_RADIUS = 100;
 const DEFAULT_SEARCH_LIMIT = 10;
 
 export function parseCorpus(jsonlContent: string): FhHelpTopic[] {
@@ -44,112 +44,22 @@ export function resourceUriForUrl(url: string): string {
   return `fh-help:${url}`;
 }
 
-function buildExcerpt(text: string, query: string): string {
-  const matchIndex = text.toLowerCase().indexOf(query.toLowerCase());
-  if (matchIndex === -1) {
-    return text.slice(0, EXCERPT_RADIUS * 2).trim();
-  }
-  const start = Math.max(0, matchIndex - EXCERPT_RADIUS);
-  const end = Math.min(text.length, matchIndex + query.length + EXCERPT_RADIUS);
-  const prefix = start > 0 ? "…" : "";
-  const suffix = end < text.length ? "…" : "";
-  return `${prefix}${text.slice(start, end).trim()}${suffix}`;
-}
-
-const TOKEN_MIN_LENGTH = 2;
-
-// Filler words common in a natural-language question but useless as a search signal —
-// stripping them is what lets "how do I merge two individuals" reduce to the words that
-// actually distinguish a topic ("merge", "individuals"), rather than requiring literally
-// every word (including "how"/"do") to appear in the corpus, which would still fail for
-// exactly the query this fallback exists to rescue.
-const STOPWORDS = new Set([
-  "a", "an", "the", "i", "to", "do", "does", "did", "of", "in", "on", "at", "for", "is",
-  "are", "am", "was", "were", "be", "my", "me", "you", "your", "it", "this", "that",
-  "with", "how", "what", "where", "when", "why", "can", "could", "would", "should",
-  "will", "and", "or", "from", "about", "over", "all", "two", "get", "gets",
-]);
-
-function tokenize(query: string): string[] {
-  const tokens = query
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= TOKEN_MIN_LENGTH && !STOPWORDS.has(t));
-  return [...new Set(tokens)];
-}
-
-// Weights title/breadcrumb matches well above body matches so a topic that only
-// mentions a query word in passing (common for generic terms like "record" or "field"
-// across a real, hundreds-of-pages corpus) can't outrank one whose title or breadcrumb
-// is actually about it — mirrors the primary search's title > breadcrumb > text
-// ordering, rather than a flat count that treats every match location the same.
-const TITLE_TOKEN_WEIGHT = 100;
-const BREADCRUMB_TOKEN_WEIGHT = 10;
-const TEXT_TOKEN_WEIGHT = 1;
-
-function tokenMatchScore(topic: FhHelpTopic, tokens: string[]): number {
-  const title = topic.title.toLowerCase();
-  const breadcrumb = topic.breadcrumb.join(" ").toLowerCase();
-  const text = topic.text.toLowerCase();
-  let score = 0;
-  for (const token of tokens) {
-    if (title.includes(token)) score += TITLE_TOKEN_WEIGHT;
-    else if (breadcrumb.includes(token)) score += BREADCRUMB_TOKEN_WEIGHT;
-    else if (text.includes(token)) score += TEXT_TOKEN_WEIGHT;
-  }
-  return score;
-}
-
-/** Matches on title/breadcrumb/text (case-insensitive substring); title matches
- * rank above breadcrumb matches, which rank above body-text-only matches. Not a
- * relevance-ranked search engine — good enough for exact menu/feature-name
- * lookups, which is most of what this gets used for.
- *
- * A natural-language query ("how do I merge two individuals") is rarely a literal
- * contiguous substring anywhere in the corpus, so an exact-substring miss falls back to
- * scoring each topic by how many of the query's meaningful words (stopwords stripped)
- * appear in it — weighted by where (title/breadcrumb/text), same ordering as the primary
- * search — keeping anything with a nonzero score, ranked highest first. Beta feedback,
+/** Thin wrapper around the shared search/rank/excerpt logic in corpusSearch.ts, mapping
+ * its generic result shape onto FhHelpSearchResult's uri/url fields. Beta feedback,
  * 2026-07-29: a bare empty array taught Claude "the corpus has nothing" rather than
- * "retry with a narrower term" — this fallback exists to make that dead end rarer. */
+ * "retry with a narrower term" — the token-overlap fallback in searchEntries exists to
+ * make that dead end rarer. */
 export function searchFhHelp(
   corpus: FhHelpTopic[],
   query: string,
   limit = DEFAULT_SEARCH_LIMIT,
 ): FhHelpSearchResult[] {
-  const needle = query.toLowerCase();
-  if (needle.trim().length === 0) return [];
-
-  const scored: Array<{ topic: FhHelpTopic; rank: number }> = [];
-  for (const topic of corpus) {
-    const breadcrumbText = topic.breadcrumb.join(" ");
-    if (topic.title.toLowerCase().includes(needle)) {
-      scored.push({ topic, rank: 0 });
-    } else if (breadcrumbText.toLowerCase().includes(needle)) {
-      scored.push({ topic, rank: 1 });
-    } else if (topic.text.toLowerCase().includes(needle)) {
-      scored.push({ topic, rank: 2 });
-    }
-  }
-
-  let matches = scored;
-  if (matches.length === 0) {
-    const tokens = tokenize(query);
-    if (tokens.length > 0) {
-      matches = corpus
-        .map((topic) => ({ topic, score: tokenMatchScore(topic, tokens) }))
-        .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score)
-        .map(({ topic }) => ({ topic, rank: 0 }));
-    }
-  }
-
-  return matches.slice(0, limit).map(({ topic }) => ({
+  return searchEntries(corpus, query, limit).map(({ entry: topic, excerpt }) => ({
     uri: resourceUriForUrl(topic.url),
     url: topic.url,
     title: topic.title,
     breadcrumb: topic.breadcrumb,
-    excerpt: buildExcerpt(topic.text, query),
+    excerpt,
   }));
 }
 
