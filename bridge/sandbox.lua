@@ -9,10 +9,16 @@
 -- FH's own Lua host installs the primitives as globals, and fhUtils ships with every FH
 -- install (require('fhUtils'), not bundled by this project). No write-side fh...
 -- functions are populated here yet (Stage 1 is read-only — see CONTEXT.md "Access mode").
+--
+-- accessMode ("read-only" / "read-write", from the bridge dialog's toggle) is accepted
+-- and threaded through here so the write-capability work (issue #14) has a seam to add
+-- to — it grants no extra capability yet, so "read-write" behaves identically to
+-- "read-only" for now.
 
 local M = {}
 
-function M.build()
+function M.build(accessMode)
+  accessMode = accessMode or "read-only"
   local env = {}
 
   env.string = string

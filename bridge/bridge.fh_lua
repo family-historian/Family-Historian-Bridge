@@ -12,9 +12,10 @@
 -- to Claude for a bit, Stop when you want FH back.
 --
 -- Access mode (read-only / read-write) is chosen once at Start and fixed for the whole
--- Session (see CONTEXT.md "Access mode"). Read-write is wired up here but grants no extra
--- Sandbox capability yet — no write-side fh... functions exist in either allowlist this
--- stage (see docs/adr/0001-arbitrary-sandboxed-lua-execution.md).
+-- Session (see CONTEXT.md "Access mode"), and threaded through to the sandbox via
+-- runScript.run(script, currentAccessMode()). It grants no extra Sandbox capability yet —
+-- no write-side fh... functions exist in either allowlist this stage (see
+-- docs/adr/0001-arbitrary-sandboxed-lua-execution.md); that's issue #14.
 --
 -- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, and watchdog.lua
 -- must all be copied together into FH's Plugins folder (so require() can find the sibling
@@ -114,7 +115,7 @@ function timPoll:action_cb()
         return
     end
 
-    local response = runScript.run(script)
+    local response = runScript.run(script, currentAccessMode())
     client:send(response .. "\n")
     client:close()
 

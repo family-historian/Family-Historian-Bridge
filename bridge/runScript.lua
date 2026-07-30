@@ -2,6 +2,9 @@
 -- string — either the script's own returned value, or a JSON error object on failure.
 -- Ties sandbox.lua and jsonEncode.lua together; no socket/IUP/FH dependency of its own,
 -- so (unlike bridge.fh_lua's dialog/socket plumbing) this is testable standalone.
+--
+-- accessMode is forwarded straight through to sandbox.build() — see CONTEXT.md "Access
+-- mode" and sandbox.lua's own comment for what it does and doesn't unlock yet.
 
 local sandbox = require('sandbox')
 local json = require('jsonEncode')
@@ -9,8 +12,8 @@ local watchdog = require('watchdog')
 
 local M = {}
 
-function M.run(scriptText)
-  local envOk, env = pcall(sandbox.build)
+function M.run(scriptText, accessMode)
+  local envOk, env = pcall(sandbox.build, accessMode)
   if not envOk then
     return json.encode({ error = 'failed to build sandbox: ' .. tostring(env) })
   end

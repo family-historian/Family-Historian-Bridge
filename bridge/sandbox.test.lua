@@ -271,6 +271,18 @@ local env2 = sandbox.build()
 env2.string = nil
 check(env.string == string, 'each build() call returns an independent env table')
 
+-- Access mode plumbing (issue #13): build() accepts an accessMode argument, threaded
+-- through from the bridge dialog's toggle, but grants no extra capability yet — that's
+-- issue #14. "read-write" must behave identically to "read-only" for now.
+local envReadWrite = sandbox.build("read-write")
+check(envReadWrite.string == string, 'read-write build still has the read-only basics')
+check(envReadWrite.fhGetItemText == fhGetItemText, 'read-write build still has read-only FH primitives')
+check(envReadWrite.fhCreateItem == nil, 'read-write build still excludes fhCreateItem (capability not implemented until #14)')
+check(envReadWrite.fhSrcEnableAutoTitle == nil, 'read-write build still excludes fhSrcEnableAutoTitle (capability not implemented until #14)')
+
+local envExplicitReadOnly = sandbox.build("read-only")
+check(envExplicitReadOnly.string == string, 'explicit "read-only" behaves the same as the no-argument default')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

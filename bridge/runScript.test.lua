@@ -67,6 +67,16 @@ check(watchdogElapsed < 10, 'the watchdog aborts within a bounded wall-clock tim
 -- the hook is cleared, not just that the aborted script itself terminated.
 check(runScript.run('return 99') == '99', 'a normal script after a watchdog abort still runs correctly')
 
+-- Access mode plumbing (issue #13): run() accepts and forwards an accessMode argument to
+-- sandbox.build(), but it grants no extra capability yet — that's issue #14. Both modes
+-- and the no-argument default must behave identically for now.
+check(runScript.run('return {ok=true}', 'read-write') == '{"ok":true}',
+  'accessMode is accepted and forwarded without changing behavior (read-write)')
+check(runScript.run('return {ok=true}', 'read-only') == '{"ok":true}',
+  'accessMode is accepted and forwarded without changing behavior (explicit read-only)')
+check(runScript.run("return os.execute('echo hi')", 'read-write'):find('"error"', 1, true) ~= nil,
+  'a read-write run still cannot reach a permanently-excluded function (os.execute)')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)
