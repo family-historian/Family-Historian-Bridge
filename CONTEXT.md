@@ -100,9 +100,13 @@ Documented / Likely) and a citation back to its source (an FH help page, or a sp
 the family_historian_mobile project's tag-mapping specs) — entries inherited from that sibling
 project describe its raw exported-GEDCOM-file findings, not FH's live API, so each is
 cross-checked against FH's own help before being trusted here. Deliberately excludes anything
-that only describes the exported-file wire format (e.g. `_SRCT`/`_LINK_*`/`_LKID` mechanics, the
+that only describes the exported-file wire format (e.g. `_LINK_*`/`_LKID` mechanics, the
 `_PLAC`/`_ADDR` gazetteer, encoding options) since `run_lua`'s sandbox never reads or writes a
-`.ged` file directly — see docs/adr/0003-gedcom-corpus-scope-live-api-only.md.
+`.ged` file directly — see docs/adr/0003-gedcom-corpus-scope-live-api-only.md. `_SRCT` itself is
+*not* one of these exclusions — it's also a live record-type tag (Source Template record),
+reachable the same way as INDI/FAM/SOUR; see **Source template** below and the corpus's
+"Creating a templated Source record" entry for how a Source record links to one and gets its
+fields populated.
 _Avoid_: FH help corpus (that's the separate, official-help-site-sourced one; see
 `fh-help-corpus.jsonl`)
 

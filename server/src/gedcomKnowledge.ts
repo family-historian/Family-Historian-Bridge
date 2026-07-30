@@ -63,7 +63,7 @@ Use this BEFORE writing a run_lua script that reads or writes a Notes/Text field
 
 Every result carries a "confidence" level (Verified/Confirmed/Documented/Likely — see each entry's "source") and a "source" citation. Documented/Likely entries describe FH's documented intent, not something this bridge has itself observed via a live run_lua call against a real project — treat them as a strong prior, not a substitute for checking the user's actual data when precision matters.
 
-Out of scope (see docs/adr/0003-gedcom-corpus-scope-live-api-only.md): raw GEDCOM-export wire mechanics (_SRCT/_LINK_*/_LKID, the _PLAC/_ADDR gazetteer, character encodings) — run_lua's sandbox never reads or writes a .ged file directly, so none of that is reachable here.
+Out of scope (see docs/adr/0003-gedcom-corpus-scope-live-api-only.md): raw GEDCOM-export wire mechanics (_LINK_*/_LKID, the _PLAC/_ADDR gazetteer, character encodings) — run_lua's sandbox never reads or writes a .ged file directly, so none of that is reachable here. This does NOT include _SRCT itself: that's also a live record-type tag (Source Template record), reachable the same way as INDI/FAM/SOUR — see "Creating a templated Source record" for how to create and populate one.
 
 This is a simple keyword match, not semantic search: try a specific term (e.g. "record link", "shared facts", "sentence template", "rejected preferred") rather than a paraphrase. A full-sentence query falls back to matching on individual significant words.`;
 

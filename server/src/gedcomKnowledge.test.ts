@@ -152,7 +152,11 @@ describe("the real bundled corpus", () => {
   });
 
   it("does not contain excluded raw-export wire mechanics (ADR 0003 scope)", () => {
-    const excludedTerms = ["_srct", "_link_", "_lkid", "_plac gazetteer", "ansel"];
+    // _SRCT is deliberately not in this list: it's also a live record-type tag (Source
+    // Template record), reachable via run_lua the same way as INDI/FAM/SOUR — see
+    // describeProjectTool.ts's own script and the "Creating a templated Source record"
+    // corpus entry. ADR 0003 excludes the exported-.ged wire format, not this tag itself.
+    const excludedTerms = ["_link_", "_lkid", "_plac gazetteer", "ansel"];
     for (const entry of corpus) {
       const haystack = `${entry.title} ${entry.text}`.toLowerCase();
       for (const term of excludedTerms) {
