@@ -53,9 +53,10 @@ local dlg = iup.dialog{
     resize="YES", maxbox="NO", minbox="NO",
     topmost="YES", size="320x"
 }
--- Map first so RASTERSIZE reflects the natural layout size, then use that as the
--- floor for MINSIZE -- otherwise a user could resize the dialog small enough to
--- push the Start/Stop buttons off-screen, the same failure this fix is for.
+-- Map first so RASTERSIZE is populated (width from the SIZE above, height from the
+-- children's natural layout), then use that as the floor for MINSIZE -- otherwise a
+-- user could resize the dialog small enough to push the Start/Stop buttons
+-- off-screen, the same failure this fix is for.
 dlg:map()
 dlg.minsize = dlg.rastersize
 
