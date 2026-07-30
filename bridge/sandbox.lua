@@ -12,7 +12,9 @@
 -- accessMode ("read-only" / "read-write", from the bridge dialog's toggle) is threaded
 -- through from the bridge dialog's toggle. "read-write" additionally wires through FH's
 -- full write API (issue #14, 2026-07-30 grilling session decision) — all of it at once,
--- with no further staging within read-write. See CONTEXT.md "Access mode".
+-- with no further staging within read-write. See CONTEXT.md "Access mode". Read-write also
+-- wires env.fhBridge, this project's own sourceHelper.lua module (issue #18) — not part of
+-- FH's write API itself, but calls it directly, so it's gated the same way.
 
 local M = {}
 
@@ -165,6 +167,10 @@ function M.build(accessMode)
     env.fhSrcEnableAutoTitle = fhSrcEnableAutoTitle
     env.fhGetFactTag = fhGetFactTag
     env.fhGetFlagTag = fhGetFlagTag
+
+    -- Fills the one gap fhUtils itself doesn't cover (issue #18) — calls the real fh*
+    -- globals directly, same as fhUtils, so it must stay inside this read-write block.
+    env.fhBridge = require('sourceHelper')
   end
 
   return env

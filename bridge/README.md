@@ -15,10 +15,15 @@ implements.
 - `jsonEncode.lua` — hand-rolled JSON encoder (FH's Lua ships none).
 - `watchdog.lua` — aborts a script that exceeds an instruction budget, so an accidental
   infinite loop can't hang FH with no recovery path.
+- `sourceHelper.lua` — `fhBridge.createSourceFromTemplate(...)` (issue #18), a read-write-
+  only helper that creates a fully populated templated Source record in one call instead of
+  hand-assembling the `_SRCT`-link + metafield-shortcut dance every time. Wired into the
+  sandbox by `sandbox.lua` alongside the rest of the write API — see
+  `docs/superpowers/specs/2026-07-30-createSourceFromTemplate-design.md`.
 
-`requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, and `watchdog.lua`
-have standalone unit tests (`*.test.lua`, run with a plain `lua` interpreter — no FH
-dependency):
+`requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`, and
+`sourceHelper.lua` have standalone unit tests (`*.test.lua`, run with a plain `lua`
+interpreter — no FH dependency):
 
 ```bash
 lua bridge/jsonEncode.test.lua
@@ -26,6 +31,7 @@ lua bridge/sandbox.test.lua
 lua bridge/watchdog.test.lua
 lua bridge/runScript.test.lua
 lua bridge/requestFraming.test.lua
+lua bridge/sourceHelper.test.lua
 ```
 
 `bridge.fh_lua` itself (the socket/IUP dialog plumbing) has no automatable seam — FH is
@@ -33,7 +39,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
 
 ## Manual test
 
-1. Copy all six files in this folder into FH's Plugins folder (so `require()` can find
+1. Copy all seven files in this folder into FH's Plugins folder (so `require()` can find
    the sibling modules) — `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native
    Windows, or the equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `bridge.fh_lua` from that folder, click Run.
@@ -159,3 +165,28 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    Expected output: `null` (`fhCreateItem` is `nil` in the forced Read-only sandbox).
    Confirm a plain `LUA` request in the same Read-write Session returns something other
    than `null` for the same script, proving the two forms genuinely differ.
+13. `fhBridge.createSourceFromTemplate` (issue #18): with a real FH project open that has a
+   Source Template you can use (the example below uses "Civil Registration Certificate"
+   with a "Type" field, per the "Civil Registration Certificate" template used for source
+   #41 in this project — substitute a template name and field code/value that actually
+   exist in your own project's Source Templates otherwise), select Read-write, click Start:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   local result = fhBridge.createSourceFromTemplate(\"Civil Registration Certificate\", { Type = \"Birth\" }, \"Test transcription\")
+   return result
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a JSON object with `id` and `title`. Confirm in FH's own UI that a new
+   Source record now exists, linked to the chosen template, with its `Type` field set to
+   "Birth", a "Text from Source" of "Test transcription", and an auto-generated title
+   (undo with Ctrl-Z to clean up — see CONTEXT.md "FH auto-undo"). Then repeat with
+   Read-only selected instead and confirm the same script now fails calling `fhBridge` as
+   nil, the same way any other write attempt does (step 11's negative case).

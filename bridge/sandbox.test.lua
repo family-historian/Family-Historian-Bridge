@@ -137,6 +137,12 @@ fhInitialise = function() end
 local fakeFhu = { records = function(tag) end }
 package.loaded.fhUtils = fakeFhu
 
+-- sourceHelper.lua (issue #18) ships as a sibling module in this project (unlike fhUtils),
+-- but is stubbed the same way here so this test stays a pure allowlist check, independent
+-- of sourceHelper.lua's own behavior (covered by sourceHelper.test.lua).
+local fakeSourceHelper = { createSourceFromTemplate = function() end }
+package.loaded.sourceHelper = fakeSourceHelper
+
 local env = sandbox.build()
 
 -- Allowed basics are present and are the real thing (not stand-ins).
@@ -227,6 +233,10 @@ check(env.fhBeginsWithVowel == fhBeginsWithVowel, 'fhBeginsWithVowel present')
 check(env.fhu == fakeFhu, 'fhu (require("fhUtils")) present')
 check(type(env.fhu.records) == 'function', 'fhu.records present')
 
+-- fhBridge (require('sourceHelper'), issue #18) is read-write only — same gating as
+-- fhCreateItem/fhSetValueAsLink below, since it calls those globals directly.
+check(env.fhBridge == nil, 'fhBridge absent under read-only (calls real fh* globals directly — must not be reachable without the write gate)')
+
 -- Dangerous globals must be absent — the whole point of an allowlist sandbox.
 check(env.os.execute == nil, 'os.execute absent')
 check(env.os.remove == nil, 'os.remove absent')
@@ -311,6 +321,7 @@ check(envReadWrite.fhMoveItemBefore == fhMoveItemBefore, 'read-write build inclu
 check(envReadWrite.fhSrcEnableAutoTitle == fhSrcEnableAutoTitle, 'read-write build includes fhSrcEnableAutoTitle')
 check(envReadWrite.fhGetFactTag == fhGetFactTag, 'read-write build includes fhGetFactTag')
 check(envReadWrite.fhGetFlagTag == fhGetFlagTag, 'read-write build includes fhGetFlagTag')
+check(envReadWrite.fhBridge == fakeSourceHelper, 'read-write build includes fhBridge (require("sourceHelper"))')
 
 local envExplicitReadOnly = sandbox.build("read-only")
 check(envExplicitReadOnly.string == string, 'explicit "read-only" behaves the same as the no-argument default')
