@@ -152,3 +152,23 @@ as opposed to some broader/looser notion)
 When a natural-language query has ambiguous scope (e.g. an unspecified generation depth,
 an ambiguous place spelling), Claude asks the user rather than silently picking a default
 and running a `run_lua` script against a guessed interpretation.
+
+**Whole-record citation**:
+A `SOUR` citation attached directly to an `INDI` or `FAM` record itself, rather than to
+one specific Fact belonging to it. FH's own help calls this a "citation for the record as
+a whole" — distinct from (and additional to) citing the individual Facts a source
+supports. Used when a source establishes the record itself (e.g. a birth certificate
+naming a father and mother makes them each a source for their own Individual record and
+for the parent-child Family relationship), not just one dated event on it.
+_Avoid_: Record citation (alone — "whole-record" is FH's own distinguishing term, since a
+Fact-level citation is also, informally, "a citation on the record")
+
+**citeSource**:
+The `fhBridge` helper (`sourceHelper.lua`) that attaches a `SOUR` citation to any target
+item — an `INDI`/`FAM` record (a Whole-record citation) or a specific Fact item — given a
+Source record resolved the same by-id-or-by-title way `createSourceFromTemplate` resolves
+a template. See docs/adr/0006-cite-every-fact-a-source-supports.md for why this exists as
+a shared helper instead of each script hand-rolling `fhCreateItem("SOUR", ...)` +
+`fhSetValueAsLink`.
+_Avoid_: Add source, link source (this project's own name for the operation is
+`citeSource`, matching the domain term "citation")

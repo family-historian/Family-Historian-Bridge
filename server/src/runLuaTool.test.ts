@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
-import { handleRunLua } from "./runLuaTool.js";
+import { handleRunLua, RUN_LUA_DESCRIPTION } from "./runLuaTool.js";
 
 describe("handleRunLua", () => {
   it("returns the script's result as text on success", async () => {
@@ -80,5 +80,17 @@ describe("handleRunLua", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/bridge_prototype_v2/);
     expect(text).toMatch(/bridge\.fh_lua/);
+  });
+});
+
+describe("RUN_LUA_DESCRIPTION", () => {
+  it("names fhBridge.citeSource as the way to attach a citation, instead of hand-rolling fhCreateItem+fhSetValueAsLink", () => {
+    expect(RUN_LUA_DESCRIPTION).toMatch(/fhBridge\.citeSource/);
+  });
+
+  it("instructs listing every fact a source supports and waiting for confirmation before writing any of them", () => {
+    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/isn't yet (in|entered)|not yet entered|gaps?/);
+    expect(lower).toMatch(/wait for the user's .*(confirmation|go-ahead)/);
   });
 });

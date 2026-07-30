@@ -89,32 +89,33 @@ local function fieldDefs(srctPtr)
   return defs
 end
 
--- Resolves templateNameOrId to a pointer positioned at the one matching _SRCT template
--- (case-insensitive NAME match for a string, exact record id for a number). Errors on zero
--- or multiple matches. Deliberately walks records by tag rather than using
--- MoveToRecordById, since a number here means "match this id among _SRCT templates
--- specifically", not "any record with this id".
-local function resolveTemplate(templateNameOrId)
-  if type(templateNameOrId) == "number" then
-    local match = findRecord("_SRCT", function(ptr)
-      return fhGetRecordId(ptr) == templateNameOrId
+-- Resolves nameOrId to the one record: tag whose readChildText(ptr, nameFieldTag) matches
+-- nameOrId case-insensitively (string form), or whose fhGetRecordId matches exactly
+-- (number form). Errors on zero or multiple matches. Deliberately walks records by tag
+-- rather than using MoveToRecordById, since a number here means "match this id among
+-- tag records specifically", not "any record with this id". label names the record kind
+-- in error messages (e.g. "_SRCT template", "SOUR source").
+local function resolveByNameOrId(tag, nameFieldTag, label, nameOrId)
+  if type(nameOrId) == "number" then
+    local match = findRecord(tag, function(ptr)
+      return fhGetRecordId(ptr) == nameOrId
     end)
     if not match then
-      error("no _SRCT template record with id " .. tostring(templateNameOrId))
+      error("no " .. label .. " record with id " .. tostring(nameOrId))
     end
     return match
   end
 
-  if type(templateNameOrId) ~= "string" then
-    error("templateNameOrId must be a string (template name) or number (template id)")
+  if type(nameOrId) ~= "string" then
+    error(label .. " lookup must be a string (name/title) or number (record id)")
   end
 
-  local wanted = templateNameOrId:lower()
+  local wanted = nameOrId:lower()
   local matches = {}
   local ptr = fhNewItemPtr()
-  ptr:MoveToFirstRecord("_SRCT")
+  ptr:MoveToFirstRecord(tag)
   while ptr:IsNotNull() do
-    local name = readChildText(ptr, "NAME")
+    local name = readChildText(ptr, nameFieldTag)
     if name and name:lower() == wanted then
       table.insert(matches, ptr:Clone())
     end
@@ -122,12 +123,20 @@ local function resolveTemplate(templateNameOrId)
   end
 
   if #matches == 0 then
-    error("no _SRCT template found named '" .. templateNameOrId .. "'")
+    error("no " .. label .. " found named '" .. nameOrId .. "'")
   end
   if #matches > 1 then
-    error(#matches .. " _SRCT templates found named '" .. templateNameOrId .. "' - resolve by id instead")
+    error(#matches .. " " .. label .. "s found named '" .. nameOrId .. "' - resolve by id instead")
   end
   return matches[1]
+end
+
+local function resolveTemplate(templateNameOrId)
+  return resolveByNameOrId("_SRCT", "NAME", "_SRCT template", templateNameOrId)
+end
+
+local function resolveSource(sourceNameOrId)
+  return resolveByNameOrId("SOUR", "TITL", "SOUR source", sourceNameOrId)
 end
 
 local function validateFields(fields, defs)
@@ -203,6 +212,19 @@ function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
     id = fhGetRecordId(sour),
     title = currentText(sour),
   }
+end
+
+-- sourceHelper.citeSource(ptrTarget, sourceNameOrId)
+-- Attaches a SOUR citation to ptrTarget, resolving the source the same by-id-or-by-title
+-- way createSourceFromTemplate resolves a template. ptrTarget may be an INDI/FAM record
+-- (a Whole-record citation, per FH's own "citation for the record as a whole" concept —
+-- see docs/adr/0006-cite-every-fact-a-source-supports.md) or any Fact item already
+-- positioned by the caller (a Fact-level citation). Errors on an unresolvable source
+-- before creating anything, so a bad call never leaves a stray citation behind.
+function M.citeSource(ptrTarget, sourceNameOrId)
+  local source = resolveSource(sourceNameOrId)
+  local citation = fhCreateItem("SOUR", ptrTarget)
+  fhSetValueAsLink(citation, source)
 end
 
 return M

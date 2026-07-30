@@ -365,6 +365,65 @@ local okMissingId, errMissingId = pcall(sourceHelper.createSourceFromTemplate, 9
 check(not okMissingId, 'missing template id raises an error')
 check(contains(errMissingId, '999999'), 'missing-id error names the id that was looked for')
 
+------------------------------------------------------------------
+-- citeSource: attaches a SOUR citation to any target item (record or Fact)
+------------------------------------------------------------------
+
+local function buildSource(title)
+  local sour = fhCreateItem("SOUR")
+  fhSetValueAsText(fhCreateItem("TITL", sour), title)
+  return sour
+end
+
+local certSource = buildSource("Birth certificate of Nellie Record, 15 November 1895")
+local certSourceId = fhGetRecordId(certSource)
+
+local indiTarget = fhCreateItem("INDI")
+sourceHelper.citeSource(indiTarget, certSourceId)
+local indiCite = findChild(currentNode(indiTarget), "SOUR")
+check(indiCite ~= nil, 'citeSource creates a SOUR child on an INDI record (whole-record citation), resolved by id')
+check(indiCite and indiCite.value == currentNode(certSource), 'whole-record SOUR child links (fhSetValueAsLink) to the resolved source')
+
+local factTarget = fhCreateItem("BIRT", indiTarget)
+sourceHelper.citeSource(factTarget, "Birth certificate of Nellie Record, 15 November 1895")
+local factCite = findChild(currentNode(factTarget), "SOUR")
+check(factCite ~= nil, 'citeSource creates a SOUR child on a Fact item too, resolved by exact title')
+check(factCite and factCite.value == currentNode(certSource), 'Fact-level SOUR child links to the resolved source')
+
+local factTarget2 = fhCreateItem("OCCU", indiTarget)
+sourceHelper.citeSource(factTarget2, "BIRTH CERTIFICATE OF NELLIE RECORD, 15 NOVEMBER 1895")
+local factCite2 = findChild(currentNode(factTarget2), "SOUR")
+check(factCite2 and factCite2.value == currentNode(certSource), 'title resolution is case-insensitive')
+
+------------------------------------------------------------------
+-- citeSource: unknown / ambiguous source errors before any mutation
+------------------------------------------------------------------
+
+local function sourCountOnTarget(targetPtr)
+  local count = 0
+  for _, child in ipairs(currentNode(targetPtr).children) do
+    if child.tag == "SOUR" then count = count + 1 end
+  end
+  return count
+end
+
+local badIdTarget = fhCreateItem("INDI")
+local okBadId, errBadId = pcall(sourceHelper.citeSource, badIdTarget, 999999)
+check(not okBadId, 'unknown source id raises an error')
+check(contains(errBadId, '999999'), 'missing-id error names the id that was looked for')
+check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source id is not found')
+
+local okBadTitle, errBadTitle = pcall(sourceHelper.citeSource, badIdTarget, "No Such Source")
+check(not okBadTitle, 'unknown source title raises an error')
+check(contains(errBadTitle, 'No Such Source'), 'missing-title error names the title that was looked for')
+check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source title is not found')
+
+local dupeSource = buildSource("Birth certificate of Nellie Record, 15 November 1895")
+local okDupeCite, errDupeCite = pcall(sourceHelper.citeSource, badIdTarget, "Birth certificate of Nellie Record, 15 November 1895")
+check(not okDupeCite, 'ambiguous source title (two sources, same title) raises an error')
+check(contains(errDupeCite, '2'), 'ambiguous-title error mentions the match count')
+check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source title is ambiguous')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

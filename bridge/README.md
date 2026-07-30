@@ -19,7 +19,11 @@ implements.
   only helper that creates a fully populated templated Source record in one call instead of
   hand-assembling the `_SRCT`-link + metafield-shortcut dance every time. Wired into the
   sandbox by `sandbox.lua` alongside the rest of the write API — see
-  `docs/superpowers/specs/2026-07-30-createSourceFromTemplate-design.md`.
+  `docs/superpowers/specs/2026-07-30-createSourceFromTemplate-design.md`. Also exposes
+  `fhBridge.citeSource(ptrTarget, sourceIdOrTitle)`, attaching a `SOUR` citation to any
+  target item (an INDI/FAM record for a Whole-record citation, or a Fact item) instead of
+  hand-assembling `fhCreateItem("SOUR", ...)` + `fhSetValueAsLink` — see
+  `docs/adr/0006-cite-every-fact-a-source-supports.md`.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`, and
 `sourceHelper.lua` have standalone unit tests (`*.test.lua`, run with a plain `lua`
@@ -190,3 +194,28 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    (undo with Ctrl-Z to clean up — see CONTEXT.md "FH auto-undo"). Then repeat with
    Read-only selected instead and confirm the same script now fails calling `fhBridge` as
    nil, the same way any other write attempt does (step 11's negative case).
+14. `fhBridge.citeSource` (issue #18 follow-up, ADR 0006): with a real FH project open that
+   has at least one Source record (the example below cites Source #41 in this project's own
+   tree — substitute a Source record id/title that actually exists in yours), select
+   Read-write, click Start:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   local p = fhNewItemPtr()
+   p:MoveToFirstRecord(\"INDI\")
+   while p:IsNotNull() and fhGetRecordId(p) ~= 124 do p:MoveNext() end
+   fhBridge.citeSource(p, 41)
+   return \"ok\"
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: `"ok"`. Confirm in FH's own UI that the Individual now has a new
+   Whole-record source citation to the chosen Source (undo with Ctrl-Z to clean up). Then
+   repeat with Read-only selected instead and confirm the same script now fails calling
+   `fhBridge` as nil (step 11's negative case).
