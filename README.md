@@ -10,14 +10,17 @@ scripts to a companion FH plugin over a local TCP socket.
   currently open FH data ("who died between 1914 and 1918 in France or Belgium", "how many
   Munros are in the tree", "who are so-and-so's grandparents").
 - Let Claude write the user a complete, standalone FH Report or Query plugin to install
-  and run themselves — a separate, human-reviewed path that isn't bound by Stage 1's
-  read-only rule, since the user runs it under FH's own permission model, not the
+  and run themselves — a separate, human-reviewed path that isn't bound by the Bridge
+  Session's Access mode, since the user runs it under FH's own permission model, not the
   Bridge's.
 - Keep everything local: both halves talk to each other on `127.0.0.1` only. The one
   deliberate exception is an explicit, user-triggered check for an updated copy of FH8's
   bundled help content from family-historian.co.uk.
-- Stage 1 (current): **read-only**. Claude can look up, count, cross-reference, and
-  narrate — it cannot create, edit, or delete anything in the user's tree yet.
+- **Access mode**, chosen once at Session Start: **Read-only** (default) — Claude can
+  look up, count, cross-reference, and narrate. **Read-write** — additionally lets Claude
+  create, edit, and delete records in the user's tree, via the same `run_lua` tool.
+  `describe_project`'s fixed census script always runs Read-only regardless of the
+  Session's mode.
 - Run every query as a fresh, purpose-written Lua script against FH's own API rather than
   a fixed set of canned queries, so it can answer whatever's actually asked.
 
@@ -56,8 +59,8 @@ Short version:
    ```
    This produces `server/dist/index.js`.
 3. **Install the Bridge plugin into FH** — copy `bridge.fh_lua`, `jsonEncode.lua`,
-   `sandbox.lua`, `runScript.lua`, and `watchdog.lua` (all five, together) from `bridge/`
-   into FH's Plugins folder:
+   `sandbox.lua`, `runScript.lua`, `watchdog.lua`, and `requestFraming.lua` (all six,
+   together) from `bridge/` into FH's Plugins folder:
    - Native Windows, FH8: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` —
      note the `8`. A same-machine FH7 install has its own `Family Historian\Plugins\`
      (no version number) sitting right next to it, already populated with real plugins,

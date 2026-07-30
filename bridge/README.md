@@ -6,6 +6,9 @@ implements.
 
 - `bridge.fh_lua` — the plugin itself: IUP dialog (Access-mode selector, Start/Stop, idle
   auto-Stop timer), TCP listener, request framing.
+- `requestFraming.lua` — parses a request's first line (`STOP` / `LUA <n>` / `LUA_RO <n>`)
+  into a structured form; `LUA_RO` forces the Read-only sandbox regardless of the
+  Session's own Access mode (issue #16 — used exclusively by `describe_project`).
 - `runScript.lua` — compiles and runs a submitted script inside the sandbox (guarded by
   the watchdog), returns a JSON-encoded result or error.
 - `sandbox.lua` — builds the allowlist `_ENV` a script executes inside.
@@ -13,14 +16,16 @@ implements.
 - `watchdog.lua` — aborts a script that exceeds an instruction budget, so an accidental
   infinite loop can't hang FH with no recovery path.
 
-`runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, and `watchdog.lua` have standalone unit
-tests (`*.test.lua`, run with a plain `lua` interpreter — no FH dependency):
+`requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, and `watchdog.lua`
+have standalone unit tests (`*.test.lua`, run with a plain `lua` interpreter — no FH
+dependency):
 
 ```bash
 lua bridge/jsonEncode.test.lua
 lua bridge/sandbox.test.lua
 lua bridge/watchdog.test.lua
 lua bridge/runScript.test.lua
+lua bridge/requestFraming.test.lua
 ```
 
 `bridge.fh_lua` itself (the socket/IUP dialog plumbing) has no automatable seam — FH is
@@ -28,7 +33,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
 
 ## Manual test
 
-1. Copy all five files in this folder into FH's Plugins folder (so `require()` can find
+1. Copy all six files in this folder into FH's Plugins folder (so `require()` can find
    the sibling modules) — `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native
    Windows, or the equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `bridge.fh_lua` from that folder, click Run.
@@ -114,3 +119,43 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    ```
    Expected output: a bare number matching FH's own count of Individuals in the open
    project.
+11. FH write allowlist (issue #14): with a real FH project open, select Read-write, click
+   Start, then create an Individual and set a field on it, confirming the change lands in
+   the open project (check FH's own tree/Individual list after the script runs):
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   local ptr = fhCreateItem(nil, \"INDI\")
+   fhSetValueAsText(ptr, \"NAME\", \"Test /Person/\")
+   return fhGetItemText(ptr, \"~\")
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a JSON string, and a new Individual named "Test /Person/" visible in
+   FH once you look at the project (undo with Ctrl-Z to clean up — see CONTEXT.md "FH
+   auto-undo"). Then repeat with Read-only selected instead and confirm the same script
+   now fails with a JSON error calling a nil value (`fhCreateItem` absent).
+12. `describe_project` forced Read-only (issue #16): with a Read-write Session started,
+   send a `LUA_RO` request directly (this is what `describeProjectTool.ts` sends) and
+   confirm it still cannot reach a write function, even though the Session itself is
+   Read-write:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'return fhCreateItem'
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=5)
+   s.sendall(('LUA_RO %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: `null` (`fhCreateItem` is `nil` in the forced Read-only sandbox).
+   Confirm a plain `LUA` request in the same Read-write Session returns something other
+   than `null` for the same script, proving the two forms genuinely differ.

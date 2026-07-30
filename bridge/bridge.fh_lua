@@ -13,9 +13,10 @@
 --
 -- Access mode (read-only / read-write) is chosen once at Start and fixed for the whole
 -- Session (see CONTEXT.md "Access mode"), and threaded through to the sandbox via
--- runScript.run(script, currentAccessMode()). It grants no extra Sandbox capability yet —
--- no write-side fh... functions exist in either allowlist this stage (see
--- docs/adr/0001-arbitrary-sandboxed-lua-execution.md); that's issue #14.
+-- runScript.run(script, currentAccessMode()) — read-write additionally wires through FH's
+-- full write API (issue #14). describe_project's fixed script instead forces the
+-- Read-only sandbox regardless of the Session's access mode, via the LUA_RO request form
+-- (issue #16) — see requestFraming.lua.
 --
 -- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, and watchdog.lua
 -- must all be copied together into FH's Plugins folder (so require() can find the sibling
@@ -28,6 +29,7 @@ iup.SetGlobal("CUSTOMQUITMESSAGE", "YES") -- avoids known FH/IUP interaction iss
 
 local runScript = require("runScript")
 local json = require("jsonEncode")
+local requestFraming = require("requestFraming")
 
 local PORT = 8734
 local IDLE_TIMEOUT_SECONDS = 300 -- auto-Stop a Session this long after its last accepted request
@@ -67,9 +69,12 @@ end
 
 local timPoll = iup.timer{time=100, run="NO"}
 
--- Request framing: the bridge reads one line first.
+-- Request framing: the bridge reads one line first, parsed by requestFraming.lua.
 --   STOP           -- ends the Session immediately, same as clicking Stop.
 --   LUA <n>        -- followed by exactly n bytes: the script body, read via receive(n).
+--                     Runs under the Session's own current Access mode.
+--   LUA_RO <n>     -- same, but forces the Read-only sandbox regardless of the Session's
+--                     Access mode (issue #16 — used exclusively by describe_project).
 -- This replaces the prototype's single-line-only receive("*l") read, which could not
 -- carry a multi-line Lua script.
 function timPoll:action_cb()
@@ -89,7 +94,15 @@ function timPoll:action_cb()
         return
     end
 
-    if header:upper() == "STOP" then
+    local request = requestFraming.parse(header)
+    if not request then
+        -- malformed framing, not an accepted request — doesn't reset the idle timer
+        client:send(json.encode({ error = "expected STOP or LUA <n>" }) .. "\n")
+        client:close()
+        return
+    end
+
+    if request.kind == "stop" then
         lastActivityTime = os.time()
         client:send("STOPPING\n")
         client:close()
@@ -97,25 +110,17 @@ function timPoll:action_cb()
         return btnStop:action()
     end
 
-    local byteCountStr = header:match("^LUA (%d+)$")
-    if not byteCountStr then
-        -- malformed framing, not an accepted request — doesn't reset the idle timer
-        client:send(json.encode({ error = "expected STOP or LUA <n>" }) .. "\n")
-        client:close()
-        return
-    end
-
     lastActivityTime = os.time()
 
-    local n = tonumber(byteCountStr)
-    local script = client:receive(n)
+    local script = client:receive(request.byteCount)
     if not script then
-        client:send(json.encode({ error = "expected " .. n .. " script bytes but the read failed (timeout or connection closed early)" }) .. "\n")
+        client:send(json.encode({ error = "expected " .. request.byteCount .. " script bytes but the read failed (timeout or connection closed early)" }) .. "\n")
         client:close()
         return
     end
 
-    local response = runScript.run(script, currentAccessMode())
+    local accessMode = requestFraming.resolveAccessMode(request, currentAccessMode())
+    local response = runScript.run(script, accessMode)
     client:send(response .. "\n")
     client:close()
 

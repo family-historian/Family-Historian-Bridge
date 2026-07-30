@@ -17,13 +17,20 @@ export interface RunLuaOnBridgeOptions {
   host?: string;
   port?: number;
   timeoutMs?: number;
+  /**
+   * Forces the Bridge to run this script under its Read-only sandbox regardless of the
+   * Session's own Access mode, via the LUA_RO request form (see bridge/requestFraming.lua
+   * and issue #16). Used exclusively by describeProjectTool.ts — run_lua's own requests
+   * always leave this unset, so they use the Session's actual Access mode.
+   */
+  forceReadOnly?: boolean;
 }
 
 /**
- * Sends a Lua script to the Bridge under the LUA <n> length-prefixed framing
- * (see bridge/bridge.fh_lua) and resolves with the raw response body once the Bridge
- * closes the connection. Does not parse the response — the caller (the run_lua tool)
- * decides how to interpret it.
+ * Sends a Lua script to the Bridge under the LUA <n> / LUA_RO <n> length-prefixed framing
+ * (see bridge/bridge.fh_lua, bridge/requestFraming.lua) and resolves with the raw response
+ * body once the Bridge closes the connection. Does not parse the response — the caller
+ * (the run_lua / describe_project tool) decides how to interpret it.
  */
 export function runLuaOnBridge(
   script: string,
@@ -65,7 +72,8 @@ export function runLuaOnBridge(
 
     socket.on("connect", () => {
       const scriptBytes = Buffer.from(script, "utf8");
-      const header = Buffer.from(`LUA ${scriptBytes.byteLength}\n`, "utf8");
+      const verb = options.forceReadOnly ? "LUA_RO" : "LUA";
+      const header = Buffer.from(`${verb} ${scriptBytes.byteLength}\n`, "utf8");
       socket.end(Buffer.concat([header, scriptBytes]));
     });
 

@@ -5,16 +5,19 @@ import {
   runLuaOnBridge,
 } from "./bridgeClient.js";
 
-// A fake Bridge: speaks the same STOP/LUA<n> request framing and send-then-close
-// response shape as the real bridge.fh_lua, without needing FH itself. This is the
-// spec's one automatable seam for the MCP-server side of the protocol.
+// A fake Bridge: speaks the same STOP/LUA<n>/LUA_RO<n> request framing and
+// send-then-close response shape as the real bridge.fh_lua, without needing FH itself.
+// This is the spec's one automatable seam for the MCP-server side of the protocol.
+// handleScript's second argument is the raw header line, for tests that care which
+// framing verb was actually sent (e.g. LUA vs LUA_RO — see issue #16).
 function startFakeBridge(
-  handleScript: (script: string) => string,
+  handleScript: (script: string, header: string) => string,
 ): Promise<{ port: number; close: () => Promise<void> }> {
   return new Promise((resolve) => {
     const server = net.createServer((socket) => {
       let buffered = Buffer.alloc(0);
       let expectedBytes: number | null = null;
+      let receivedHeader = "";
 
       socket.on("data", (chunk) => {
         const chunkBuf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "utf8");
@@ -27,17 +30,18 @@ function startFakeBridge(
           const header = buffered.subarray(0, newlineIndex).toString("utf8");
           buffered = buffered.subarray(newlineIndex + 1);
 
-          const match = header.match(/^LUA (\d+)$/);
+          const match = header.match(/^LUA(_RO)? (\d+)$/);
           if (!match) {
             socket.end(JSON.stringify({ error: "expected STOP or LUA <n>" }));
             return;
           }
-          expectedBytes = Number(match[1]);
+          receivedHeader = header;
+          expectedBytes = Number(match[2]);
         }
 
         if (expectedBytes !== null && buffered.byteLength >= expectedBytes) {
           const script = buffered.subarray(0, expectedBytes).toString("utf8");
-          socket.end(handleScript(script));
+          socket.end(handleScript(script, receivedHeader));
         }
       });
     });
@@ -113,6 +117,32 @@ describe("runLuaOnBridge", () => {
     await expect(runLuaOnBridge("return 1", { port })).rejects.toBeInstanceOf(
       BridgeConnectionRefusedError,
     );
+  });
+
+  it("frames the request as LUA_RO <n> when forceReadOnly is set (issue #16)", async () => {
+    let receivedHeader: string | undefined;
+    const { port, close } = await startFakeBridge((_script, header) => {
+      receivedHeader = header;
+      return '"ok"';
+    });
+    cleanup = close;
+
+    await runLuaOnBridge("return 1", { port, forceReadOnly: true });
+
+    expect(receivedHeader).toBe("LUA_RO 8");
+  });
+
+  it("still frames the request as plain LUA <n> when forceReadOnly is left unset", async () => {
+    let receivedHeader: string | undefined;
+    const { port, close } = await startFakeBridge((_script, header) => {
+      receivedHeader = header;
+      return '"ok"';
+    });
+    cleanup = close;
+
+    await runLuaOnBridge("return 1", { port });
+
+    expect(receivedHeader).toBe("LUA 8");
   });
 
   it("rejects with a timeout error if the Bridge never responds", async () => {

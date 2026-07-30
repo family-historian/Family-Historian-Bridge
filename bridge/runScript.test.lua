@@ -68,8 +68,9 @@ check(watchdogElapsed < 10, 'the watchdog aborts within a bounded wall-clock tim
 check(runScript.run('return 99') == '99', 'a normal script after a watchdog abort still runs correctly')
 
 -- Access mode plumbing (issue #13): run() accepts and forwards an accessMode argument to
--- sandbox.build(), but it grants no extra capability yet — that's issue #14. Both modes
--- and the no-argument default must behave identically for now.
+-- sandbox.build(). Read-write additionally grants the full write API (issue #14) — see
+-- sandbox.test.lua for that allowlist's own present/absent assertions; here we only check
+-- that both modes still behave identically for the basics every script can use.
 check(runScript.run('return {ok=true}', 'read-write') == '{"ok":true}',
   'accessMode is accepted and forwarded without changing behavior (read-write)')
 check(runScript.run('return {ok=true}', 'read-only') == '{"ok":true}',

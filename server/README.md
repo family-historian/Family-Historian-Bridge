@@ -5,7 +5,9 @@ The Claude-facing half of the bridge — see the repo root `CONTEXT.md` and
 implements.
 
 - `src/bridgeClient.ts` — the socket client: frames a request as `LUA <n>\n` + script
-  bytes, reads the response until the Bridge closes the connection.
+  bytes (or `LUA_RO <n>\n` to force the Bridge's Read-only sandbox regardless of the
+  Session's Access mode — see `forceReadOnly`, used by `describeProjectTool.ts`), reads
+  the response until the Bridge closes the connection.
 - `src/runLuaTool.ts` — the `run_lua` MCP tool: translates a Bridge response (or a
   connection failure) into a tool result Claude can act on.
 - `src/fhHelp.ts` — the bundled FH8 help corpus: `search_fh_help` tool and one MCP

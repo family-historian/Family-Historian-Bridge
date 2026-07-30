@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BridgeConnectionRefusedError } from "./bridgeClient.js";
-import { DESCRIBE_PROJECT_SCRIPT, handleDescribeProject } from "./describeProjectTool.js";
+import { BridgeConnectionRefusedError, type RunLuaOnBridgeOptions } from "./bridgeClient.js";
+import {
+  DESCRIBE_PROJECT_SCRIPT,
+  handleDescribeProject,
+  makeDescribeProjectDeps,
+} from "./describeProjectTool.js";
 
 describe("handleDescribeProject", () => {
   it("runs the fixed built-in script rather than accepting one from the caller", async () => {
@@ -71,6 +75,18 @@ describe("handleDescribeProject", () => {
     });
 
     expect(result.isError).toBe(true);
+  });
+
+  it("forces the Read-only sandbox regardless of the Session's Access mode (issue #16)", async () => {
+    let receivedOptions: RunLuaOnBridgeOptions | undefined;
+    const deps = makeDescribeProjectDeps(async (_script, options) => {
+      receivedOptions = options;
+      return "{}";
+    });
+
+    await handleDescribeProject(deps);
+
+    expect(receivedOptions?.forceReadOnly).toBe(true);
   });
 
   it("names the stale bridge_prototype_v2 plugin when its handshake answers instead of the current Bridge", async () => {

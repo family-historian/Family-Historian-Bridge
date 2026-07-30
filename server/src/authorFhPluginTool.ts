@@ -6,7 +6,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 // "author_fh_plugin" entry and docs/adr/0004-author-fh-plugin-text-only-flag-risky-calls.md.
 export const AUTHOR_FH_PLUGIN_DESCRIPTION = `Scaffold a standalone FH Report or Query plugin from Lua logic you author, wrapped in that plugin type's required boilerplate, and return it as plugin source text for the user to save and install themselves.
 
-This is a distinct trust mode from run_lua, not a variant of it. run_lua executes a script immediately, live, inside the user's own open FH process, under this Bridge's read-only sandbox allowlist. author_fh_plugin's output is never executed by the Bridge at all — it's unreviewed-until-installed text that only ever runs once the user saves it as a .fh_lua file and installs it themselves (double-click on Windows, or FH's own Tools -> Plugins -> New/Import), under FH's own trust boundary. Because of that, functions run_lua's sandbox excludes (fhShellExecute, filesystem functions like fhLoadTextFile/fhSaveTextFile, fhMessageBox, fhPromptUserForDate and the other fhPromptUserFor* dialogs, fhOutputResultSetColumn/fhOutputResultSetTitles, etc.) are fair game here — they are excluded from run_lua's sandbox, not forbidden knowledge, and this tool is exactly the other, human-reviewed path to them.
+This is a distinct trust mode from run_lua, not a variant of it. run_lua executes a script immediately, live, inside the user's own open FH process, under this Bridge's sandbox allowlist (Read-only by default; Read-write during a read-write Session additionally grants FH's write API — see CONTEXT.md's "Access mode" entry — but never anything beyond that allowlist). author_fh_plugin's output is never executed by the Bridge at all — it's unreviewed-until-installed text that only ever runs once the user saves it as a .fh_lua file and installs it themselves (double-click on Windows, or FH's own Tools -> Plugins -> New/Import), under FH's own trust boundary. Because of that, functions run_lua's sandbox permanently excludes regardless of Access mode (fhShellExecute, filesystem functions like fhLoadTextFile/fhSaveTextFile, fhMessageBox, fhPromptUserForDate and the other fhPromptUserFor* dialogs, fhOutputResultSetColumn/fhOutputResultSetTitles, etc.) are fair game here — they are excluded from run_lua's sandbox, not forbidden knowledge, and this tool is exactly the other, human-reviewed path to them.
 
 Because installing a plugin file is a weaker review checkpoint than reading an inline chat answer, any call to one of these otherwise-excluded functions is flagged inline in the returned source with a "-- FLAGGED" comment, so the user notices it even if they only skim before installing.
 
@@ -16,12 +16,15 @@ Plugin types (pass one as pluginType):
 
 This tool's output is text only — it never writes the plugin file to disk itself. The user saves it themselves wherever they want, then installs it under FH's own permission model.`;
 
-// Functions run_lua's sandbox (bridge/sandbox.lua) never wires into its allowlist — kept
-// in sync by hand with bridge/sandbox.test.lua's own exclusion-assertion list, the single
-// authoritative enumeration of what run_lua excludes. author_fh_plugin's output sits
-// outside that trust boundary entirely (see CONTEXT.md "author_fh_plugin" and
+// Functions run_lua's sandbox (bridge/sandbox.lua) excludes under its Read-only baseline
+// — kept in sync by hand with bridge/sandbox.test.lua's own exclusion-assertion list, the
+// single authoritative enumeration of what run_lua excludes there. author_fh_plugin's
+// output sits outside that trust boundary entirely (see CONTEXT.md "author_fh_plugin" and
 // docs/adr/0004-author-fh-plugin-text-only-flag-risky-calls.md), so these are legitimate
-// to use here — they're flagged for the user's review, not blocked.
+// to use here — they're flagged for the user's review, not blocked. The write-API
+// functions below (fhCreateItem and the fhSet* setters) are reachable via run_lua too, but
+// only during a read-write Session (issue #14) — author_fh_plugin has no way to know the
+// Session's Access mode, so it flags them unconditionally, erring toward review.
 export const SANDBOX_EXCLUDED_FUNCTIONS = [
   "fhCreateItem",
   "fhDeleteItem",
@@ -30,6 +33,13 @@ export const SANDBOX_EXCLUDED_FUNCTIONS = [
   "fhSrcEnableAutoTitle",
   "fhGetFactTag",
   "fhGetFlagTag",
+  "fhSetLabelledText",
+  "fhSetValueAsAge",
+  "fhSetValueAsDate",
+  "fhSetValueAsInteger",
+  "fhSetValueAsLink",
+  "fhSetValueAsRichText",
+  "fhSetValueAsText",
   "fhSetStringEncoding",
   "fhSetConversionLossFlag",
   "fhShellExecute",

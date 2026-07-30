@@ -83,9 +83,22 @@ fhGetNamedListByIndex = function() end
 fhGetNamedListCount = function() end
 fhBeginsWithVowel = function() end
 
--- Excluded functions: stubbed as if FH provides them (it does), so asserting env.fhX ==
--- nil below actually proves sandbox.build() declines to wire them through, rather than
--- passing vacuously because the global itself doesn't exist in this plain-lua process.
+-- Read-write write API (issue #14): stubbed the same way as the read-only surface above,
+-- so the read-write assertions below (present, by reference) and the read-only exclusion
+-- assertions further down (absent) each prove something real, rather than either passing
+-- vacuously.
+fhSetLabelledText = function() end
+fhSetValueAsAge = function() end
+fhSetValueAsDate = function() end
+fhSetValueAsInteger = function() end
+fhSetValueAsLink = function() end
+fhSetValueAsRichText = function() end
+fhSetValueAsText = function() end
+
+-- Excluded-from-Read-only functions: stubbed as if FH provides them (it does), so the
+-- read-only absence assertions below actually prove sandbox.build() declines to wire
+-- them through under read-only, rather than passing vacuously because the global itself
+-- doesn't exist in this plain-lua process. Also part of the read-write write API above.
 fhCreateItem = function() end
 fhDeleteItem = function() end
 fhMoveItemAfter = function() end
@@ -242,6 +255,13 @@ check(env.fhMoveItemBefore == nil, 'fhMoveItemBefore absent (mutates the GEDCOM 
 check(env.fhSrcEnableAutoTitle == nil, 'fhSrcEnableAutoTitle absent (mutates a Source record\'s flag — reserved for Read-write)')
 check(env.fhGetFactTag == nil, 'fhGetFactTag absent (can create a new fact-type definition via bCreateIfNone — excluded entirely rather than wrapped, to keep the allowlist a flat reference-through list)')
 check(env.fhGetFlagTag == nil, 'fhGetFlagTag absent (same bCreateIfNone concern as fhGetFactTag)')
+check(env.fhSetLabelledText == nil, 'fhSetLabelledText absent under read-only (reserved for Read-write)')
+check(env.fhSetValueAsAge == nil, 'fhSetValueAsAge absent under read-only (reserved for Read-write)')
+check(env.fhSetValueAsDate == nil, 'fhSetValueAsDate absent under read-only (reserved for Read-write)')
+check(env.fhSetValueAsInteger == nil, 'fhSetValueAsInteger absent under read-only (reserved for Read-write)')
+check(env.fhSetValueAsLink == nil, 'fhSetValueAsLink absent under read-only (reserved for Read-write)')
+check(env.fhSetValueAsRichText == nil, 'fhSetValueAsRichText absent under read-only (reserved for Read-write)')
+check(env.fhSetValueAsText == nil, 'fhSetValueAsText absent under read-only (reserved for Read-write)')
 check(env.fhSetStringEncoding == nil, 'fhSetStringEncoding absent (mutates app/session state, not tree data — permanently excluded, not a Read-write concern)')
 check(env.fhSetConversionLossFlag == nil, 'fhSetConversionLossFlag absent (same app-state concern as fhSetStringEncoding)')
 check(env.fhShellExecute == nil, 'fhShellExecute absent (launches arbitrary programs — permanently excluded)')
@@ -271,14 +291,26 @@ local env2 = sandbox.build()
 env2.string = nil
 check(env.string == string, 'each build() call returns an independent env table')
 
--- Access mode plumbing (issue #13): build() accepts an accessMode argument, threaded
--- through from the bridge dialog's toggle, but grants no extra capability yet — that's
--- issue #14. "read-write" must behave identically to "read-only" for now.
+-- Access mode plumbing (issue #13) + write API (issue #14): build() accepts an accessMode
+-- argument, threaded through from the bridge dialog's toggle. "read-write" carries every
+-- read-only capability plus the full write API, granted all at once.
 local envReadWrite = sandbox.build("read-write")
 check(envReadWrite.string == string, 'read-write build still has the read-only basics')
 check(envReadWrite.fhGetItemText == fhGetItemText, 'read-write build still has read-only FH primitives')
-check(envReadWrite.fhCreateItem == nil, 'read-write build still excludes fhCreateItem (capability not implemented until #14)')
-check(envReadWrite.fhSrcEnableAutoTitle == nil, 'read-write build still excludes fhSrcEnableAutoTitle (capability not implemented until #14)')
+check(envReadWrite.fhSetLabelledText == fhSetLabelledText, 'read-write build includes fhSetLabelledText')
+check(envReadWrite.fhSetValueAsAge == fhSetValueAsAge, 'read-write build includes fhSetValueAsAge')
+check(envReadWrite.fhSetValueAsDate == fhSetValueAsDate, 'read-write build includes fhSetValueAsDate')
+check(envReadWrite.fhSetValueAsInteger == fhSetValueAsInteger, 'read-write build includes fhSetValueAsInteger')
+check(envReadWrite.fhSetValueAsLink == fhSetValueAsLink, 'read-write build includes fhSetValueAsLink')
+check(envReadWrite.fhSetValueAsRichText == fhSetValueAsRichText, 'read-write build includes fhSetValueAsRichText')
+check(envReadWrite.fhSetValueAsText == fhSetValueAsText, 'read-write build includes fhSetValueAsText')
+check(envReadWrite.fhCreateItem == fhCreateItem, 'read-write build includes fhCreateItem')
+check(envReadWrite.fhDeleteItem == fhDeleteItem, 'read-write build includes fhDeleteItem')
+check(envReadWrite.fhMoveItemAfter == fhMoveItemAfter, 'read-write build includes fhMoveItemAfter')
+check(envReadWrite.fhMoveItemBefore == fhMoveItemBefore, 'read-write build includes fhMoveItemBefore')
+check(envReadWrite.fhSrcEnableAutoTitle == fhSrcEnableAutoTitle, 'read-write build includes fhSrcEnableAutoTitle')
+check(envReadWrite.fhGetFactTag == fhGetFactTag, 'read-write build includes fhGetFactTag')
+check(envReadWrite.fhGetFlagTag == fhGetFlagTag, 'read-write build includes fhGetFlagTag')
 
 local envExplicitReadOnly = sandbox.build("read-only")
 check(envExplicitReadOnly.string == string, 'explicit "read-only" behaves the same as the no-argument default')

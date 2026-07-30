@@ -7,13 +7,12 @@
 -- Read-only allowlist: basic Lua, plus FH's read-side primitives and fhUtils. Both are
 -- wired through by reference from the real global environment, not reimplemented —
 -- FH's own Lua host installs the primitives as globals, and fhUtils ships with every FH
--- install (require('fhUtils'), not bundled by this project). No write-side fh...
--- functions are populated here yet (Stage 1 is read-only — see CONTEXT.md "Access mode").
+-- install (require('fhUtils'), not bundled by this project).
 --
--- accessMode ("read-only" / "read-write", from the bridge dialog's toggle) is accepted
--- and threaded through here so the write-capability work (issue #14) has a seam to add
--- to — it grants no extra capability yet, so "read-write" behaves identically to
--- "read-only" for now.
+-- accessMode ("read-only" / "read-write", from the bridge dialog's toggle) is threaded
+-- through from the bridge dialog's toggle. "read-write" additionally wires through FH's
+-- full write API (issue #14, 2026-07-30 grilling session decision) — all of it at once,
+-- with no further staging within read-write. See CONTEXT.md "Access mode".
 
 local M = {}
 
@@ -51,10 +50,11 @@ function M.build(accessMode)
   -- into FH's Plugins folder and reload" cycle. Two different kinds of exclusion below —
   -- don't conflate them:
   --
-  -- (1) Excluded from Read-only, reserved for Read-write once implemented (these mutate
-  -- the GEDCOM tree, or can conditionally create schema): fhCreateItem, fhDeleteItem,
-  -- fhMoveItemAfter, fhMoveItemBefore, fhSrcEnableAutoTitle, fhGetFactTag, fhGetFlagTag
-  -- (the latter two despite their "Get" name, via a bCreateIfNone param).
+  -- (1) Excluded from Read-only, granted under Read-write below (these write to the
+  -- GEDCOM tree, or can conditionally create schema): fhSetLabelledText, every
+  -- fhSetValueAs* setter (Age/Date/Integer/Link/RichText/Text), fhCreateItem,
+  -- fhDeleteItem, fhMoveItemAfter, fhMoveItemBefore, fhSrcEnableAutoTitle, fhGetFactTag,
+  -- fhGetFlagTag (the latter two despite their "Get" name, via a bCreateIfNone param).
   --
   -- (2) Excluded permanently, regardless of Read-only/Read-write — Read-write means
   -- read-write to the user's tree data, not to their computer:
@@ -146,6 +146,26 @@ function M.build(accessMode)
   env.fhBeginsWithVowel = fhBeginsWithVowel
 
   env.fhu = require('fhUtils')
+
+  if accessMode == "read-write" then
+    -- FH's full write API (issue #14, 2026-07-30 grilling session): granted all at once,
+    -- wired through by reference exactly like the read-only entries above — no further
+    -- staging within read-write. See CONTEXT.md "Access mode" for the authoritative list.
+    env.fhSetLabelledText = fhSetLabelledText
+    env.fhSetValueAsAge = fhSetValueAsAge
+    env.fhSetValueAsDate = fhSetValueAsDate
+    env.fhSetValueAsInteger = fhSetValueAsInteger
+    env.fhSetValueAsLink = fhSetValueAsLink
+    env.fhSetValueAsRichText = fhSetValueAsRichText
+    env.fhSetValueAsText = fhSetValueAsText
+    env.fhCreateItem = fhCreateItem
+    env.fhDeleteItem = fhDeleteItem
+    env.fhMoveItemAfter = fhMoveItemAfter
+    env.fhMoveItemBefore = fhMoveItemBefore
+    env.fhSrcEnableAutoTitle = fhSrcEnableAutoTitle
+    env.fhGetFactTag = fhGetFactTag
+    env.fhGetFlagTag = fhGetFlagTag
+  end
 
   return env
 end

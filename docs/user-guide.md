@@ -5,8 +5,10 @@ Ask Claude natural-language questions about your own Family Historian (FH) proje
 "who are so-and-so's grandparents" — and get answers grounded in your actual, currently
 open FH data. No GEDCOM export, no separate app.
 
-This is **Stage 1: read-only**. Claude can look up and count things in your tree, but
-cannot create or edit anything yet (see [What it can do right now](#what-it-can-do-right-now)).
+A Session starts **Read-only** by default: Claude can look up and count things in your
+tree, but not change anything. Pick **Read-write** at Start instead to additionally let
+Claude create, edit, and delete records while answering your question (see
+[What it can do right now](#what-it-can-do-right-now)).
 
 ## How it works, in short
 
@@ -101,8 +103,9 @@ restart Claude Desktop) after adding the config, not before.
 ## Using it
 
 1. **Open your project in FH**, then in the "FH Bridge" dialog:
-   - Pick **Read-only** or **Read-write** (Read-write is present but doesn't currently
-     grant anything extra — Stage 1 is read-only regardless of which you pick).
+   - Pick **Read-only** (Claude can only look things up) or **Read-write** (Claude can
+     also create, edit, and delete records). This choice holds for the whole Session —
+     Stop and Start again to change it.
    - Click **Start**. The dialog shows "Listening..." and FH's main window locks — this is
      expected.
 2. **Ask Claude your question**, in plain English, in your normal conversation. No fixed
@@ -115,8 +118,8 @@ restart Claude Desktop) after adding the config, not before.
 
 ## What it can do right now
 
-Stage 1 is read-only: Claude can look things up and count/list/cross-reference, but cannot
-create, edit, or delete anything in your project. In particular it can:
+In a **Read-only** Session, Claude can look things up and count/list/cross-reference, but
+cannot create, edit, or delete anything in your project. In particular it can:
 
 - Iterate every Individual and Family record.
 - Read names, dates, places, and any Fact (birth, death, occupation, residence, etc.).
@@ -139,10 +142,16 @@ create, edit, or delete anything in your project. In particular it can:
   from family-historian.co.uk — the one thing this server ever does over the internet,
   and only when you ask for it.
 
-It cannot yet: create or edit records, facts, source citations, or notes *while answering
-a live question*. The Read-write toggle exists in the dialog ahead of that work, but
-doesn't do anything extra yet. This is separate from asking for a standalone plugin (see
-below), which is not bound by the same read-only rule.
+In a **Read-write** Session, Claude can additionally create, edit, and delete records,
+facts, source citations, and notes *while answering a live question* — the same way it
+answers read-only questions, just with more of FH's API available to the script it
+writes. Nothing here bypasses FH's own undo: Ctrl-Z always reverts the last change, and FH
+automatically undoes a script's changes if it errors partway through (see CONTEXT.md "FH
+auto-undo"). `describe_project`'s built-in project census always runs Read-only, even
+during a Read-write Session — it never needs write access, so it doesn't get it.
+
+Getting a standalone plugin written for you (see below) is separate from either mode —
+it's not bound by the Session's Access mode at all.
 
 ## Getting a standalone plugin written for you
 
@@ -160,10 +169,10 @@ This is a different mode from the live Q&A above, not an extension of it:
 - No Bridge Session is needed for this — it doesn't touch your live project at all
   until you choose to install and run the plugin yourself, under FH's own permission
   model.
-- Because you're the one reviewing and running it, it isn't limited by Stage 1's
-  read-only rule the way a live question is — a generated plugin can do things (show a
+- Because you're the one reviewing and running it, it isn't limited by either Session
+  Access mode the way a live question is — a generated plugin can do things (show a
   message box, read/write a file, edit your project) that asking Claude a question never
-  can. This is intentional, not a gap in the read-only guarantee above.
+  can, even in a Read-write Session. This is intentional, not a gap in the sandbox above.
 - Any line that uses one of those otherwise-off-limits functions is marked with a
   `-- FLAGGED` comment directly above it in the returned text. Read those lines before
   you install — that's the entire purpose of the flag, so don't skip past them just
