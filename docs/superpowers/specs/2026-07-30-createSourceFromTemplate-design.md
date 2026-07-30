@@ -78,7 +78,8 @@ already exists.
 --   found) or integer (a _SRCT record id, e.g. from a prior lookup).
 --
 -- fields: table mapping a field CODE (exactly as declared in the template's own FDEF,
---   e.g. "Type", "Principal_2") to a value:
+--   e.g. "Type", "Principal_2") to a value. May be nil or {} — a Source linked to its
+--   template with no fields populated yet is valid.
 --     - Text / Name / Place / Address / Enum -> plain Lua string
 --     - Date -> either a Date object already built via fhNewDate(y, m, d[, subtype]), or
 --       a plain table { year = , month = , day = [, subtype = ] } which the helper
@@ -88,7 +89,10 @@ already exists.
 --   Every key in `fields` must match a real FDEF code on the resolved template. Every
 --   value for an Enum-typed field must be one of that field's own declared options
 --   (parsed from its FDEF's PROM, pipe-separated, e.g. "Birth | Marriage | Death |
---   Divorce").
+--   Divorce" -> {"Birth","Marriage","Death","Divorce"}, each option whitespace-trimmed
+--   after splitting on "|"). Comparison against the supplied value is exact/case-sensitive
+--   — "birth" does not match "Birth". No fuzzy or case-insensitive matching: an Enum value
+--   is meant to land in FH's own dropdown exactly as declared.
 --
 -- transcription: optional string. If given, becomes the record's "Text from Source" (TEXT
 --   child tag), stored as plain text (fhNewRichText(transcription, false) — not parsed as
