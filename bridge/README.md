@@ -26,16 +26,17 @@ implements.
   `docs/adr/0006-cite-every-fact-a-source-supports.md`.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`, and
-`sourceHelper.lua` have standalone unit tests (`*.test.lua`, run with a plain `lua`
-interpreter — no FH dependency):
+`sourceHelper.lua` have standalone unit tests, in `tests/` (`*.test.lua`, run with a plain
+`lua` interpreter — no FH dependency). Keeping tests out of this folder means every file
+directly in `bridge/` is exactly what step 1 below copies — nothing to filter by name:
 
 ```bash
-lua bridge/jsonEncode.test.lua
-lua bridge/sandbox.test.lua
-lua bridge/watchdog.test.lua
-lua bridge/runScript.test.lua
-lua bridge/requestFraming.test.lua
-lua bridge/sourceHelper.test.lua
+lua bridge/tests/jsonEncode.test.lua
+lua bridge/tests/sandbox.test.lua
+lua bridge/tests/watchdog.test.lua
+lua bridge/tests/runScript.test.lua
+lua bridge/tests/requestFraming.test.lua
+lua bridge/tests/sourceHelper.test.lua
 ```
 
 `bridge.fh_lua` itself (the socket/IUP dialog plumbing) has no automatable seam — FH is
@@ -43,9 +44,10 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
 
 ## Manual test
 
-1. Copy all seven files in this folder into FH's Plugins folder (so `require()` can find
-   the sibling modules) — `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native
-   Windows, or the equivalent path under CrossOver's virtual C: drive on Mac.
+1. Copy every file directly in this folder (not the `tests/` subfolder) into FH's Plugins
+   folder (so `require()` can find the sibling modules) —
+   `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native Windows, or the
+   equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `bridge.fh_lua` from that folder, click Run.
 3. A small "FH Bridge" dialog appears with a Read-only/Read-write selector (Read-only
    selected by default) and Start/Stop buttons. Confirm the selector is clickable, then

@@ -1,8 +1,8 @@
--- Standalone tests for jsonEncode.lua. Run with: lua bridge/jsonEncode.test.lua
+-- Standalone tests for jsonEncode.lua. Run with: lua bridge/tests/jsonEncode.test.lua
 -- No FH/socket/iup dependency — this is the one piece of the Bridge pure enough to
 -- automate outside FH itself (see the spec's Testing Decisions).
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 local json = require('jsonEncode')
 
 local failures = 0

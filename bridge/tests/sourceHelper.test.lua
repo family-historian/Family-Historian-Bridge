@@ -1,4 +1,4 @@
--- Standalone tests for sourceHelper.lua. Run with: lua bridge/sourceHelper.test.lua
+-- Standalone tests for sourceHelper.lua. Run with: lua bridge/tests/sourceHelper.test.lua
 -- No FH/socket dependency. Unlike sandbox.test.lua/runScript.test.lua's flat, no-op
 -- stubs, sourceHelper.lua genuinely walks a record/child-item tree (MoveToFirstRecord,
 -- MoveToFirstChildItem, MoveNext) and creates new items in it — so this file builds a
@@ -8,7 +8,7 @@
 -- fhGetRecordId/fhCreateItem/fhSetValueAsText/fhSetValueAsDate/fhSetValueAsLink/
 -- fhSetValueAsRichText/fhNewDate/fhNewRichText/fhSrcEnableAutoTitle.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 
 local failures = 0
 

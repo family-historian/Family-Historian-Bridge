@@ -1,8 +1,8 @@
--- Standalone tests for sandbox.lua. Run with: lua bridge/sandbox.test.lua
+-- Standalone tests for sandbox.lua. Run with: lua bridge/tests/sandbox.test.lua
 -- Pure table inspection — no FH/socket/iup dependency. Verifies both halves of the
 -- allowlist: the basics are present, and nothing dangerous leaked in by accident.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 local sandbox = require('sandbox')
 
 local failures = 0

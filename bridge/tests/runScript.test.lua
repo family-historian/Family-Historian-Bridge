@@ -1,9 +1,9 @@
--- Standalone tests for runScript.lua. Run with: lua bridge/runScript.test.lua
+-- Standalone tests for runScript.lua. Run with: lua bridge/tests/runScript.test.lua
 -- No FH/socket/iup dependency — exercises the full compile/execute/encode path a
 -- run_lua request goes through, minus the socket framing (covered manually — see the
 -- spec's Testing Decisions).
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 local runScript = require('runScript')
 
 local failures = 0

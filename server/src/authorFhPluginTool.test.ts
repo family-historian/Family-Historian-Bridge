@@ -111,9 +111,9 @@ describe("handleAuthorFhPlugin", () => {
 });
 
 describe("SANDBOX_EXCLUDED_FUNCTIONS", () => {
-  it("matches every function bridge/sandbox.test.lua asserts is absent from run_lua's sandbox", () => {
+  it("matches every function bridge/tests/sandbox.test.lua asserts is absent from run_lua's sandbox", () => {
     const sandboxTestLuaPath = fileURLToPath(
-      new URL("../../bridge/sandbox.test.lua", import.meta.url),
+      new URL("../../bridge/tests/sandbox.test.lua", import.meta.url),
     );
     const sandboxTestLua = readFileSync(sandboxTestLuaPath, "utf-8");
 

@@ -1,8 +1,8 @@
--- Standalone tests for watchdog.lua. Run with: lua bridge/watchdog.test.lua
+-- Standalone tests for watchdog.lua. Run with: lua bridge/tests/watchdog.test.lua
 -- Pure Lua debug.sethook behavior — no FH dependency (the VM instruction-counting hook
 -- works identically in a plain lua interpreter as it does inside FH's embedded Lua 5.3).
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 local watchdog = require('watchdog')
 
 local failures = 0

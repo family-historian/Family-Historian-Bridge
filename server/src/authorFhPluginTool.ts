@@ -17,7 +17,7 @@ Plugin types (pass one as pluginType):
 This tool's output is text only — it never writes the plugin file to disk itself. The user saves it themselves wherever they want, then installs it under FH's own permission model.`;
 
 // Functions run_lua's sandbox (bridge/sandbox.lua) excludes under its Read-only baseline
-// — kept in sync by hand with bridge/sandbox.test.lua's own exclusion-assertion list, the
+// — kept in sync by hand with bridge/tests/sandbox.test.lua's own exclusion-assertion list, the
 // single authoritative enumeration of what run_lua excludes there. author_fh_plugin's
 // output sits outside that trust boundary entirely (see CONTEXT.md "author_fh_plugin" and
 // docs/adr/0004-author-fh-plugin-text-only-flag-risky-calls.md), so these are legitimate

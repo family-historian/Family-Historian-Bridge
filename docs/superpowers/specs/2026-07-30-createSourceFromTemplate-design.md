@@ -145,9 +145,8 @@ narrowly to only the item-pointer methods this helper actually calls:
 `MoveToFirstRecord`/`MoveToFirstChildItem`/`MoveNext`/`IsNotNull`/`IsNull`/`GetTag`, plus
 fakes for `fhGetItemText`/`fhGetRecordId`/`fhCreateItem`/`fhSetValueAsText`/
 `fhSetValueAsDate`/`fhSetValueAsLink`/`fhSetValueAsRichText`/`fhNewDate`/`fhNewRichText`/
-`fhSrcEnableAutoTitle`. Lives alongside the module as `bridge/sourceHelper.test.lua`, run
-the same way as the other `*.test.lua` files (`lua bridge/sourceHelper.test.lua`, no FH
-dependency).
+`fhSrcEnableAutoTitle`. Lives in `bridge/tests/sourceHelper.test.lua`, run the same way as
+the other `*.test.lua` files (`lua bridge/tests/sourceHelper.test.lua`, no FH dependency).
 
 Coverage should include: creating a Source with every field type represented (Text, Name,
 Date via both a Date object and the table shorthand, Place, Address, Repository, Enum,
