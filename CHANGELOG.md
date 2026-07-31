@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Plugin headers
+- Bridge plugin renamed `bridge.fh_lua` -> `Claude MCP Bridge.fh_lua` and given the
+  standard `@Title`/`@Type`/`@Author`/`@Version`/`@Keywords`/`@LastUpdated`/`@Licence`/
+  `@Description` header block FH's plugin store expects.
+- `author_fh_plugin` tool now generates that same standard header for both Report and
+  Query plugins it authors, filled in from new optional `title`/`description`/
+  `keywords`/`version`/`author` inputs (sensible defaults when omitted).
+
 ## 0.2.0
 
 ### Read-write Access mode wired end-to-end
