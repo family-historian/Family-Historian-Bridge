@@ -54,7 +54,7 @@ This produces `server/dist/index.js` — the file Claude Desktop will run.
 
 Copy these seven files from the project's `bridge` folder into FH's Plugins folder:
 
-- `bridge.fh_lua`
+- `Claude MCP Bridge.fh_lua`
 - `jsonEncode.lua`
 - `sandbox.lua`
 - `runScript.lua`
@@ -72,7 +72,7 @@ files.
   easy to copy into by mistake, and FH won't tell you if you do.
 - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
 
-In FH: **Tools -> Plugins -> New**, open `bridge.fh_lua` from that folder, click **Run**. A
+In FH: **Tools -> Plugins -> New**, open `Claude MCP Bridge.fh_lua` from that folder, click **Run**. A
 small "FH Bridge" dialog appears — leave it there; you'll use it every time you want
 Claude to look at your tree.
 
@@ -199,7 +199,7 @@ any other running instance and try again.
 Bridge"** — an earlier prototype plugin (title bar: "FH Bridge (prototype)", Start/Stop
 only, no Read-only/Read-write toggle) is still running and holding port 8734. Its dialog
 is **modal**, so while it's up you can't reach Tools -> Plugins to load the real
-`bridge.fh_lua` — Stop *and close* its window first, then load and Run `bridge.fh_lua`.
+`Claude MCP Bridge.fh_lua` — Stop *and close* its window first, then load and Run `Claude MCP Bridge.fh_lua`.
 The current Bridge's dialog is titled plainly "FH Bridge" and has the Read-only/Read-write
 selector.
 

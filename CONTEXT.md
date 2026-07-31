@@ -7,7 +7,7 @@ local TCP socket.
 ## Language
 
 **Bridge plugin**:
-The Lua plugin (`bridge/bridge.fh_lua`) that runs inside FH itself, opens the local TCP
+The Lua plugin (`bridge/Claude MCP Bridge.fh_lua`) that runs inside FH itself, opens the local TCP
 listener, and executes scripts sent to it. Supersedes an earlier prototype
 (`bridge_prototype_v2.fh_lua`, removed from this repo) — a user who never updated their
 FH Plugins folder past that old prototype gets a specific error telling them to switch,

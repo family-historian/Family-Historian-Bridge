@@ -58,7 +58,7 @@ Short version:
    npm run build
    ```
    This produces `server/dist/index.js`.
-3. **Install the Bridge plugin into FH** — copy `bridge.fh_lua`, `jsonEncode.lua`,
+3. **Install the Bridge plugin into FH** — copy `Claude MCP Bridge.fh_lua`, `jsonEncode.lua`,
    `sandbox.lua`, `runScript.lua`, `watchdog.lua`, `requestFraming.lua`, and
    `sourceHelper.lua` (all seven, together) from `bridge/` into FH's Plugins folder:
    - Native Windows, FH8: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` —
@@ -67,7 +67,7 @@ Short version:
      and it's easy to copy into the wrong one (confirmed on a beta install).
    - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
 
-   Then in FH: **Tools -> Plugins -> New**, open `bridge.fh_lua` from that folder, click
+   Then in FH: **Tools -> Plugins -> New**, open `Claude MCP Bridge.fh_lua` from that folder, click
    **Run**.
 4. **Connect Claude Desktop** — add an entry to Claude Desktop's MCP config
    (`~/Library/Application Support/Claude/claude_desktop_config.json` on Mac,
