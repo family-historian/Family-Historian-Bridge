@@ -49,7 +49,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native Windows, or the
    equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `Claude MCP Bridge.fh_lua` from that folder, click Run.
-3. A small "FH Bridge" dialog appears with a Read-only/Read-write selector (Read-only
+3. A small "Claude MCP Bridge" dialog appears with a Read-only/Read-write selector (Read-only
    selected by default) and Start/Stop buttons. Confirm the selector is clickable, then
    click Start. Confirm the selector greys out (inactive) once the Session is running, and
    the status label shows the chosen mode, e.g. "Listening on 127.0.0.1:8734 (read-only)".

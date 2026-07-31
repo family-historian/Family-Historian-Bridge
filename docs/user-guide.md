@@ -73,7 +73,7 @@ files.
 - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
 
 In FH: **Tools -> Plugins -> New**, open `Claude MCP Bridge.fh_lua` from that folder, click **Run**. A
-small "FH Bridge" dialog appears — leave it there; you'll use it every time you want
+small "Claude MCP Bridge" dialog appears — leave it there; you'll use it every time you want
 Claude to look at your tree.
 
 ### 4. Connect Claude Desktop to the server
@@ -104,7 +104,7 @@ restart Claude Desktop) after adding the config, not before.
 
 ## Using it
 
-1. **Open your project in FH**, then in the "FH Bridge" dialog:
+1. **Open your project in FH**, then in the "Claude MCP Bridge" dialog:
    - Pick **Read-only** (Claude can only look things up) or **Read-write** (Claude can
      also create, edit, and delete records). This choice holds for the whole Session —
      Stop and Start again to change it.
@@ -185,7 +185,7 @@ Tell Claude which kind you want — a **Report** plugin (shows in FH's Report Wi
 
 ## Troubleshooting
 
-**"No FH Bridge Session is running"** — click Start in the FH Bridge dialog. Claude can't
+**"No FH Bridge Session is running"** — click Start in the Claude MCP Bridge dialog. Claude can't
 start a Session itself; there's no way around clicking Start yourself.
 
 **Session ended on its own** — either you clicked Stop, or 5 minutes passed with no
@@ -200,7 +200,7 @@ Bridge"** — an earlier prototype plugin (title bar: "FH Bridge (prototype)", S
 only, no Read-only/Read-write toggle) is still running and holding port 8734. Its dialog
 is **modal**, so while it's up you can't reach Tools -> Plugins to load the real
 `Claude MCP Bridge.fh_lua` — Stop *and close* its window first, then load and Run `Claude MCP Bridge.fh_lua`.
-The current Bridge's dialog is titled plainly "FH Bridge" and has the Read-only/Read-write
+The current Bridge's dialog is titled plainly "Claude MCP Bridge" and has the Read-only/Read-write
 selector.
 
 **Claude's answer looks wrong** — Claude runs a fresh Lua script per question, so an

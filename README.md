@@ -90,7 +90,7 @@ only needed to build the server once).
 
 ## Using it
 
-Open the FH project, click **Start** in the "FH Bridge" dialog, then ask Claude a
+Open the FH project, click **Start** in the "Claude MCP Bridge" dialog, then ask Claude a
 genealogy question in plain English. See
 [docs/user-guide.md](docs/user-guide.md#using-it) for the full walkthrough, and
 [docs/user-guide.md#getting-a-standalone-plugin-written-for-you](docs/user-guide.md#getting-a-standalone-plugin-written-for-you)

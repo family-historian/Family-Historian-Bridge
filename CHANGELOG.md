@@ -72,6 +72,8 @@
 - `author_fh_plugin` tool now generates that same standard header for both Report and
   Query plugins it authors, filled in from new optional `title`/`description`/
   `keywords`/`version`/`author` inputs (sensible defaults when omitted).
+- Bridge dialog's title bar now reads "Claude MCP Bridge", matching the plugin's
+  `@Title` instead of the old "FH Bridge". (#25)
 
 ## 0.2.0
 

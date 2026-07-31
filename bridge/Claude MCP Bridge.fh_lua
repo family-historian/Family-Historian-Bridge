@@ -64,7 +64,7 @@ local dlg = iup.dialog{
         iup.hbox{btnStart, btnStop, gap="8"},
         margin="10x10", gap="10"
     },
-    title="FH Bridge",
+    title="Claude MCP Bridge",
     resize="YES", maxbox="NO", minbox="NO",
     topmost="YES", size="320x"
 }
