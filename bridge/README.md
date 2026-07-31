@@ -4,8 +4,13 @@ The FH-side half of the MCP bridge — see the repo root `CONTEXT.md` and
 `docs/adr/0001-arbitrary-sandboxed-lua-execution.md` for the concepts and decisions this
 implements.
 
-- `Claude MCP Bridge.fh_lua` — the plugin itself: IUP dialog (Access-mode selector, Start/Stop, idle
-  auto-Stop timer), TCP listener, request framing.
+- `Claude MCP Bridge.fh_lua` — the plugin itself: IUP dialog (Access-mode selector, idle-timeout
+  spin-box and countdown, Start/Stop, idle auto-Stop timer), TCP listener, request framing.
+  Calls `fhInitialise(7, 0, 0, "save_required")` as its very first statement, before any
+  `require()`, so FH prompts to save unsaved changes the moment the plugin loads rather
+  than partway through (issue #33) — Cancel there ends the plugin before the dialog is
+  ever built. Also calls `fhUpdateDisplay()` after every accepted request, so any change a
+  write script made is reflected on FH's own screen right away (issue #33).
 - `requestFraming.lua` — parses a request's first line (`STOP` / `LUA <n>` / `LUA_RO <n>`)
   into a structured form; `LUA_RO` forces the Read-only sandbox regardless of the
   Session's own Access mode (issue #16 — used exclusively by `describe_project`).
@@ -15,6 +20,10 @@ implements.
 - `jsonEncode.lua` — hand-rolled JSON encoder (FH's Lua ships none).
 - `watchdog.lua` — aborts a script that exceeds an instruction budget, so an accidental
   infinite loop can't hang FH with no recovery path.
+- `timeoutDisplay.lua` — pure formatting/conversion/clamping helpers for the Session
+  idle-timeout spin-box and its live countdown label (issue #34): minutes-to-seconds
+  conversion, `M:SS` formatting, and clamping a spin-box reading to the ticket's stated
+  5–120 minute range.
 - `sourceHelper.lua` — `fhBridge.createSourceFromTemplate(...)` (issue #18), a read-write-
   only helper that creates a fully populated templated Source record in one call instead of
   hand-assembling the `_SRCT`-link + metafield-shortcut dance every time. Wired into the
@@ -25,10 +34,11 @@ implements.
   hand-assembling `fhCreateItem("SOUR", ...)` + `fhSetValueAsLink` — see
   `docs/adr/0006-cite-every-fact-a-source-supports.md`.
 
-`requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`, and
-`sourceHelper.lua` have standalone unit tests, in `tests/` (`*.test.lua`, run with a plain
-`lua` interpreter — no FH dependency). Keeping tests out of this folder means every file
-directly in `bridge/` is exactly what step 1 below copies — nothing to filter by name:
+`requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
+`timeoutDisplay.lua`, and `sourceHelper.lua` have standalone unit tests, in `tests/`
+(`*.test.lua`, run with a plain `lua` interpreter — no FH dependency). Keeping tests out of
+this folder means every file directly in `bridge/` is exactly what step 1 below copies —
+nothing to filter by name:
 
 ```bash
 lua bridge/tests/jsonEncode.test.lua
@@ -36,6 +46,7 @@ lua bridge/tests/sandbox.test.lua
 lua bridge/tests/watchdog.test.lua
 lua bridge/tests/runScript.test.lua
 lua bridge/tests/requestFraming.test.lua
+lua bridge/tests/timeoutDisplay.test.lua
 lua bridge/tests/sourceHelper.test.lua
 ```
 
@@ -49,13 +60,25 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native Windows, or the
    equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `Claude MCP Bridge.fh_lua` from that folder, click Run.
+   Confirm `fhInitialise`'s save-required prompt (issue #33) fires here, before the Bridge's
+   own dialog appears: with unsaved changes in the open project, FH shows its own dialog
+   saying saving is required, with OK/Cancel. Click OK and confirm the project is saved
+   (check FH's own title bar/modified indicator) and the Bridge dialog then appears as
+   normal. Reload the plugin, make another unsaved change, run it again, and this time
+   click Cancel — confirm the plugin ends immediately with no Bridge dialog shown at all.
+   With no unsaved changes, confirm this prompt is skipped entirely and the Bridge dialog
+   appears directly (fhInitialise's documented behavior when there's nothing to save).
 3. A small "Claude MCP Bridge" dialog appears with a Read-only/Read-write selector (Read-only
-   selected by default) and Start/Stop buttons. Confirm the selector is clickable, then
-   click Start. Confirm the selector greys out (inactive) once the Session is running, and
-   the status label shows the chosen mode, e.g. "Listening on 127.0.0.1:8734 (read-only)".
-   Click Stop and confirm the selector becomes clickable again. Select Read-write, click
-   Start again, and confirm the status label now shows "(read-write)" — Sandbox behavior
-   is unchanged either way this stage, so only the label/lock differs. Click Stop.
+   selected by default), an "Idle timeout (min)" spin-box (default 5, spinnable between 5
+   and 120 — issue #34), and Start/Stop buttons. Confirm the selector and the spin-box are
+   both clickable/editable, then click Start. Confirm the selector and the spin-box both
+   grey out (inactive) once the Session is running, the status label shows the chosen mode,
+   e.g. "Listening on 127.0.0.1:8734 (read-only)", and a "Time left: M:SS" label appears
+   below the spin-box and counts down once per second. Click Stop and confirm the selector
+   and spin-box both become editable again, and the "Time left" label clears. Select
+   Read-write, click Start again, and confirm the status label now shows "(read-write)" —
+   Sandbox behavior is unchanged either way this stage, so only the label/lock differs.
+   Click Stop.
 4. Resize: drag the dialog wider and taller. Confirm the status label's text isn't
    truncated at the new width, and that the Start/Stop buttons stay pinned to the bottom
    of the dialog rather than floating in the middle. Try shrinking it back down and
@@ -105,12 +128,16 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    Expected output: a JSON object containing `"error"` and `"instruction limit"`.
 8. Click Stop (or send `STOP\n` the same way as the prototype's original test) — FH
    should become interactive again immediately.
-9. Idle-timeout auto-Stop: temporarily lower `IDLE_TIMEOUT_SECONDS` near the top of
-   `Claude MCP Bridge.fh_lua` (e.g. to `10`) for a fast test, reload the plugin, click Start, then
-   leave the Session idle (no request sent) past that duration. Confirm the dialog
-   auto-returns to "Not listening." and the selector becomes clickable again, with no
-   request sent and without clicking Stop. Restore `IDLE_TIMEOUT_SECONDS` to its real value
-   (`300`) afterward.
+9. Idle-timeout auto-Stop and countdown (issue #34): the spin-box enforces a 5–120 minute
+   range with no override in the UI, so for a fast test, temporarily lower
+   `timeoutDisplay.MIN_MINUTES` (e.g. to `1`) — copy the modified `timeoutDisplay.lua`
+   alongside the rest of `bridge/`'s files, reload the plugin, set the spin-box to its new
+   minimum, click Start, then leave the Session idle (no request sent). Confirm the
+   "Time left" label counts down to "0:00" and the dialog then auto-returns to "Not
+   listening." with the selector and spin-box both clickable again, with no request sent
+   and without clicking Stop. Restore `timeoutDisplay.MIN_MINUTES` to `5` afterward (and
+   re-run `lua bridge/tests/timeoutDisplay.test.lua` to confirm the restored value still
+   passes its assertions).
 10. FH read allowlist: with a real FH project open and a Session started (read-only),
    confirm `fhu.records("INDI")` and the raw primitives are actually wired up against
    real data — count every `INDI` record and cross-check against FH's own count (e.g.
@@ -151,8 +178,11 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    ```
    Expected output: a JSON string, and a new Individual named "Test /Person/" visible in
    FH once you look at the project (undo with Ctrl-Z to clean up — see CONTEXT.md "FH
-   auto-undo"). Then repeat with Read-only selected instead and confirm the same script
-   now fails with a JSON error calling a nil value (`fhCreateItem` absent).
+   auto-undo"). If the Records Window or a diagram showing this record is visible
+   on-screen at the time, confirm it reflects the new record without you having to click
+   or switch windows yourself — that's `fhUpdateDisplay()` (issue #33) firing right after
+   the response is sent. Then repeat with Read-only selected instead and confirm the same
+   script now fails with a JSON error calling a nil value (`fhCreateItem` absent).
 12. `describe_project` forced Read-only (issue #16): with a Read-write Session started,
    send a `LUA_RO` request directly (this is what `describeProjectTool.ts` sends) and
    confirm it still cannot reach a write function, even though the Session itself is

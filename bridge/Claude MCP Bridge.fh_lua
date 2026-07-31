@@ -12,12 +12,14 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 
 -- FH MCP Bridge
 --
--- IUP dialog with an Access-mode selector and Start/Stop buttons. Start binds a local TCP
--- listener and polls it via an IUP timer (not a manual while-loop — see docs/adr's
--- prototype-era findings on why fhExhibitResponsiveness()+while-loop doesn't work). Stop
--- unbinds it. Closing the dialog window ends the plugin and cleans up. The same poll timer
--- also watches for an idle Session (no accepted request for IDLE_TIMEOUT_SECONDS) and
--- auto-Stops it, so a forgotten Session doesn't lock FH indefinitely.
+-- IUP dialog with an Access-mode selector, an idle-timeout spin-box (issue #34), and
+-- Start/Stop buttons. Start binds a local TCP listener and polls it via an IUP timer (not
+-- a manual while-loop — see docs/adr's prototype-era findings on why
+-- fhExhibitResponsiveness()+while-loop doesn't work). Stop unbinds it. Closing the dialog
+-- window ends the plugin and cleans up. The same poll timer also watches for an idle
+-- Session (no accepted request for the configured idle-timeout, see
+-- currentIdleTimeoutSeconds() below) and auto-Stops it, so a forgotten Session doesn't
+-- lock FH indefinitely; a live countdown to that auto-Stop is shown in lblTimeLeft.
 --
 -- Confirmed in testing (prototype phase): while a session is running, FH's main window
 -- is locked. This is a deliberate "Session" (see CONTEXT.md) — start it to hand control
@@ -30,10 +32,20 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 -- Read-only sandbox regardless of the Session's access mode, via the LUA_RO request form
 -- (issue #16) — see requestFraming.lua.
 --
--- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, and watchdog.lua
--- must all be copied together into FH's Plugins folder (so require() can find the sibling
--- modules) — see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/.
+-- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, watchdog.lua, and
+-- timeoutDisplay.lua must all be copied together into FH's Plugins folder (so require()
+-- can find the sibling modules) —
+-- see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/.
 -- This file itself is then loaded via Tools -> Plugins in FH, same as any other plugin.
+
+-- fhInitialise must be the first function this plugin calls, before even require()
+-- (per FH's own docs) — "save_required" pops FH's own save-changes dialog (OK/Cancel)
+-- the moment the plugin loads, ensuring the project is saved before any work happens
+-- through it (issue #33). Cancel there ends the plugin immediately, before the dialog
+-- below is ever built. Declares a minimum FH version of 7.0.0, matching the earliest
+-- version this project already supports side-by-side (see README.md) — not a new
+-- restriction, just what fhInitialise itself requires as its other two arguments.
+fhInitialise(7, 0, 0, "save_required")
 
 socket = require("socket")
 require("iuplua")
@@ -42,9 +54,10 @@ iup.SetGlobal("CUSTOMQUITMESSAGE", "YES") -- avoids known FH/IUP interaction iss
 local runScript = require("runScript")
 local json = require("jsonEncode")
 local requestFraming = require("requestFraming")
+local timeoutDisplay = require("timeoutDisplay")
 
 local PORT = 8734
-local IDLE_TIMEOUT_SECONDS = 300 -- auto-Stop a Session this long after its last accepted request
+local DEFAULT_IDLE_TIMEOUT_MINUTES = 5 -- unchanged from the previous hardcoded 300s default
 local server = nil
 local lastActivityTime = nil
 
@@ -52,6 +65,16 @@ local lblStatus = iup.label{title="Not listening.", padding="10x10"}
 local togReadOnly  = iup.toggle{title="Read-only", value="ON"}
 local togReadWrite = iup.toggle{title="Read-write"}
 local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
+-- Idle-timeout control (issue #34): minutes, 5-120 per the ticket's stated range, editable
+-- only while the Session is stopped (locked the same way togReadOnly/togReadWrite are —
+-- see btnStart/btnStop below). SPINMIN/SPINMAX are the widget's own guard;
+-- timeoutDisplay.clampMinutes is a second, defensive clamp applied when the value is
+-- actually read, in case a manually typed value slips past the widget.
+local txtIdleTimeout = iup.text{
+    spin="YES", spinmin=timeoutDisplay.MIN_MINUTES, spinmax=timeoutDisplay.MAX_MINUTES,
+    value=tostring(DEFAULT_IDLE_TIMEOUT_MINUTES), visiblecolumns=4
+}
+local lblTimeLeft = iup.label{title="", padding="10x10"}
 local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
 
@@ -60,6 +83,8 @@ lblStatus.expand = "HORIZONTAL"
 local dlg = iup.dialog{
     iup.vbox{
         lblStatus, radAccessMode,
+        iup.hbox{iup.label{title="Idle timeout (min):"}, txtIdleTimeout, gap="8"},
+        lblTimeLeft,
         iup.fill{expand="YES"},
         iup.hbox{btnStart, btnStop, gap="8"},
         margin="10x10", gap="10"
@@ -77,6 +102,17 @@ dlg.minsize = dlg.rastersize
 
 local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"
+end
+
+-- Read live rather than snapshotted at Start, same as currentAccessMode() above — safe
+-- because txtIdleTimeout is locked (active="NO") for the whole Session, just like
+-- togReadOnly/togReadWrite.
+local function currentIdleTimeoutSeconds()
+    return timeoutDisplay.minutesToSeconds(timeoutDisplay.clampMinutes(txtIdleTimeout.value))
+end
+
+local function updateTimeLeftLabel(secondsLeft)
+    lblTimeLeft.title = "Time left: " .. timeoutDisplay.formatSecondsRemaining(secondsLeft)
 end
 
 local timPoll = iup.timer{time=100, run="NO"}
@@ -101,8 +137,14 @@ local pendingRethrow = nil
 function timPoll:action_cb()
     if not server then return end
 
-    if lastActivityTime and os.time() - lastActivityTime > IDLE_TIMEOUT_SECONDS then
+    if lastActivityTime and os.time() - lastActivityTime > currentIdleTimeoutSeconds() then
         return btnStop:action()
+    end
+
+    -- Live countdown (issue #34) -- updated every poll tick, not just when a request
+    -- arrives, so it counts down even while idle.
+    if lastActivityTime then
+        updateTimeLeftLabel(currentIdleTimeoutSeconds() - (os.time() - lastActivityTime))
     end
 
     local client = server:accept()
@@ -145,6 +187,11 @@ function timPoll:action_cb()
     client:send(response .. "\n")
     client:close()
 
+    -- Give FH a chance to redraw anything a write script changed (issue #33) --
+    -- unconditional, regardless of access mode or whether this particular script
+    -- actually wrote anything: cheap when nothing changed, per fhUpdateDisplay's own docs.
+    fhUpdateDisplay()
+
     lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
         "\nLast request handled at " .. os.date("%H:%M:%S")
 
@@ -178,6 +225,8 @@ function btnStart:action()
     btnStop.active = "YES"
     togReadOnly.active = "NO"
     togReadWrite.active = "NO"
+    txtIdleTimeout.active = "NO"
+    updateTimeLeftLabel(currentIdleTimeoutSeconds())
     lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
         "\nWaiting for a connection..."
 end
@@ -193,6 +242,8 @@ function btnStop:action()
     btnStop.active = "NO"
     togReadOnly.active = "YES"
     togReadWrite.active = "YES"
+    txtIdleTimeout.active = "YES"
+    lblTimeLeft.title = ""
     lblStatus.title = "Not listening."
 end
 

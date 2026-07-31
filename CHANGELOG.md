@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Save prompt and display refresh
+- The Bridge plugin now calls `fhInitialise(7, 0, 0, "save_required")` as its first
+  statement, before any `require()`, so FH prompts to save unsaved changes the moment the
+  plugin loads rather than silently leaving the project unsaved for the whole Session.
+  Cancelling the prompt ends the plugin before its own dialog ever appears. (#33)
+- The Bridge now calls `fhUpdateDisplay()` after every accepted `LUA`/`LUA_RO` request, so
+  a write script's changes show up on FH's own screen immediately instead of only after
+  the user next interacts with FH. (#33)
+
+### Idle-timeout control
+- The Session idle auto-Stop timeout, previously a hardcoded 300s (5 min) constant, is now
+  a spin-box in the Bridge dialog (5–120 minutes, matching the previous default), editable
+  only while the Session is stopped. A live "Time left: M:SS" countdown label shows the
+  time remaining before auto-Stop. Pure formatting/conversion/clamping logic lives in the
+  new `bridge/timeoutDisplay.lua`, with its own standalone tests. The value is not
+  persisted between plugin loads — it resets to 5 minutes each time. (#34)
+- Deliberately deferred to a follow-up issue: including timeout information in the
+  client's `run_lua` response, and letting a client request a longer timeout — both would
+  require redesigning the run_lua wire response shape, which a prior decision (see
+  `bridgeResponse.ts`'s "ticket #2" comment) already chose not to do for a smaller case.
+  (#35)
+
 ## 0.3.0
 
 ### fhu sandbox escape hatches
