@@ -108,6 +108,39 @@ describe("handleAuthorFhPlugin", () => {
     expect(text).toMatch(/\.fh_lua/);
     expect(text).toMatch(/double-click|Import/i);
   });
+
+  it("fills the standard header fields from the caller-supplied metadata, for both plugin types", async () => {
+    const text = await textOf(
+      handleAuthorFhPlugin({
+        pluginType: "report",
+        logic: "local x = 1",
+        title: "Surname Census",
+        description: "Counts occurrences of each surname across selected Individuals.",
+        keywords: "Individual, Sources",
+        version: "1.2",
+        author: "Jane_t",
+      }),
+    );
+
+    expect(text).toMatch(/@Title: Surname Census/);
+    expect(text).toMatch(/@Author: Jane_t/);
+    expect(text).toMatch(/@Version: 1\.2/);
+    expect(text).toMatch(/@Keywords: Individual, Sources/);
+    expect(text).toMatch(/@LastUpdated: \d{4}-\d{2}-\d{2}/);
+    expect(text).toMatch(/@Description: Counts occurrences of each surname across selected Individuals\./);
+    expect(text).toMatch(
+      /@Licence: This plugin is copyright \(c\) \d{4} Jane_t and contributors, and is licensed under the MIT License/,
+    );
+  });
+
+  it("defaults author to Claude MCP and still includes the standard header fields when metadata is omitted", async () => {
+    const text = await textOf(handleAuthorFhPlugin({ pluginType: "query", logic: "local x = 1" }));
+
+    expect(text).toMatch(/@Author: Claude MCP/);
+    expect(text).toMatch(/@Version: 1\.0/);
+    expect(text).toMatch(/@LastUpdated: \d{4}-\d{2}-\d{2}/);
+    expect(text).not.toMatch(/@Type:/);
+  });
 });
 
 describe("SANDBOX_EXCLUDED_FUNCTIONS", () => {
