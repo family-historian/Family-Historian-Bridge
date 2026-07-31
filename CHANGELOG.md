@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0
+
 ### fhu sandbox escape hatches
 - Eight `fhu` (`fhUtils`) methods that bypassed the sandbox entirely are now replaced
   with an error-raising wrapper, in both Read-only and Read-write: `getParam`,
@@ -99,6 +101,9 @@
   `fhGetContextInfo("CI_APP_DATA_FOLDER")` (falling back to an explicit `path` param
   when no Bridge Session is running), avoiding the FH7/FH8 side-by-side Plugins-folder
   footgun documented in docs/user-guide.md. (#24, ADR 0008)
+
+### Packaging
+- Version bumped to 0.3.0 (0.2.0 already released on Forgejo).
 
 ## 0.2.0
 
