@@ -1,4 +1,7 @@
+import fs from "node:fs/promises";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import {
   BridgeConnectionRefusedError,
   runLuaOnBridge as defaultRunLuaOnBridge,
@@ -130,5 +133,57 @@ export async function handleInstallFhPlugin(
 
   return textResult(
     `Installed as "${filename}" in FH's Plugins folder (${resolved.path}).\n\nFH doesn't rescan its Plugins folder live — if the Plugins Dialog (Tools -> Plugins) is currently open, close and reopen it so the new entry appears, then select it and click Run (or tick Add To Tools Menu to run it again later).`,
+  );
+}
+
+function makeDefaultInstallFhPluginDeps(): InstallFhPluginDeps {
+  return {
+    runLuaOnBridge: defaultRunLuaOnBridge,
+    readdir: (dirPath) => fs.readdir(dirPath),
+    // "wx" refuses to overwrite an existing file — a last-line-of-defence race guard on
+    // top of the version-number scan above, not a substitute for it.
+    writeFile: (filePath, content) => fs.writeFile(filePath, content, { flag: "wx" }),
+  };
+}
+
+const defaultDeps: InstallFhPluginDeps = makeDefaultInstallFhPluginDeps();
+
+// Steers Claude's own behavior when it uses this tool — see CONTEXT.md's
+// "install_fh_plugin" entry and docs/adr/0008-install-fh-plugin-staged-write.md.
+export const INSTALL_FH_PLUGIN_DESCRIPTION = `Write a plugin author_fh_plugin generated directly into FH's Plugins folder, ready for the user to run from Tools -> Plugins, instead of them saving the file themselves.
+
+Only call this when the user explicitly asks you to install (or "save", "add", "upload") the plugin you just generated — never automatically as a follow-up to author_fh_plugin, even when the generated plugin has no "-- FLAGGED" lines. Installing is still the user choosing to trust and run what you wrote; author_fh_plugin's flags exist so they can review it first, and calling this tool silently would remove that checkpoint. Flagged lines are expected and fine here — a Report/Query plugin genuinely needs functions run_lua's sandbox excludes (fhOutputResultSetColumn, fhMessageBox, etc.), that's the whole reason author_fh_plugin exists as a separate trust mode.
+
+Pass pluginSource exactly as author_fh_plugin returned it (its trailing "---" install-instructions footer, if you include it, is stripped automatically — no need to trim it yourself).
+
+Never overwrites an existing file. Each install gets the next unused "V<N>" suffix on both the filename and the plugin's own @Title header, based on how many versions of that title are already in the Plugins folder — so asking to install after tweaking the same plugin's logic again produces "<Title> V2", then "V3", etc., rather than clobbering the previous save.
+
+Requires an active Bridge Session (same as run_lua) to look up FH's Plugins folder location live. If no Session is running, tell the user to click Start and retry, or ask them to confirm their Plugins folder path themselves (see docs/user-guide.md's "Where FH's Plugins folder is" — the location differs by FH version and is easy to get wrong) and pass it as the path parameter.
+
+FH does not rescan its Plugins folder while its Plugins Dialog is open. After a successful install, tell the user to close and reopen Tools -> Plugins if they have it open, then select the new entry and click Run (or tick Add To Tools Menu).`;
+
+export function registerInstallFhPluginTool(
+  server: McpServer,
+  deps: InstallFhPluginDeps = defaultDeps,
+): void {
+  server.registerTool(
+    "install_fh_plugin",
+    {
+      description: INSTALL_FH_PLUGIN_DESCRIPTION,
+      inputSchema: {
+        pluginSource: z
+          .string()
+          .describe(
+            "The plugin source exactly as author_fh_plugin returned it. Its trailing '---' install-instructions footer, if included, is stripped automatically.",
+          ),
+        path: z
+          .string()
+          .optional()
+          .describe(
+            "Explicit path to FH's Plugins folder, used only as a fallback when no Bridge Session is running to look the path up live. Ask the user to confirm this themselves (see docs/user-guide.md's 'Where FH's Plugins folder is') rather than guessing it.",
+          ),
+      },
+    },
+    (input) => handleInstallFhPlugin(input, deps),
   );
 }

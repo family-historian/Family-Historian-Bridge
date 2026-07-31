@@ -109,6 +109,12 @@ describe("handleAuthorFhPlugin", () => {
     expect(text).toMatch(/double-click|Import/i);
   });
 
+  it("mentions install_fh_plugin as the option for the user's explicit install request", async () => {
+    const text = await textOf(handleAuthorFhPlugin({ pluginType: "report", logic: "local x = 1" }));
+
+    expect(text).toMatch(/install_fh_plugin/);
+  });
+
   it("fills the standard header fields from the caller-supplied metadata, for both plugin types", async () => {
     const text = await textOf(
       handleAuthorFhPlugin({

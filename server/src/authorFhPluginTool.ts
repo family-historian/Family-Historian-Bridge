@@ -187,7 +187,7 @@ export async function handleAuthorFhPlugin(input: AuthorFhPluginInput): Promise<
   const text = `${pluginSource}
 
 ---
-Save this as a .fh_lua file yourself and install it under FH's own permission model — this tool never writes it to disk. Double-click the file to install on Windows, or use FH's own Tools -> Plugins -> New/Import option.
+Save this as a .fh_lua file yourself and install it under FH's own permission model — this tool never writes it to disk. Double-click the file to install on Windows, or use FH's own Tools -> Plugins -> New/Import option. Alternatively, if the user asks you to install it, call install_fh_plugin with this output and it'll be written straight into FH's Plugins folder for them (with automatic V1/V2/... versioning so repeated installs never overwrite each other) — only do that on their explicit say-so, the same way you wouldn't save this file yourself without being asked.
 
 Any line above marked "-- FLAGGED" calls a function excluded from run_lua's sandbox. That's expected here, not a problem to fix — but review each flagged line before installing, the same way you'd review any other line in a plugin you're about to run.`;
 
