@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### GEDCOM knowledge corpus
+- Added Data Reference qualifier codes (Date, Name, Place/lat-long) to
+  `gedcom-knowledge-corpus.jsonl`, transcribed from an FH developer-supplied source
+  header (`g_QualArr`) and cross-checked against the Date/Name/Place Formats help
+  pages and Understanding Data References. Fills in canonical qualifier name
+  strings, aliases (COMPACT/SHORT, ABBREV/MEDIUM), record-type restrictions, and
+  gotchas (undocumented LONG_FS/COMPACT_FS; the 'NUMERIC' qualifier name being
+  reused, unrelated, for both lat/long and custom-attribute editing).
+- Added a `data-references-syntax` entry covering the general Data Reference
+  grammar (%TAG.FIELD:QUALIFIER% dot/chevron/index/shortcut/contextual-ref
+  syntax) that the qualifier codes above, and Sentence Templates, both sit on
+  top of — qualifiers are a Data Reference feature, not a Sentence-Template-only
+  one; the entries above were corrected mid-session after initially mislabeling
+  them as sentence-template-specific.
+
 ### fh-help resource reads
 - `fh_help_page`'s resource template no longer implements `list` — `resources/list` was
   returning all ~993 corpus topics unpaginated (~258 KB, no `nextCursor`; this SDK version
