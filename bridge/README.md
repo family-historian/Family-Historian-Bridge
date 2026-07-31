@@ -74,7 +74,10 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    both clickable/editable, then click Start. Confirm the selector and the spin-box both
    grey out (inactive) once the Session is running, the status label shows the chosen mode,
    e.g. "Listening on 127.0.0.1:8734 (read-only)", and a "Time left: M:SS" label appears
-   below the spin-box and counts down once per second. Click Stop and confirm the selector
+   below the spin-box and counts down once per second — confirm the full text is visible,
+   not clipped to a couple of characters (the label is created with an empty title, so it
+   needs an explicit `expand="HORIZONTAL"`, same fix as `lblStatus`, or it maps too narrow
+   for the text set into it later). Click Stop and confirm the selector
    and spin-box both become editable again, and the "Time left" label clears. Select
    Read-write, click Start again, and confirm the status label now shows "(read-write)" —
    Sandbox behavior is unchanged either way this stage, so only the label/lock differs.

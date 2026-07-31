@@ -79,6 +79,11 @@ local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
 
 lblStatus.expand = "HORIZONTAL"
+-- Same fix as lblStatus: this label is created with an empty title, so without an
+-- explicit expand it maps at near-zero width and never grows to fit the "Time left:
+-- M:SS" text set into it later — IUP sizes a label once, at map time, from whatever
+-- title it had then.
+lblTimeLeft.expand = "HORIZONTAL"
 
 local dlg = iup.dialog{
     iup.vbox{
