@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### fh-help resource reads
+- `fh_help_page`'s resource template no longer implements `list` — `resources/list` was
+  returning all ~993 corpus topics unpaginated (~258 KB, no `nextCursor`; this SDK version
+  doesn't support cursor pagination at that layer regardless). No caller needs to browse
+  the full corpus: `search_fh_help` already returns the exact `uri` to read, and
+  `resources/read` matches by URI-template pattern independent of `list`. (#20)
+- Investigated why an MCP client failed to read `fh-help:` resource uris despite the
+  server advertising and correctly serving them at the protocol level — root cause is
+  client-side, not fixable here. `search_fh_help`'s description no longer promises
+  resource reads as a reliable path to full text. See ADR 0007. (#20)
+
 ### Plugin headers
 - Bridge plugin renamed `bridge.fh_lua` -> `Claude MCP Bridge.fh_lua` and given the
   standard `@Title`/`@Type`/`@Author`/`@Version`/`@Keywords`/`@LastUpdated`/`@Licence`/

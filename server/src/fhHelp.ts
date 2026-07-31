@@ -72,7 +72,7 @@ export const SEARCH_FH_HELP_DESCRIPTION = `Search Family Historian 8's official 
 
 Also use this BEFORE writing a run_lua script, any time you're not certain of an FH API function's exact signature, an item-pointer method's calling convention, or a data-reference syntax detail (e.g. "MoveToFirstChildItem", "fhGetItemText data reference syntax") — the corpus includes the full function reference. Cheaper and more reliable than guessing the shape and fixing it by trial and error against the user's real, live project.
 
-Returns a ranked list of matching topics, each with a "uri" — read that uri as an MCP resource to get the topic's full text. This search is a simple keyword match, not semantic search: try the FH feature/menu name or function name a user/API would recognize, not a paraphrase. A full-sentence query falls back to matching on individual significant words, but a single term (e.g. "merge", "MoveToFirstChildItem") is still the most reliable form.`;
+Returns a ranked list of matching topics, each with a "uri" that can be read as an MCP resource for the topic's full text — but resource reads are unreliable in at least one tested MCP client (see docs/adr/0007-fh-help-resource-reads-unreliable-client-side.md), so treat that path as best-effort, not guaranteed. If an excerpt is insufficient and a resource read isn't available, retry with a narrower, more specific query first — the excerpt is a window around the best match, so a more targeted term (an exact function name, not a paraphrase) often surfaces the passage you actually need. This search is a simple keyword match, not semantic search: try the FH feature/menu name or function name a user/API would recognize. A full-sentence query falls back to matching on individual significant words, but a single term (e.g. "merge", "MoveToFirstChildItem") is still the most reliable form.`;
 
 function searchResult(query: string, matches: FhHelpSearchResult[]): CallToolResult {
   if (matches.length === 0) {
@@ -100,17 +100,13 @@ export function registerFhHelpTools(server: McpServer, store: FhHelpCorpusStore)
     ({ query }) => searchResult(query, searchFhHelp(store.topics, query)),
   );
 
-  const template = new ResourceTemplate("fh-help:{+path}", {
-    list: () => ({
-      resources: store.topics.map((topic) => ({
-        uri: resourceUriForUrl(topic.url),
-        name: topic.url,
-        title: topic.title,
-        description: topic.breadcrumb.join(" > "),
-        mimeType: "text/plain",
-      })),
-    }),
-  });
+  // Deliberately no `list` callback: this SDK version's ListResourcesRequestSchema handler
+  // ignores `cursor` and never emits `nextCursor` (no real pagination support at that layer),
+  // so enumerating all ~1000 corpus topics in one unpaginated resources/list response risked
+  // tripping client-side size/shape limits. No caller needs to browse the full list anyway —
+  // search_fh_help already returns the exact uri to read, and resources/read matches by
+  // URI-template pattern independent of whatever (if anything) `list` returns.
+  const template = new ResourceTemplate("fh-help:{+path}", { list: undefined });
 
   server.registerResource(
     "fh_help_page",
