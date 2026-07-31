@@ -75,6 +75,16 @@
 - Bridge dialog's title bar now reads "Claude MCP Bridge", matching the plugin's
   `@Title` instead of the old "FH Bridge". (#25)
 
+### install_fh_plugin tool
+- New `install_fh_plugin` tool writes a plugin `author_fh_plugin` generated directly
+  into FH's Plugins folder, on the user's explicit request only — staged as a second,
+  separate tool call, never chained on automatically. Never overwrites an existing
+  file: each install gets the next unused `V<N>` suffix on both the filename and the
+  plugin's own `@Title` header. The Plugins folder location is resolved live via
+  `fhGetContextInfo("CI_APP_DATA_FOLDER")` (falling back to an explicit `path` param
+  when no Bridge Session is running), avoiding the FH7/FH8 side-by-side Plugins-folder
+  footgun documented in docs/user-guide.md. (#24, ADR 0008)
+
 ## 0.2.0
 
 ### Read-write Access mode wired end-to-end

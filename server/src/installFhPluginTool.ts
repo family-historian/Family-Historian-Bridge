@@ -54,21 +54,40 @@ async function resolvePluginsFolder(
     return { errorResult: bridgeResult };
   }
 
-  const appDataFolder = JSON.parse((bridgeResult.content[0] as { text: string }).text) as string;
+  const appDataFolder: unknown = JSON.parse((bridgeResult.content[0] as { text: string }).text);
+  if (typeof appDataFolder !== "string" || appDataFolder.trim() === "") {
+    return {
+      errorResult: textResult(
+        "FH returned no app-data folder path — could not determine the Plugins folder location. Ask the user to confirm their Plugins folder path (see docs/user-guide.md's \"Where FH's Plugins folder is\") and pass it as the path parameter.",
+        true,
+      ),
+    };
+  }
   return { path: joinPluginsFolder(appDataFolder) };
 }
 
 const TITLE_LINE_PATTERN = /^@Title:[ \t]*(.*)$/m;
-const GENERATED_FOOTER_SEPARATOR = "\n\n---\n";
+// Anchored to the generated footer's actual leading text (see author_fh_plugin's
+// "Save this as a .fh_lua file..." text), not just the bare "---" rule, so a
+// legitimate "---" divider inside the plugin body's own Lua (e.g. an LDoc-style
+// section break) can never be mistaken for the generated footer and truncate the
+// plugin's real logic.
+const GENERATED_FOOTER_SEPARATOR = "\n\n---\nSave this as a .fh_lua file yourself";
 
 function stripGeneratedFooter(pluginSource: string): string {
   const separatorIndex = pluginSource.indexOf(GENERATED_FOOTER_SEPARATOR);
   return separatorIndex === -1 ? pluginSource : pluginSource.slice(0, separatorIndex);
 }
 
+// Shared blank-@Title fallback base — used for both the filename (sanitizeFilenameBase)
+// and the versioned @Title header (appendVersionToTitle) so the two always agree: a blank
+// title produces filename "plugin V1.fh_lua" and header "@Title: plugin V1", never a
+// header that just reads "V1" with no "plugin" prefix.
+const BLANK_TITLE_FALLBACK = "plugin";
+
 function sanitizeFilenameBase(title: string): string {
   const trimmed = title.trim();
-  const base = trimmed.length > 0 ? trimmed : "plugin";
+  const base = trimmed.length > 0 ? trimmed : BLANK_TITLE_FALLBACK;
   return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
 }
 
@@ -86,8 +105,9 @@ function nextVersionNumber(existingNames: string[], base: string): number {
 }
 
 function appendVersionToTitle(source: string, version: number, originalTitle: string): string {
-  const suffix = originalTitle.trim().length > 0 ? `${originalTitle.trim()} V${version}` : `V${version}`;
-  return source.replace(TITLE_LINE_PATTERN, `@Title: ${suffix}`);
+  const trimmed = originalTitle.trim();
+  const effectiveTitle = trimmed.length > 0 ? trimmed : BLANK_TITLE_FALLBACK;
+  return source.replace(TITLE_LINE_PATTERN, `@Title: ${effectiveTitle} V${version}`);
 }
 
 export async function handleInstallFhPlugin(

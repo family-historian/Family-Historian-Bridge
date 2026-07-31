@@ -118,6 +118,40 @@ describe("resolvePluginsFolder (via handleInstallFhPlugin)", () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain("boom");
   });
+
+  it("errors clearly, without calling writeFile, when the bridge resolves an empty-string app data folder", async () => {
+    let writeCalled = false;
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        runLuaOnBridge: async () => JSON.stringify(""),
+        writeFile: async () => {
+          writeCalled = true;
+        },
+      }),
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text.length).toBeGreaterThan(0);
+    expect(writeCalled).toBe(false);
+  });
+
+  it("errors clearly, without calling writeFile, when the bridge resolves a null app data folder", async () => {
+    let writeCalled = false;
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        runLuaOnBridge: async () => JSON.stringify(null),
+        writeFile: async () => {
+          writeCalled = true;
+        },
+      }),
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text.length).toBeGreaterThan(0);
+    expect(writeCalled).toBe(false);
+  });
 });
 
 describe("handleInstallFhPlugin — versioning and write behaviour", () => {
@@ -170,19 +204,22 @@ describe("handleInstallFhPlugin — versioning and write behaviour", () => {
     );
   });
 
-  it("defaults to base name 'plugin' when @Title is blank", async () => {
+  it("defaults to base name 'plugin' when @Title is blank, consistently in filename and header", async () => {
     const source = PLUGIN_SOURCE.replace("@Title: Surname Census", "@Title:");
     let writtenPath: string | undefined;
+    let writtenContent: string | undefined;
     await handleInstallFhPlugin(
       { pluginSource: source },
       makeDeps({
-        writeFile: async (filePath) => {
+        writeFile: async (filePath, content) => {
           writtenPath = filePath;
+          writtenContent = content;
         },
       }),
     );
 
     expect(writtenPath).toContain("plugin V1.fh_lua");
+    expect(writtenContent).toMatch(/^@Title: plugin V1$/m);
   });
 
   it("strips author_fh_plugin's trailing '---' install-instructions footer before writing", async () => {
@@ -199,6 +236,24 @@ describe("handleInstallFhPlugin — versioning and write behaviour", () => {
 
     expect(writtenContent).not.toContain("Save this as a .fh_lua file yourself");
     expect(writtenContent).toContain('fhOutputResultSetColumn("Surname", "text", {}, 0)');
+  });
+
+  it("does not truncate on a bare '---' divider inside the plugin body itself", async () => {
+    // A plausible Claude-authored Lua section divider (LDoc-style), not the real
+    // author_fh_plugin generated footer — must survive stripGeneratedFooter intact.
+    const withBodyDivider = `${PLUGIN_SOURCE}\n\n---\n-- a section divider, not the generated footer\nlocal x = 1\n`;
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: withBodyDivider },
+      makeDeps({
+        writeFile: async (_filePath, content) => {
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenContent).toContain("-- a section divider, not the generated footer");
+    expect(writtenContent).toContain("local x = 1");
   });
 
   it("returns a clear error and writes nothing when no @Title field is present", async () => {
