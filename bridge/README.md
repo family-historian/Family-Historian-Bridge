@@ -221,3 +221,48 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    Whole-record source citation to the chosen Source (undo with Ctrl-Z to clean up). Then
    repeat with Read-only selected instead and confirm the same script now fails calling
    `fhBridge` as nil (step 11's negative case).
+15. Write-mode error handling / FH auto-undo (issues #15, #19, ADR 0005): with a real FH
+   project open, select Read-write, click Start:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   fhu.createIndi(\"ZZ_MANUAL_TEST_ROLLBACK\", \"Male\")
+   error(\"deliberate error after write, manual test\")
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a JSON error object containing `"writeSessionRolledBack":true`. FH
+   should then pop its own "Plugin Error" dialog naming the same error, asking "Do you
+   wish to rollback (i.e. undo) all changes to data records made by this plugin?" — click
+   Yes and confirm the new Individual is gone. The Bridge Session ends as part of this (the
+   dialog closes, the socket stops listening) — reopen the plugin via Tools -> Plugins and
+   click Start again before the next step.
+
+   Negative case (nothing written before the error): same setup, but a script that never
+   calls a write function first —
+   ```bash
+   python3 -c "
+   import socket
+   script = b'error(\"boom, nothing written first\")'
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a plain JSON error object with no `writeSessionRolledBack` field, no
+   FH dialog, and the Session still listening afterward — send a trivial script (step 5)
+   again on the same Session to confirm it's still up.
+
+   Read-only case: repeat the first script (the one that calls `fhu.createIndi`) with
+   Read-only selected instead of Read-write. Expected output: a JSON error calling
+   `fhu.createIndi` as nil (step 11's negative case) — `fhu`'s write methods are gated the
+   same way the raw write primitives are, so nothing is ever written and there's nothing
+   for FH to roll back.
