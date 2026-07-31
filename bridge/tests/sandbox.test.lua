@@ -99,7 +99,7 @@ fhSetValueAsText = function() end
 -- read-only absence assertions below actually prove sandbox.build() declines to wire
 -- them through under read-only, rather than passing vacuously because the global itself
 -- doesn't exist in this plain-lua process. Also part of the read-write write API above.
-fhCreateItem = function() end
+fhCreateItem = function(tag) return 'created:' .. tostring(tag) end
 fhDeleteItem = function() end
 fhMoveItemAfter = function() end
 fhMoveItemBefore = function() end
@@ -133,17 +133,43 @@ fhInitialise = function() end
 -- fhUtils ships with FH and isn't resolvable via package.path in this plain-lua test
 -- process; register a stub as a real Lua module so require('fhUtils') inside
 -- sandbox.build() resolves it via package.loaded, the same mechanism it'll use for real
--- inside FH.
-local fakeFhu = { records = function(tag) end }
+-- inside FH. Includes one stub per fhu write method (issue #15/#22 — found by reading
+-- fhUtils.lua's actual source, not just the help corpus) so the read-only absence checks
+-- and read-write wrapping checks below each prove something real, not vacuous nils.
+-- createIndi additionally records its call and returns an identifiable value, to prove
+-- the read-write proxy actually forwards through to the real function and its arguments,
+-- not just that a callable of some kind is present.
+local fhuCalls = {}
+local fakeFhu = {
+  records = function(tag) end,
+  createIndi = function(sName, sSex)
+    table.insert(fhuCalls, { 'createIndi', sName, sSex })
+    return 'indi:' .. tostring(sName)
+  end,
+  addFamilyAsChild = function() end,
+  addFamilyAsSpouse = function() end,
+  addWitness = function() end,
+  createFact = function() end,
+  createFamilyAsChild = function() end,
+  createFamilyAsSpouse = function() end,
+  createUpdateFact = function() end,
+  createUpdateItem = function() end,
+  createTextFromSource = function() end,
+}
 package.loaded.fhUtils = fakeFhu
 
 -- sourceHelper.lua (issue #18) ships as a sibling module in this project (unlike fhUtils),
 -- but is stubbed the same way here so this test stays a pure allowlist check, independent
--- of sourceHelper.lua's own behavior (covered by sourceHelper.test.lua).
-local fakeSourceHelper = { createSourceFromTemplate = function() end }
+-- of sourceHelper.lua's own behavior (covered by sourceHelper.test.lua). citeSource
+-- returns an identifiable value for the same forwarding-proof reason as fakeFhu.createIndi
+-- above.
+local fakeSourceHelper = {
+  createSourceFromTemplate = function() end,
+  citeSource = function(ptrTarget, sourceNameOrId) return 'cited:' .. tostring(sourceNameOrId) end,
+}
 package.loaded.sourceHelper = fakeSourceHelper
 
-local env = sandbox.build()
+local env, tracker = sandbox.build()
 
 -- Allowed basics are present and are the real thing (not stand-ins).
 check(env.string == string, 'string library present')
@@ -229,13 +255,32 @@ check(env.fhGetNamedListByIndex == fhGetNamedListByIndex, 'fhGetNamedListByIndex
 check(env.fhGetNamedListCount == fhGetNamedListCount, 'fhGetNamedListCount present')
 check(env.fhBeginsWithVowel == fhBeginsWithVowel, 'fhBeginsWithVowel present')
 
--- fhUtils (require('fhUtils')) is present, including its records(tag) iteration helper.
-check(env.fhu == fakeFhu, 'fhu (require("fhUtils")) present')
-check(type(env.fhu.records) == 'function', 'fhu.records present')
+-- fhUtils (require('fhUtils')) is present via a proxy, not the raw module — its
+-- non-write methods (e.g. records) are still the real thing, by reference.
+check(env.fhu ~= fakeFhu, 'fhu is a proxy, not the raw fhUtils module')
+check(env.fhu.records == fakeFhu.records, 'fhu.records (non-write) present by reference')
+
+-- fhu's write methods (issue #15/#22) are absent under read-only, same treatment as the
+-- raw fh* write primitives below — fhu bypasses env and calls the real globals directly,
+-- so without this proxy gate a Read-only Session could write for real via fhu.createIndi.
+check(env.fhu.createIndi == nil, 'fhu.createIndi absent under read-only')
+check(env.fhu.addFamilyAsChild == nil, 'fhu.addFamilyAsChild absent under read-only')
+check(env.fhu.addFamilyAsSpouse == nil, 'fhu.addFamilyAsSpouse absent under read-only')
+check(env.fhu.addWitness == nil, 'fhu.addWitness absent under read-only')
+check(env.fhu.createFact == nil, 'fhu.createFact absent under read-only')
+check(env.fhu.createFamilyAsChild == nil, 'fhu.createFamilyAsChild absent under read-only')
+check(env.fhu.createFamilyAsSpouse == nil, 'fhu.createFamilyAsSpouse absent under read-only')
+check(env.fhu.createUpdateFact == nil, 'fhu.createUpdateFact absent under read-only')
+check(env.fhu.createUpdateItem == nil, 'fhu.createUpdateItem absent under read-only')
+check(env.fhu.createTextFromSource == nil, 'fhu.createTextFromSource absent under read-only (undocumented in the help corpus, found by reading fhUtils.lua itself — issue #22)')
 
 -- fhBridge (require('sourceHelper'), issue #18) is read-write only — same gating as
 -- fhCreateItem/fhSetValueAsLink below, since it calls those globals directly.
 check(env.fhBridge == nil, 'fhBridge absent under read-only (calls real fh* globals directly — must not be reachable without the write gate)')
+
+-- Write tracker (issue #15): present on every build(), starts false, independent of
+-- accessMode (a read-only script can never flip it, since it has no write functions).
+check(type(tracker) == 'table' and tracker.wrote == false, 'read-only build returns a tracker with wrote = false')
 
 -- Dangerous globals must be absent — the whole point of an allowlist sandbox.
 check(env.os.execute == nil, 'os.execute absent')
@@ -303,25 +348,52 @@ check(env.string == string, 'each build() call returns an independent env table'
 
 -- Access mode plumbing (issue #13) + write API (issue #14): build() accepts an accessMode
 -- argument, threaded through from the bridge dialog's toggle. "read-write" carries every
--- read-only capability plus the full write API, granted all at once.
-local envReadWrite = sandbox.build("read-write")
+-- read-only capability plus the full write API, granted all at once. Every write primitive
+-- is now wrapped (issue #15, to track whether a script actually wrote before erroring), so
+-- these are functional forwarding checks instead of reference-identity checks — proving
+-- the wrapper still calls through to the real function with the same arguments/return.
+local envReadWrite, trackerReadWrite = sandbox.build("read-write")
 check(envReadWrite.string == string, 'read-write build still has the read-only basics')
 check(envReadWrite.fhGetItemText == fhGetItemText, 'read-write build still has read-only FH primitives')
-check(envReadWrite.fhSetLabelledText == fhSetLabelledText, 'read-write build includes fhSetLabelledText')
-check(envReadWrite.fhSetValueAsAge == fhSetValueAsAge, 'read-write build includes fhSetValueAsAge')
-check(envReadWrite.fhSetValueAsDate == fhSetValueAsDate, 'read-write build includes fhSetValueAsDate')
-check(envReadWrite.fhSetValueAsInteger == fhSetValueAsInteger, 'read-write build includes fhSetValueAsInteger')
-check(envReadWrite.fhSetValueAsLink == fhSetValueAsLink, 'read-write build includes fhSetValueAsLink')
-check(envReadWrite.fhSetValueAsRichText == fhSetValueAsRichText, 'read-write build includes fhSetValueAsRichText')
-check(envReadWrite.fhSetValueAsText == fhSetValueAsText, 'read-write build includes fhSetValueAsText')
-check(envReadWrite.fhCreateItem == fhCreateItem, 'read-write build includes fhCreateItem')
-check(envReadWrite.fhDeleteItem == fhDeleteItem, 'read-write build includes fhDeleteItem')
-check(envReadWrite.fhMoveItemAfter == fhMoveItemAfter, 'read-write build includes fhMoveItemAfter')
-check(envReadWrite.fhMoveItemBefore == fhMoveItemBefore, 'read-write build includes fhMoveItemBefore')
-check(envReadWrite.fhSrcEnableAutoTitle == fhSrcEnableAutoTitle, 'read-write build includes fhSrcEnableAutoTitle')
-check(envReadWrite.fhGetFactTag == fhGetFactTag, 'read-write build includes fhGetFactTag')
-check(envReadWrite.fhGetFlagTag == fhGetFlagTag, 'read-write build includes fhGetFlagTag')
-check(envReadWrite.fhBridge == fakeSourceHelper, 'read-write build includes fhBridge (require("sourceHelper"))')
+check(type(envReadWrite.fhSetLabelledText) == 'function' and envReadWrite.fhSetLabelledText ~= fhSetLabelledText, 'read-write build includes a wrapped fhSetLabelledText')
+check(type(envReadWrite.fhSetValueAsAge) == 'function', 'read-write build includes a wrapped fhSetValueAsAge')
+check(type(envReadWrite.fhSetValueAsDate) == 'function', 'read-write build includes a wrapped fhSetValueAsDate')
+check(type(envReadWrite.fhSetValueAsInteger) == 'function', 'read-write build includes a wrapped fhSetValueAsInteger')
+check(type(envReadWrite.fhSetValueAsLink) == 'function', 'read-write build includes a wrapped fhSetValueAsLink')
+check(type(envReadWrite.fhSetValueAsRichText) == 'function', 'read-write build includes a wrapped fhSetValueAsRichText')
+check(type(envReadWrite.fhSetValueAsText) == 'function', 'read-write build includes a wrapped fhSetValueAsText')
+check(type(envReadWrite.fhDeleteItem) == 'function', 'read-write build includes a wrapped fhDeleteItem')
+check(type(envReadWrite.fhMoveItemAfter) == 'function', 'read-write build includes a wrapped fhMoveItemAfter')
+check(type(envReadWrite.fhMoveItemBefore) == 'function', 'read-write build includes a wrapped fhMoveItemBefore')
+check(type(envReadWrite.fhSrcEnableAutoTitle) == 'function', 'read-write build includes a wrapped fhSrcEnableAutoTitle')
+check(type(envReadWrite.fhGetFactTag) == 'function', 'read-write build includes a wrapped fhGetFactTag')
+check(type(envReadWrite.fhGetFlagTag) == 'function', 'read-write build includes a wrapped fhGetFlagTag')
+
+check(trackerReadWrite.wrote == false, 'read-write tracker starts false')
+check(envReadWrite.fhCreateItem('INDI') == 'created:INDI', 'wrapped fhCreateItem still forwards its argument and return value through to the real function')
+check(trackerReadWrite.wrote == true, 'calling a wrapped raw write primitive flips the tracker')
+
+-- fhu's write methods, under read-write: present, wrapped, forward through to the real
+-- fhu method (fakeFhu.createIndi records its call and returns an identifiable value).
+local envReadWrite2, trackerReadWrite2 = sandbox.build("read-write")
+check(type(envReadWrite2.fhu.createIndi) == 'function' and envReadWrite2.fhu.createIndi ~= fakeFhu.createIndi, 'read-write fhu.createIndi is wrapped, not the raw function')
+check(envReadWrite2.fhu.createIndi('Jane /Doe/', 'Female') == 'indi:Jane /Doe/', 'wrapped fhu.createIndi forwards its arguments and return value through to the real fhu.createIndi')
+check(#fhuCalls == 1 and fhuCalls[1][1] == 'createIndi' and fhuCalls[1][2] == 'Jane /Doe/' and fhuCalls[1][3] == 'Female', 'the real fhu.createIndi actually ran with the original arguments')
+check(trackerReadWrite2.wrote == true, 'calling a wrapped fhu write method flips that build\'s own tracker')
+check(envReadWrite2.fhu.records == fakeFhu.records, 'fhu.records (non-write) is still present by reference under read-write')
+
+-- fhBridge (require('sourceHelper')), under read-write: present, wrapped, forwards through
+-- and flips the same tracker as the raw primitives and fhu above.
+local envReadWrite3, trackerReadWrite3 = sandbox.build("read-write")
+check(type(envReadWrite3.fhBridge) == 'table', 'read-write build includes fhBridge (require("sourceHelper"))')
+check(envReadWrite3.fhBridge.citeSource('ptr', 'my-source') == 'cited:my-source', 'wrapped fhBridge.citeSource forwards through to the real sourceHelper.citeSource')
+check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips the tracker too')
+
+-- Two read-write build() calls must not share a tracker: a fourth build with no write call
+-- at all must stay false, proving trackerReadWrite/2/3 above went true from their own
+-- calls, not a single table shared across every build().
+local _, trackerReadWriteUntouched = sandbox.build("read-write")
+check(trackerReadWriteUntouched.wrote == false, 'a read-write build with no write call keeps its own tracker false, proving trackers are not shared across build() calls')
 
 local envExplicitReadOnly = sandbox.build("read-only")
 check(envExplicitReadOnly.string == string, 'explicit "read-only" behaves the same as the no-argument default')

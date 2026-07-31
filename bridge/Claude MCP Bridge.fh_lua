@@ -81,6 +81,15 @@ end
 
 local timPoll = iup.timer{time=100, run="NO"}
 
+-- Set just before ending the plugin on a genuine write-mode error (see action_cb below) --
+-- checked once iup.MainLoop() returns, so the error can be re-raised truly at the top
+-- level, past this whole script's remaining statements, uncaught. docs/adr/0005: an error
+-- raised from inside a callback alone never reaches that far -- IUP's own callback
+-- dispatch swallows it before it can escape the plugin, confirmed empirically. Ending the
+-- plugin this way (rather than just Stopping the Session) is deliberate and only happens
+-- when a write-mode script actually wrote something before erroring (issue #15).
+local pendingRethrow = nil
+
 -- Request framing: the bridge reads one line first, parsed by requestFraming.lua.
 --   STOP           -- ends the Session immediately, same as clicking Stop.
 --   LUA <n>        -- followed by exactly n bytes: the script body, read via receive(n).
@@ -132,12 +141,27 @@ function timPoll:action_cb()
     end
 
     local accessMode = requestFraming.resolveAccessMode(request, currentAccessMode())
-    local response = runScript.run(script, accessMode)
+    local response, rethrowErr = runScript.run(script, accessMode)
     client:send(response .. "\n")
     client:close()
 
     lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
         "\nLast request handled at " .. os.date("%H:%M:%S")
+
+    -- Send-then-rethrow (docs/adr/0005): a write-mode runtime error is already reported to
+    -- the client above. To give FH's own auto-undo an actual chance to fire, the whole
+    -- plugin has to end with the error uncaught -- ending the network side the same way a
+    -- manual Stop does, then returning iup.CLOSE (the documented way a callback ends
+    -- iup.MainLoop(), same effect as ExitLoop -- confirmed safe here since only this
+    -- plugin's own process owns the loop; FH itself isn't IUP-based) so the code below can
+    -- re-raise pendingRethrow once MainLoop() returns, truly at the top level. The Session
+    -- does not survive this -- the user has to reopen the plugin (Tools -> Plugins, or the
+    -- Tools-menu entry) to start a new one.
+    if rethrowErr ~= nil then
+        pendingRethrow = rethrowErr
+        btnStop:action()
+        return iup.CLOSE
+    end
 end
 
 function btnStart:action()
@@ -185,3 +209,9 @@ if (iup.MainLoopLevel() == 0) then
     iup.MainLoop()
 end
 dlg:destroy()
+
+-- Re-raise a write-mode script's error here, past every other statement in this file,
+-- genuinely uncaught -- see the pendingRethrow comment above and docs/adr/0005.
+if pendingRethrow ~= nil then
+    error(pendingRethrow)
+end

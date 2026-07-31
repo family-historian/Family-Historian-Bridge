@@ -13,7 +13,7 @@ local watchdog = require('watchdog')
 local M = {}
 
 function M.run(scriptText, accessMode)
-  local envOk, env = pcall(sandbox.build, accessMode)
+  local envOk, env, tracker = pcall(sandbox.build, accessMode)
   if not envOk then
     return json.encode({ error = 'failed to build sandbox: ' .. tostring(env) })
   end
@@ -28,6 +28,17 @@ function M.run(scriptText, accessMode)
   watchdog.stop()
 
   if not ok then
+    -- Only a write-mode script that actually called a tracked write primitive before
+    -- erroring (sandbox.lua's tracker) can have partially mutated the tree -- a script
+    -- that errored before writing anything, or a compile/sandbox-build failure above, has
+    -- nothing for FH's auto-undo to act on. When the tracker did fire, report the error
+    -- as normal but also hand the caller the raw error, to be re-raised after sending in
+    -- a way that actually ends the whole plugin -- the only way confirmed (docs/adr/0005)
+    -- to give FH's own auto-undo a real chance to fire, unlike an error raised from
+    -- inside a timer callback alone, which IUP swallows before it ever escapes the plugin.
+    if accessMode == 'read-write' and tracker.wrote then
+      return json.encode({ error = tostring(result), writeSessionRolledBack = true }), result
+    end
     return json.encode({ error = tostring(result) })
   end
 

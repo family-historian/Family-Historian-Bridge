@@ -18,9 +18,61 @@
 
 local M = {}
 
+-- Raw fh* primitives that mutate the GEDCOM tree (or can, via bCreateIfNone) -- wrapped
+-- below to flip a per-build write tracker, so runScript.lua/M.run can tell whether a
+-- since-failed script actually wrote anything before it errored (issue #15,
+-- docs/adr/0005). fhGetFactTag/fhGetFlagTag are conservatively tracked on every call, not
+-- just a bCreateIfNone=true one -- same reasoning that already excludes them from
+-- Read-only outright below: cheaper to over-flag a possible write than silently miss one.
+local WRITE_PRIMITIVE_NAMES = {
+  'fhSetLabelledText', 'fhSetValueAsAge', 'fhSetValueAsDate', 'fhSetValueAsInteger',
+  'fhSetValueAsLink', 'fhSetValueAsRichText', 'fhSetValueAsText', 'fhCreateItem',
+  'fhDeleteItem', 'fhMoveItemAfter', 'fhMoveItemBefore', 'fhSrcEnableAutoTitle',
+  'fhGetFactTag', 'fhGetFlagTag',
+}
+
+-- fhUtils (fhu) methods that write tree data, found by reading fhUtils.lua's actual
+-- source rather than trusting the help corpus alone (which is missing
+-- createTextFromSource entirely -- issue #22). fhu is FH-shipped and calls the real
+-- global fh* primitives directly, bypassing this sandbox's env entirely -- so without this
+-- list, neither the Read-only gate below nor the write tracker above would ever see a
+-- write made via fhu.createIndi() and friends, which is how most scripts are told to
+-- write (RUN_LUA_DESCRIPTION prefers fhu helpers over hand-rolled primitives). Every other
+-- fhu method (list/string helpers, the pCite object, UI prompts) only reads tree data or
+-- touches an in-memory Lua object -- see issue #22 for the two other fhu escape hatches
+-- (modal dialogs, direct filesystem writes) that are out of scope here.
+local FHU_WRITE_METHOD_NAMES = {
+  'addFamilyAsChild', 'addFamilyAsSpouse', 'addWitness', 'createFact',
+  'createFamilyAsChild', 'createFamilyAsSpouse', 'createIndi', 'createUpdateFact',
+  'createUpdateItem', 'createTextFromSource',
+}
+
+local function toSet(list)
+  local set = {}
+  for _, name in ipairs(list) do
+    set[name] = true
+  end
+  return set
+end
+
+local FHU_WRITE_METHODS = toSet(FHU_WRITE_METHOD_NAMES)
+
+-- M.build's accessMode ("read-only"/"read-write") is threaded through from the bridge
+-- dialog's toggle; returns the sandbox env plus a tracker table ({wrote = boolean}) the
+-- caller can inspect after running a script to see whether any wrapped write primitive
+-- was actually called -- kept out of env itself so the sandboxed script can't read or
+-- tamper with its own tracker.
 function M.build(accessMode)
   accessMode = accessMode or "read-only"
   local env = {}
+  local tracker = { wrote = false }
+
+  local function trackedWrite(fn)
+    return function(...)
+      tracker.wrote = true
+      return fn(...)
+    end
+  end
 
   env.string = string
   env.table = table
@@ -147,33 +199,45 @@ function M.build(accessMode)
   -- Miscellaneous
   env.fhBeginsWithVowel = fhBeginsWithVowel
 
-  env.fhu = require('fhUtils')
+  -- fhu (require('fhUtils')) is never the raw module -- always a proxy, so its write
+  -- methods can be gated by accessMode and tracked the same as the raw primitives below
+  -- (issue #22 found the raw module was reachable read-only, since fhu bypasses env and
+  -- calls real fh* globals directly regardless of what this sandbox otherwise allows).
+  -- Every non-write method is passed through by reference, unchanged.
+  do
+    local realFhu = require('fhUtils')
+    local fhuProxy = {}
+    for name, value in pairs(realFhu) do
+      if FHU_WRITE_METHODS[name] then
+        if accessMode == "read-write" then
+          fhuProxy[name] = trackedWrite(value)
+        end
+        -- else: omitted under read-only, same treatment as the raw write primitives below
+      else
+        fhuProxy[name] = value
+      end
+    end
+    env.fhu = fhuProxy
+  end
 
   if accessMode == "read-write" then
     -- FH's full write API (issue #14, 2026-07-30 grilling session): granted all at once,
-    -- wired through by reference exactly like the read-only entries above — no further
-    -- staging within read-write. See CONTEXT.md "Access mode" for the authoritative list.
-    env.fhSetLabelledText = fhSetLabelledText
-    env.fhSetValueAsAge = fhSetValueAsAge
-    env.fhSetValueAsDate = fhSetValueAsDate
-    env.fhSetValueAsInteger = fhSetValueAsInteger
-    env.fhSetValueAsLink = fhSetValueAsLink
-    env.fhSetValueAsRichText = fhSetValueAsRichText
-    env.fhSetValueAsText = fhSetValueAsText
-    env.fhCreateItem = fhCreateItem
-    env.fhDeleteItem = fhDeleteItem
-    env.fhMoveItemAfter = fhMoveItemAfter
-    env.fhMoveItemBefore = fhMoveItemBefore
-    env.fhSrcEnableAutoTitle = fhSrcEnableAutoTitle
-    env.fhGetFactTag = fhGetFactTag
-    env.fhGetFlagTag = fhGetFlagTag
+    -- wrapped to flip the write tracker above — no further staging within read-write. See
+    -- CONTEXT.md "Access mode" for the authoritative list.
+    for _, name in ipairs(WRITE_PRIMITIVE_NAMES) do
+      env[name] = trackedWrite(_G[name])
+    end
 
     -- Fills the one gap fhUtils itself doesn't cover (issue #18) — calls the real fh*
     -- globals directly, same as fhUtils, so it must stay inside this read-write block.
-    env.fhBridge = require('sourceHelper')
+    local realFhBridge = require('sourceHelper')
+    env.fhBridge = {
+      createSourceFromTemplate = trackedWrite(realFhBridge.createSourceFromTemplate),
+      citeSource = trackedWrite(realFhBridge.citeSource),
+    }
   end
 
-  return env
+  return env, tracker
 end
 
 return M

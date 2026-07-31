@@ -30,8 +30,13 @@ check(contains(buildFailure, '"error"') and contains(buildFailure, 'fhUtils'),
 
 -- Stub fhUtils via package.loaded so require('fhUtils') inside sandbox.build() resolves
 -- without a real FH install, the same mechanism it'll use for real inside FH. Needed as a
--- prerequisite for every assertion below, not something under test itself.
-package.loaded.fhUtils = { records = function(tag) end }
+-- prerequisite for every assertion below, not something under test itself. createIndi is
+-- included so the send-then-rethrow tests further down have a real write path to call
+-- through fhu (sandbox.lua's write tracker, issue #15, only fires on an actual call).
+package.loaded.fhUtils = {
+  records = function(tag) end,
+  createIndi = function(sName) return 'indi:' .. tostring(sName) end,
+}
 
 check(runScript.run('return {ok=true}') == '{"ok":true}', 'trivial script returns encoded result')
 check(runScript.run('return 42') == '42', 'script returning a bare number')
@@ -77,6 +82,55 @@ check(runScript.run('return {ok=true}', 'read-only') == '{"ok":true}',
   'accessMode is accepted and forwarded without changing behavior (explicit read-only)')
 check(runScript.run("return os.execute('echo hi')", 'read-write'):find('"error"', 1, true) ~= nil,
   'a read-write run still cannot reach a permanently-excluded function (os.execute)')
+
+-- Send-then-rethrow (issue #15, docs/adr/0005): a write-mode runtime error is still
+-- reported to the caller as a normal JSON error response (the "send" half), but M.run's
+-- second return value carries the original error so the caller can re-raise it after
+-- sending -- giving FH's own auto-undo a chance to undo a partial write. This only
+-- applies when the script actually wrote something before erroring (sandbox.lua's write
+-- tracker) -- a write-mode script that errors without ever calling a write function has
+-- nothing for FH's auto-undo to act on, so it behaves the same as read-only. Read-only
+-- never has anything to undo at all, so it never returns a second value either way.
+do
+  local response, rethrow = runScript.run("fhu.createIndi('X'); error('boom')", 'read-write')
+  check(contains(response, '"error"') and contains(response, 'boom'),
+    'write-mode runtime error after a tracked write still sends a normal JSON error response')
+  check(contains(response, '"writeSessionRolledBack":true'),
+    'write-mode runtime error after a tracked write carries the writeSessionRolledBack hint')
+  check(rethrow ~= nil, 'write-mode runtime error after a tracked write returns a non-nil second value to re-raise')
+end
+
+do
+  local response, rethrow = runScript.run("error('boom')", 'read-write')
+  check(contains(response, '"error"') and contains(response, 'boom'),
+    'write-mode runtime error with no prior write still sends a normal JSON error response')
+  check(not contains(response, 'writeSessionRolledBack'),
+    'write-mode runtime error with no prior write carries no writeSessionRolledBack hint (nothing was written)')
+  check(rethrow == nil, 'write-mode runtime error with no prior write returns no second value (nothing to undo)')
+end
+
+do
+  local response, rethrow = runScript.run("error('boom')", 'read-only')
+  check(contains(response, '"error"') and contains(response, 'boom'),
+    'read-only runtime error still sends a normal JSON error response')
+  check(not contains(response, 'writeSessionRolledBack'),
+    'read-only runtime error response carries no writeSessionRolledBack hint')
+  check(rethrow == nil, 'read-only runtime error returns no second value (nothing to undo)')
+end
+
+do
+  local response, rethrow = runScript.run("error('boom')")
+  check(rethrow == nil, 'a runtime error with no accessMode argument (defaults read-only) returns no second value')
+end
+
+-- A compile error or sandbox-build failure means the script never executed at all, so
+-- there's nothing a write could have partially done -- these never rethrow even in
+-- read-write, unlike a runtime error from a script that started running.
+do
+  local response, rethrow = runScript.run('this is not valid lua (', 'read-write')
+  check(contains(response, 'failed to compile'), 'a compile error is still reported as such in write mode')
+  check(rethrow == nil, 'a compile error never rethrows, even in write mode (the script never ran)')
+end
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

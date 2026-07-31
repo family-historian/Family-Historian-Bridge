@@ -28,6 +28,43 @@
   client-side, not fixable here. `search_fh_help`'s description no longer promises
   resource reads as a reliable path to full text. See ADR 0007. (#20)
 
+### Write-mode error handling
+- A read-write Session's script errors, when the script actually wrote something
+  first, now end the whole Bridge plugin with the error uncaught, giving FH's own
+  auto-undo a real chance to undo the partial write — confirmed against a real
+  FH8/CrossOver install: FH shows its own "Plugin Error" dialog with a Yes/No undo
+  prompt, and clicking Yes actually removes the written record. A write-mode script
+  that errors before writing anything, and every Read-only script error, are
+  unaffected (reported normally, Session stays up).
+- Getting here took two iterations. The first attempt just re-raised the error inside
+  the polling timer's callback and left the Session running — empirically, this never
+  triggered FH's auto-undo at all (IUP swallows an error raised inside a callback
+  before it escapes the plugin) and always left the write in place. The working
+  version instead ends the whole plugin: the callback tears down the network side (the
+  same path STOP uses) and returns `iup.CLOSE` (IUP's documented way for a callback to
+  end its `iup.MainLoop()`), and the error is re-raised once `MainLoop()` returns,
+  genuinely at the plugin's top level. Safe here because FH itself isn't IUP-based —
+  only plugins are — so this plugin process is always the sole owner of any loop it
+  starts. `docs/adr/0005-write-mode-errors-rethrown-for-fh-auto-undo.md` has the full
+  history and both test results.
+- Whether a script "actually wrote something" is now tracked precisely
+  (`sandbox.lua`), not inferred from access mode alone: every raw write primitive
+  (`fhCreateItem`, `fhSetValueAs*`, etc.) and every `fhUtils` (`fhu`) method that
+  writes tree data (`createIndi`, `addFamilyAsChild`, `createFact`, and 7 others —
+  found by reading `fhUtils.lua`'s actual source, since the help corpus doesn't
+  document all of them) is wrapped to flip a per-script tracker. This closed a
+  pre-existing gap found along the way: `fhu`'s write methods were reachable from a
+  Read-only Session too, since `fhu` is FH's real, unsandboxed module and bypasses this
+  project's `env` allowlist entirely — folded into this same fix rather than filed
+  separately, since it needed the same write-method list either way. Two remaining
+  `fhu` escape hatches (modal dialogs that would hang a headless `run_lua` call;
+  `saveOptions`/`loadOptions`/`resetOptions` writing straight to disk) are out of scope
+  here and tracked as #22.
+- `writeSessionRolledBack: true`'s wording (`RUN_LUA_DESCRIPTION` and the Bridge's own
+  error-response hint) matches the confirmed behavior: FH's auto-undo needs a human to
+  click Yes on its own dialog, and the Bridge Session has ended and needs restarting —
+  neither of which run_lua can do on the user's behalf. (#15)
+
 ### Plugin headers
 - Bridge plugin renamed `bridge.fh_lua` -> `Claude MCP Bridge.fh_lua` and given the
   standard `@Title`/`@Type`/`@Author`/`@Version`/`@Keywords`/`@LastUpdated`/`@Licence`/

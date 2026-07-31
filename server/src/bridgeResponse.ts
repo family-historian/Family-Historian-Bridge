@@ -21,14 +21,27 @@ function isStalePrototypeHandshake(raw: string): boolean {
   return trimmed.startsWith("PROJECT_NAME:") && trimmed.endsWith("END");
 }
 
-function isLuaErrorShape(value: unknown): value is { error: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
-    typeof (value as Record<string, unknown>).error === "string"
-  );
+// {"error": "<message>"} on any script failure, plus {"writeSessionRolledBack": true} on
+// a write-mode runtime error specifically — see bridge/runScript.lua and
+// docs/adr/0005-write-mode-errors-rethrown-for-fh-auto-undo.md. A script that legitimately
+// returns one of these shapes as its own data is (mis)read the same way; accepted as a
+// rare edge case of this wire shape rather than a reason to redesign an already-shipped,
+// manually-verified protocol (ticket #2).
+function isLuaErrorShape(
+  value: unknown,
+): value is { error: string; writeSessionRolledBack?: true } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  if (typeof obj.error !== "string") {
+    return false;
+  }
+  if (keys.length === 1) {
+    return true;
+  }
+  return keys.length === 2 && obj.writeSessionRolledBack === true;
 }
 
 /** Maps a thrown error from runLuaOnBridge to the tool result Claude should see. */
@@ -43,11 +56,6 @@ export function describeBridgeConnectionError(err: unknown): CallToolResult {
   return textResult(`Bridge communication error: ${message}`, true);
 }
 
-// A script's own error path (compile error, runtime error) is wrapped by the Bridge
-// as exactly {"error": "<message>"} — see bridge/runScript.lua. A script that
-// legitimately returns a single-key {error: "..."} object as its own data would be
-// (mis)read the same way; accepted as a rare edge case of this wire shape rather than
-// a reason to redesign an already-shipped, manually-verified protocol (ticket #2).
 export function interpretBridgeResponse(raw: string): CallToolResult {
   let parsed: unknown;
   try {
@@ -66,7 +74,10 @@ export function interpretBridgeResponse(raw: string): CallToolResult {
   }
 
   if (isLuaErrorShape(parsed)) {
-    return textResult(`Script error: ${parsed.error}`, true);
+    const undoHint = parsed.writeSessionRolledBack
+      ? " This script wrote to the tree before failing, and the Bridge Session has ended as a result. FH should now be showing its own \"Plugin Error\" dialog asking whether to undo the changes this plugin made — tell the user to check for it and click Yes to undo the partial write, then start a new Session in the Bridge dialog to continue."
+      : "";
+    return textResult(`Script error: ${parsed.error}${undoHint}`, true);
   }
 
   return textResult(JSON.stringify(parsed));

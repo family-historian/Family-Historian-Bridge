@@ -27,6 +27,23 @@ describe("handleRunLua", () => {
     expect((result.content[0] as { text: string }).text).toContain("boom");
   });
 
+  it("surfaces a write-mode error's writeSessionRolledBack hint by pointing at FH's own undo dialog and the ended Session, not claiming the undo already happened", async () => {
+    const result = await handleRunLua(
+      { script: "error('boom')" },
+      {
+        runLuaOnBridge: async () =>
+          '{"error":"[string \\"run_lua\\"]:1: boom","writeSessionRolledBack":true}',
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("boom");
+    expect(text.toLowerCase()).toMatch(/plugin error/);
+    expect(text.toLowerCase()).toMatch(/click yes|\byes\b/);
+    expect(text.toLowerCase()).toMatch(/start a new session|session has ended/);
+  });
+
   it('tells Claude to ask the user to click Start, rather than retry, when no Session is running', async () => {
     const result = await handleRunLua(
       { script: "return 1" },
@@ -92,5 +109,14 @@ describe("RUN_LUA_DESCRIPTION", () => {
     const lower = RUN_LUA_DESCRIPTION.toLowerCase();
     expect(lower).toMatch(/isn't yet (in|entered)|not yet entered|gaps?/);
     expect(lower).toMatch(/wait for the user's .*(confirmation|go-ahead)/);
+  });
+
+  it("documents write capability, FH's auto-undo safety net, and what writeSessionRolledBack means", () => {
+    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/read-write/);
+    expect(lower).toMatch(/auto-undo|automatic undo/);
+    expect(lower).toMatch(/plugin error/);
+    expect(lower).toMatch(/session has ended|session ends|click start again/);
+    expect(RUN_LUA_DESCRIPTION).toMatch(/writeSessionRolledBack/);
   });
 });
