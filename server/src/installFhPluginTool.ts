@@ -55,22 +55,80 @@ async function resolvePluginsFolder(
   return { path: joinPluginsFolder(appDataFolder) };
 }
 
-// Placeholder so Task 1's tests compile and pass — Task 2 replaces this with the full
-// title-parsing/versioning/write implementation.
+const TITLE_LINE_PATTERN = /^@Title:[ \t]*(.*)$/m;
+const GENERATED_FOOTER_SEPARATOR = "\n\n---\n";
+
+function stripGeneratedFooter(pluginSource: string): string {
+  const separatorIndex = pluginSource.indexOf(GENERATED_FOOTER_SEPARATOR);
+  return separatorIndex === -1 ? pluginSource : pluginSource.slice(0, separatorIndex);
+}
+
+function sanitizeFilenameBase(title: string): string {
+  const trimmed = title.trim();
+  const base = trimmed.length > 0 ? trimmed : "plugin";
+  return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+}
+
+function nextVersionNumber(existingNames: string[], base: string): number {
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedBase} V(\\d+)\\.fh_lua$`);
+  let max = 0;
+  for (const name of existingNames) {
+    const match = name.match(pattern);
+    if (match) {
+      max = Math.max(max, Number(match[1]));
+    }
+  }
+  return max + 1;
+}
+
+function appendVersionToTitle(source: string, version: number, originalTitle: string): string {
+  const suffix = originalTitle.trim().length > 0 ? `${originalTitle.trim()} V${version}` : `V${version}`;
+  return source.replace(TITLE_LINE_PATTERN, `@Title: ${suffix}`);
+}
+
 export async function handleInstallFhPlugin(
   input: { pluginSource: string; path?: string },
   deps: InstallFhPluginDeps,
 ): Promise<CallToolResult> {
+  const source = stripGeneratedFooter(input.pluginSource);
+
+  const titleMatch = source.match(TITLE_LINE_PATTERN);
+  if (!titleMatch) {
+    return textResult(
+      "No @Title field found in the supplied plugin source — pass pluginSource exactly as author_fh_plugin generated it.",
+      true,
+    );
+  }
+  const originalTitle = titleMatch[1];
+
   const resolved = await resolvePluginsFolder(deps, input.path);
   if ("errorResult" in resolved) {
     return resolved.errorResult;
   }
 
-  const titleMatch = input.pluginSource.match(/^@Title:[ \t]*(.*)$/m);
-  const base = (titleMatch?.[1].trim() || "plugin").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
-  const filename = `${base} V1.fh_lua`;
-  const fullPath = `${resolved.path}\\${filename}`;
+  let existingNames: string[];
+  try {
+    existingNames = await deps.readdir(resolved.path);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return textResult(`Could not read the Plugins folder at ${resolved.path}: ${message}`, true);
+  }
 
-  await deps.writeFile(fullPath, input.pluginSource);
-  return textResult(`Installed as "${filename}" in FH's Plugins folder (${resolved.path}).`);
+  const base = sanitizeFilenameBase(originalTitle);
+  const version = nextVersionNumber(existingNames, base);
+  const filename = `${base} V${version}.fh_lua`;
+  const fullPath = `${resolved.path}\\${filename}`;
+  const versionedSource = appendVersionToTitle(source, version, originalTitle);
+
+  try {
+    await deps.writeFile(fullPath, versionedSource);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return textResult(`Could not write the plugin file to ${fullPath}: ${message}`, true);
+  }
+
+  return textResult(
+    `Installed as "${filename}" in FH's Plugins folder (${resolved.path}).\n\nFH doesn't rescan its Plugins folder live — if the Plugins Dialog (Tools -> Plugins) is currently open, close and reopen it so the new entry appears, then select it and click Run (or tick Add To Tools Menu to run it again later).`,
+  );
 }

@@ -119,3 +119,110 @@ describe("resolvePluginsFolder (via handleInstallFhPlugin)", () => {
     expect((result.content[0] as { text: string }).text).toContain("boom");
   });
 });
+
+describe("handleInstallFhPlugin — versioning and write behaviour", () => {
+  it("starts at V1 and appends the version to the @Title header, not just the filename", async () => {
+    let writtenPath: string | undefined;
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        writeFile: async (filePath, content) => {
+          writtenPath = filePath;
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenPath).toContain("Surname Census V1.fh_lua");
+    expect(writtenContent).toMatch(/^@Title: Surname Census V1$/m);
+  });
+
+  it("increments past existing V<N> files for the same title, never overwriting", async () => {
+    let writtenPath: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        readdir: async () => ["Surname Census V1.fh_lua", "Surname Census V2.fh_lua", "Other Plugin V1.fh_lua"],
+        writeFile: async (filePath) => {
+          writtenPath = filePath;
+        },
+      }),
+    );
+
+    expect(writtenPath).toContain("Surname Census V3.fh_lua");
+  });
+
+  it("sanitizes characters invalid in a Windows filename out of the title", async () => {
+    const source = PLUGIN_SOURCE.replace("@Title: Surname Census", '@Title: Surnames: A "Census"?');
+    let writtenPath: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: source },
+      makeDeps({
+        writeFile: async (filePath) => {
+          writtenPath = filePath;
+        },
+      }),
+    );
+
+    expect(writtenPath).toBe(
+      "C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugins\\Surnames_ A _Census__ V1.fh_lua",
+    );
+  });
+
+  it("defaults to base name 'plugin' when @Title is blank", async () => {
+    const source = PLUGIN_SOURCE.replace("@Title: Surname Census", "@Title:");
+    let writtenPath: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: source },
+      makeDeps({
+        writeFile: async (filePath) => {
+          writtenPath = filePath;
+        },
+      }),
+    );
+
+    expect(writtenPath).toContain("plugin V1.fh_lua");
+  });
+
+  it("strips author_fh_plugin's trailing '---' install-instructions footer before writing", async () => {
+    const withFooter = `${PLUGIN_SOURCE}\n\n---\nSave this as a .fh_lua file yourself and install it under FH's own permission model.`;
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: withFooter },
+      makeDeps({
+        writeFile: async (_filePath, content) => {
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenContent).not.toContain("Save this as a .fh_lua file yourself");
+    expect(writtenContent).toContain('fhOutputResultSetColumn("Surname", "text", {}, 0)');
+  });
+
+  it("returns a clear error and writes nothing when no @Title field is present", async () => {
+    let writeCalled = false;
+    const result = await handleInstallFhPlugin(
+      { pluginSource: "fhOutputResultSetColumn(\"Surname\", \"text\", {}, 0)" },
+      makeDeps({
+        writeFile: async () => {
+          writeCalled = true;
+        },
+      }),
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/@Title/);
+    expect(writeCalled).toBe(false);
+  });
+
+  it("reminds the user to close and reopen the Plugins Dialog if it's open, on success", async () => {
+    const result = await handleInstallFhPlugin({ pluginSource: PLUGIN_SOURCE }, makeDeps());
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/close and reopen/i);
+    expect(text).toMatch(/plugins dialog/i);
+  });
+});
