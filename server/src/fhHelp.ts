@@ -67,12 +67,94 @@ export function getFhHelpPage(corpus: FhHelpTopic[], url: string): string | unde
   return corpus.find((topic) => topic.url === url)?.text;
 }
 
+export interface FhHelpGrepMatch {
+  uri: string;
+  url: string;
+  title: string;
+  breadcrumb: string[];
+  text: string;
+}
+
+export interface FhHelpGrepResult {
+  matches: FhHelpGrepMatch[];
+  totalMatches: number;
+  truncated: boolean;
+}
+
+interface FhHelpGrepResponseBody extends FhHelpGrepResult {
+  note?: string;
+}
+
+const GREP_DEFAULT_MATCH_LIMIT = 10;
+const GREP_MAX_MATCH_LIMIT = 25;
+// Same lesson as the unpaginated resources/list issue (#20): an overly broad pattern
+// (e.g. a single common word) shouldn't be able to dump most of the corpus into one
+// response, even under the match-count cap above.
+const GREP_MAX_TOTAL_BYTES = 200_000;
+
+function buildGrepMatcher(pattern: string, isRegex: boolean): (haystack: string) => boolean {
+  if (isRegex) {
+    const re = new RegExp(pattern, "i");
+    return (haystack) => re.test(haystack);
+  }
+  const needle = pattern.toLowerCase();
+  return (haystack) => haystack.toLowerCase().includes(needle);
+}
+
+/** Full-text grep across the whole corpus (title, breadcrumb, and body), returning the
+ * complete text of every matching entry — not a truncated excerpt window like
+ * searchFhHelp. For when the caller knows a fragment of what they're looking for (a
+ * function name, a sample-script pattern) but not which page holds it. See issue #21. */
+export function grepFhHelp(
+  corpus: FhHelpTopic[],
+  pattern: string,
+  options: { regex?: boolean; limit?: number } = {},
+): FhHelpGrepResult {
+  const limit = Math.min(options.limit ?? GREP_DEFAULT_MATCH_LIMIT, GREP_MAX_MATCH_LIMIT);
+  const matcher = buildGrepMatcher(pattern, options.regex ?? false);
+
+  const allMatches = corpus.filter(
+    (topic) => matcher(topic.title) || matcher(topic.breadcrumb.join(" ")) || matcher(topic.text),
+  );
+
+  const matches: FhHelpGrepMatch[] = [];
+  let totalBytes = 0;
+  for (const topic of allMatches) {
+    if (matches.length >= limit) break;
+    const bytes = Buffer.byteLength(topic.text, "utf8");
+    // The `matches.length > 0` guard lets a single entry through even if it alone
+    // exceeds the byte cap, so one oversized page can't turn a real match into "no results".
+    if (matches.length > 0 && totalBytes + bytes > GREP_MAX_TOTAL_BYTES) break;
+    totalBytes += bytes;
+    matches.push({
+      uri: resourceUriForUrl(topic.url),
+      url: topic.url,
+      title: topic.title,
+      breadcrumb: topic.breadcrumb,
+      text: topic.text,
+    });
+  }
+
+  return {
+    matches,
+    totalMatches: allMatches.length,
+    truncated: matches.length < allMatches.length,
+  };
+}
+
 // Steers Claude's own behavior when it uses this tool.
 export const SEARCH_FH_HELP_DESCRIPTION = `Search Family Historian 8's official help documentation (both the main FH8 help and the plugin-authoring help) for topics matching a query. Use this for questions about how Family Historian itself works — menus, features, dialogs, where something lives, how to write a plugin — as opposed to questions about the user's own tree data (use run_lua for that).
 
 Also use this BEFORE writing a run_lua script, any time you're not certain of an FH API function's exact signature, an item-pointer method's calling convention, or a data-reference syntax detail (e.g. "MoveToFirstChildItem", "fhGetItemText data reference syntax") — the corpus includes the full function reference. Cheaper and more reliable than guessing the shape and fixing it by trial and error against the user's real, live project.
 
-Returns a ranked list of matching topics, each with a "uri" that can be read as an MCP resource for the topic's full text — but resource reads are unreliable in at least one tested MCP client (see docs/adr/0007-fh-help-resource-reads-unreliable-client-side.md), so treat that path as best-effort, not guaranteed. If an excerpt is insufficient and a resource read isn't available, retry with a narrower, more specific query first — the excerpt is a window around the best match, so a more targeted term (an exact function name, not a paraphrase) often surfaces the passage you actually need. This search is a simple keyword match, not semantic search: try the FH feature/menu name or function name a user/API would recognize. A full-sentence query falls back to matching on individual significant words, but a single term (e.g. "merge", "MoveToFirstChildItem") is still the most reliable form.`;
+Returns a ranked list of matching topics, each with a "uri" that can be read as an MCP resource for the topic's full text — but resource reads are unreliable in at least one tested MCP client (see docs/adr/0007-fh-help-resource-reads-unreliable-client-side.md), so treat that path as best-effort, not guaranteed. If an excerpt is insufficient and a resource read isn't available, retry with a narrower, more specific query first — the excerpt is a window around the best match, so a more targeted term (an exact function name, not a paraphrase) often surfaces the passage you actually need. If that still doesn't surface what's needed, use grep_fh_help next — it returns full page text, not an excerpt — before falling back to web search for content that's already local. This search is a simple keyword match, not semantic search: try the FH feature/menu name or function name a user/API would recognize. A full-sentence query falls back to matching on individual significant words, but a single term (e.g. "merge", "MoveToFirstChildItem") is still the most reliable form.`;
+
+// Steers Claude's own behavior when it uses this tool.
+export const GREP_FH_HELP_DESCRIPTION = `Full-text search across the entire Family Historian help corpus (both the main FH8 help and the plugin-authoring help, including sample scripts) — matches against each entry's complete title, breadcrumb, and body text, and returns the complete text of every matching entry (not a truncated excerpt).
+
+Use this when search_fh_help's excerpt doesn't contain enough of the page to answer the question, or when you only know a fragment of what you're looking for — a specific function name, a line from a sample script, an error string — but not which page it lives on. This is the fallback to reach for before web search: the corpus is already local, so a pattern that would find something on the FH help website will usually find it here too.
+
+By default the pattern is matched as a literal, case-insensitive substring. Pass regex: true to match it as a case-insensitive regular expression instead. Results are capped (a limited number of matches, and a limited total size) so an overly broad pattern can't dump the whole corpus in one response — narrow the pattern and retry if the result reports truncation.`;
 
 function searchResult(query: string, matches: FhHelpSearchResult[]): CallToolResult {
   if (matches.length === 0) {
@@ -88,6 +170,24 @@ function searchResult(query: string, matches: FhHelpSearchResult[]): CallToolRes
   return { content: [{ type: "text", text: JSON.stringify(matches) }] };
 }
 
+function grepResult(pattern: string, result: FhHelpGrepResult): CallToolResult {
+  if (result.matches.length === 0) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `No match for "${pattern}" anywhere in the corpus (title, breadcrumb, or body).`,
+        },
+      ],
+    };
+  }
+  const body: FhHelpGrepResponseBody = { ...result };
+  if (result.truncated) {
+    body.note = `Truncated: ${result.totalMatches} entries matched "${pattern}", only ${result.matches.length} returned. Narrow the pattern to see the rest.`;
+  }
+  return { content: [{ type: "text", text: JSON.stringify(body) }] };
+}
+
 export function registerFhHelpTools(server: McpServer, store: FhHelpCorpusStore): void {
   server.registerTool(
     "search_fh_help",
@@ -98,6 +198,35 @@ export function registerFhHelpTools(server: McpServer, store: FhHelpCorpusStore)
       },
     },
     ({ query }) => searchResult(query, searchFhHelp(store.topics, query)),
+  );
+
+  server.registerTool(
+    "grep_fh_help",
+    {
+      description: GREP_FH_HELP_DESCRIPTION,
+      inputSchema: {
+        pattern: z.string().describe("Literal substring, or regex if regex: true, to search the full corpus text for."),
+        regex: z.boolean().optional().describe("Match pattern as a regular expression instead of a literal substring. Default false."),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(GREP_MAX_MATCH_LIMIT)
+          .optional()
+          .describe(`Max number of matching entries to return (default ${GREP_DEFAULT_MATCH_LIMIT}, max ${GREP_MAX_MATCH_LIMIT}).`),
+      },
+    },
+    ({ pattern, regex, limit }) => {
+      try {
+        return grepResult(pattern, grepFhHelp(store.topics, pattern, { regex, limit }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text", text: `Invalid pattern: ${message}` }],
+          isError: true,
+        };
+      }
+    },
   );
 
   // Deliberately no `list` callback: this SDK version's ListResourcesRequestSchema handler

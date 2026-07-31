@@ -1,6 +1,9 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   getFhHelpPage,
+  grepFhHelp,
+  loadCorpusFromFile,
   parseCorpus,
   resourceUriForUrl,
   searchFhHelp,
@@ -138,5 +141,144 @@ describe("resourceUriForUrl", () => {
     expect(resourceUriForUrl("/help/fh8/mapwindow.html")).toBe(
       "fh-help:/help/fh8/mapwindow.html",
     );
+  });
+});
+
+describe("grepFhHelp", () => {
+  const corpus = parseCorpus(FIXTURE_JSONL);
+
+  it("matches a literal substring in the body even when the title doesn't contain it", () => {
+    const result = grepFhHelp(corpus, "select both records");
+    expect(result.matches.map((m) => m.url)).toEqual(["/help/fh8/mergingpeople.html"]);
+  });
+
+  it("returns the entry's full text, not a truncated excerpt", () => {
+    const result = grepFhHelp(corpus, "select both records");
+    expect(result.matches[0]?.text).toBe(
+      "To merge two people, select both records and choose Merge from the menu.",
+    );
+  });
+
+  it("matches on title", () => {
+    const result = grepFhHelp(corpus, "Map Window");
+    expect(result.matches.map((m) => m.url)).toContain("/help/fh8/mapwindow.html");
+  });
+
+  it("matches on breadcrumb", () => {
+    const result = grepFhHelp(corpus, "Workspace Windows");
+    expect(result.matches.map((m) => m.url)).toContain("/help/fh8/mapwindow.html");
+  });
+
+  it("is case-insensitive by default", () => {
+    const result = grepFhHelp(corpus, "MERGE");
+    expect(result.matches.map((m) => m.url)).toContain("/help/fh8/mergingpeople.html");
+  });
+
+  it("returns no matches and totalMatches 0 for a pattern found nowhere", () => {
+    const result = grepFhHelp(corpus, "xyzzy nonsense query");
+    expect(result.matches).toEqual([]);
+    expect(result.totalMatches).toBe(0);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("returns the resource uri, title, and breadcrumb alongside the full text", () => {
+    const result = grepFhHelp(corpus, "merge");
+    const match = result.matches.find((m) => m.url === "/help/fh8/mergingpeople.html");
+    expect(match?.uri).toBe("fh-help:/help/fh8/mergingpeople.html");
+    expect(match?.title).toBe("Merging Duplicate People");
+    expect(match?.breadcrumb).toEqual(["How to...", "Merging Duplicate People"]);
+  });
+
+  it("does not require the pattern to be a literal substring anywhere when regex is requested", () => {
+    const result = grepFhHelp(corpus, "select (both|all) records", { regex: true });
+    expect(result.matches.map((m) => m.url)).toEqual(["/help/fh8/mergingpeople.html"]);
+  });
+
+  it("treats the pattern literally (not as regex) unless regex is requested", () => {
+    // "Map." isn't literally in the corpus - the "." would only match as regex wildcard.
+    const result = grepFhHelp(corpus, "Map.Window");
+    expect(result.matches).toEqual([]);
+  });
+
+  it("throws a descriptive error for an invalid regex pattern", () => {
+    expect(() => grepFhHelp(corpus, "(unclosed", { regex: true })).toThrow();
+  });
+
+  it("caps the number of returned matches and reports truncation", () => {
+    const manyEntries = Array.from({ length: 30 }, (_, i) =>
+      JSON.stringify({
+        url: `/help/fh8/topic${i}.html`,
+        section: "fh8",
+        title: `Topic ${i}`,
+        breadcrumb: ["Topics"],
+        text: "Contains the word needle in every entry.",
+      }),
+    ).join("\n");
+    const bigCorpus = parseCorpus(manyEntries);
+    const result = grepFhHelp(bigCorpus, "needle", { limit: 5 });
+    expect(result.matches).toHaveLength(5);
+    expect(result.totalMatches).toBe(30);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("defaults to a sensible match cap even when no limit is given", () => {
+    const manyEntries = Array.from({ length: 30 }, (_, i) =>
+      JSON.stringify({
+        url: `/help/fh8/topic${i}.html`,
+        section: "fh8",
+        title: `Topic ${i}`,
+        breadcrumb: ["Topics"],
+        text: "Contains the word needle in every entry.",
+      }),
+    ).join("\n");
+    const bigCorpus = parseCorpus(manyEntries);
+    const result = grepFhHelp(bigCorpus, "needle");
+    expect(result.matches.length).toBeLessThan(30);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("caps total returned bytes so a broad pattern can't dump the whole corpus", () => {
+    const bigText = "needle ".repeat(50_000); // ~350KB in one entry
+    const manyEntries = Array.from({ length: 10 }, (_, i) =>
+      JSON.stringify({
+        url: `/help/fh8/big${i}.html`,
+        section: "fh8",
+        title: `Big ${i}`,
+        breadcrumb: ["Topics"],
+        text: bigText,
+      }),
+    ).join("\n");
+    const bigCorpus = parseCorpus(manyEntries);
+    const result = grepFhHelp(bigCorpus, "needle", { limit: 10 });
+    expect(result.matches.length).toBeLessThan(10);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("still returns at least one match even if that single entry alone exceeds the byte cap", () => {
+    const hugeText = "needle ".repeat(200_000); // ~1.4MB, larger than the byte cap alone
+    const corpusWithHugeEntry = parseCorpus(
+      JSON.stringify({
+        url: "/help/fh8/huge.html",
+        section: "fh8",
+        title: "Huge",
+        breadcrumb: ["Topics"],
+        text: hugeText,
+      }),
+    );
+    const result = grepFhHelp(corpusWithHugeEntry, "needle");
+    expect(result.matches).toHaveLength(1);
+  });
+});
+
+describe("grepFhHelp real-corpus case (issue #21)", () => {
+  it("finds a sample script by a function call it contains, not by its title", () => {
+    const corpus = loadCorpusFromFile(
+      fileURLToPath(new URL("../data/fh-help-corpus.jsonl", import.meta.url)),
+    );
+    const result = grepFhHelp(corpus, "fhCallBuiltInFunction");
+    const match = result.matches.find((m) => m.url === "/help/fh8plugins/Samples/AllSurnames.htm");
+    expect(match).toBeDefined();
+    expect(match?.title).not.toContain("fhCallBuiltInFunction");
+    expect(match?.text).toContain("fhCallBuiltInFunction");
   });
 });
