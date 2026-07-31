@@ -140,6 +140,18 @@ fhInitialise = function() end
 -- the read-write proxy actually forwards through to the real function and its arguments,
 -- not just that a callable of some kind is present.
 local fhuCalls = {}
+
+-- Modal-dialog and filesystem-writing fhu methods (issue #22): stubbed as recording
+-- functions, not no-ops, so the "never forwarded" assertions below prove something real
+-- -- if the proxy ever slipped and called through to one of these, fhuCalls would show
+-- it, rather than the test passing vacuously because the stub does nothing anyway.
+local function recordingStub(name, retVal)
+  return function(...)
+    table.insert(fhuCalls, { name, ... })
+    return retVal
+  end
+end
+
 local fakeFhu = {
   records = function(tag) end,
   createIndi = function(sName, sSex)
@@ -152,9 +164,19 @@ local fakeFhu = {
   createFact = function() end,
   createFamilyAsChild = function() end,
   createFamilyAsSpouse = function() end,
-  createUpdateFact = function() end,
+  createUpdateFact = recordingStub('createUpdateFact', true),
   createUpdateItem = function() end,
   createTextFromSource = function() end,
+  getParam = recordingStub('getParam', 'param-value'),
+  pickIndividualPrompt = recordingStub('pickIndividualPrompt', 'picked-indi'),
+  yes = recordingStub('yes', true),
+  saveOptions = recordingStub('saveOptions', true),
+  loadOptions = recordingStub('loadOptions', {}),
+  resetOptions = recordingStub('resetOptions', true),
+  stripCommas = function(s, sQuestion, sTitle, hParent)
+    table.insert(fhuCalls, { 'stripCommas', s, sQuestion, sTitle, hParent })
+    return 'stripped:' .. tostring(s)
+  end,
 }
 package.loaded.fhUtils = fakeFhu
 
@@ -270,7 +292,12 @@ check(env.fhu.addWitness == nil, 'fhu.addWitness absent under read-only')
 check(env.fhu.createFact == nil, 'fhu.createFact absent under read-only')
 check(env.fhu.createFamilyAsChild == nil, 'fhu.createFamilyAsChild absent under read-only')
 check(env.fhu.createFamilyAsSpouse == nil, 'fhu.createFamilyAsSpouse absent under read-only')
-check(env.fhu.createUpdateFact == nil, 'fhu.createUpdateFact absent under read-only')
+-- createUpdateFact is the one exception: NOT nil even under read-only, because it's also
+-- one of the modal-dialog methods (it calls getParam internally) -- that check takes
+-- priority over write-gating, so it's present as an error-raising wrapper instead of a
+-- silent nil, same as under read-write. Covered fully (both modes, error message content,
+-- tracker behavior) further down in this file, alongside the other unsupported methods.
+check(type(env.fhu.createUpdateFact) == 'function' and env.fhu.createUpdateFact ~= fakeFhu.createUpdateFact, 'fhu.createUpdateFact present under read-only, but as the unsupported-error wrapper, not the raw function')
 check(env.fhu.createUpdateItem == nil, 'fhu.createUpdateItem absent under read-only')
 check(env.fhu.createTextFromSource == nil, 'fhu.createTextFromSource absent under read-only (undocumented in the help corpus, found by reading fhUtils.lua itself — issue #22)')
 
@@ -389,9 +416,68 @@ check(type(envReadWrite3.fhBridge) == 'table', 'read-write build includes fhBrid
 check(envReadWrite3.fhBridge.citeSource('ptr', 'my-source') == 'cited:my-source', 'wrapped fhBridge.citeSource forwards through to the real sourceHelper.citeSource')
 check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips the tracker too')
 
--- Two read-write build() calls must not share a tracker: a fourth build with no write call
--- at all must stay false, proving trackerReadWrite/2/3 above went true from their own
--- calls, not a single table shared across every build().
+-- Modal-dialog and filesystem-writing fhu methods (issue #22): replaced with an
+-- error-raising wrapper rather than being forwarded to the real function or left as a
+-- silent nil -- present (and always erroring) in BOTH read-only and read-write, since the
+-- hang/filesystem risk has nothing to do with access mode. The error names the method, so
+-- Claude gets a self-correctable message instead of a generic "attempt to call a nil
+-- value". fakeFhu's stubs above are recording functions, not no-ops, so "never forwarded"
+-- below proves something real.
+local function assertUnsupported(callFn, methodName)
+  local ok, err = pcall(callFn)
+  check(not ok, 'fhu.' .. methodName .. ' raises rather than succeeding')
+  check(type(err) == 'string' and err:find(methodName, 1, true) ~= nil,
+    'fhu.' .. methodName .. ' error message names the method')
+end
+
+local callsBeforeUnsupported = #fhuCalls
+assertUnsupported(env.fhu.getParam, 'getParam')
+assertUnsupported(env.fhu.pickIndividualPrompt, 'pickIndividualPrompt')
+assertUnsupported(env.fhu.yes, 'yes')
+assertUnsupported(env.fhu.saveOptions, 'saveOptions')
+assertUnsupported(env.fhu.loadOptions, 'loadOptions')
+assertUnsupported(env.fhu.resetOptions, 'resetOptions')
+check(#fhuCalls == callsBeforeUnsupported, 'none of the unsupported fhu methods actually ran (read-only)')
+
+-- Same methods, under read-write: still always error, never forwarded -- proves the
+-- exclusion is unconditional, not folded into write-gating that only applies read-only.
+local envReadWrite4 = sandbox.build("read-write")
+local callsBeforeUnsupportedRW = #fhuCalls
+assertUnsupported(envReadWrite4.fhu.getParam, 'getParam')
+assertUnsupported(envReadWrite4.fhu.pickIndividualPrompt, 'pickIndividualPrompt')
+assertUnsupported(envReadWrite4.fhu.yes, 'yes')
+assertUnsupported(envReadWrite4.fhu.saveOptions, 'saveOptions')
+assertUnsupported(envReadWrite4.fhu.loadOptions, 'loadOptions')
+assertUnsupported(envReadWrite4.fhu.resetOptions, 'resetOptions')
+check(#fhuCalls == callsBeforeUnsupportedRW, 'none of the unsupported fhu methods actually ran (read-write)')
+
+-- createUpdateFact is both a write method (FHU_WRITE_METHOD_NAMES) and one of the
+-- modal-dialog methods above -- it calls getParam internally before doing any write
+-- (issue #22). The unsupported-wrapper takes priority over write-gating, so it never
+-- forwards to the real (hang-prone) function in EITHER mode -- unlike the rest of
+-- FHU_WRITE_METHOD_NAMES, it's not nil under read-only (see the type-check assertion
+-- earlier in this file) -- and never flips the write tracker under read-write.
+assertUnsupported(env.fhu.createUpdateFact, 'createUpdateFact')
+local envReadWrite5, trackerReadWrite5 = sandbox.build("read-write")
+assertUnsupported(envReadWrite5.fhu.createUpdateFact, 'createUpdateFact')
+check(trackerReadWrite5.wrote == false, 'a blocked fhu.createUpdateFact call does not flip the write tracker')
+
+-- stripCommas: safe with just the text argument (passes through to the real function,
+-- since zero-arg stripCommas is pure string cleanup with no dialog risk); errors the same
+-- way as the methods above the moment any of its optional sQuestion/sTitle/hParent UI
+-- args is present, since those trigger the same iup.Popup call as getParam.
+check(env.fhu.stripCommas('a,, b,') == 'stripped:a,, b,', 'fhu.stripCommas passes through when called with just the text argument')
+check(#fhuCalls == callsBeforeUnsupportedRW + 1 and fhuCalls[#fhuCalls][1] == 'stripCommas',
+  'the real fhu.stripCommas actually ran for the safe zero-UI-arg call')
+local callsBeforeStripCommasUnsafe = #fhuCalls
+assertUnsupported(function() env.fhu.stripCommas('a,b', 'Are you sure?') end, 'stripCommas')
+assertUnsupported(function() env.fhu.stripCommas('a,b', nil, 'Title') end, 'stripCommas')
+assertUnsupported(function() env.fhu.stripCommas('a,b', nil, nil, 'hParentValue') end, 'stripCommas')
+check(#fhuCalls == callsBeforeStripCommasUnsafe, 'fhu.stripCommas did not forward through when called with any optional UI argument')
+
+-- Two read-write build() calls must not share a tracker: a build with no write call at
+-- all must stay false, proving trackerReadWrite/2/3 above went true from their own calls,
+-- not a single table shared across every build().
 local _, trackerReadWriteUntouched = sandbox.build("read-write")
 check(trackerReadWriteUntouched.wrote == false, 'a read-write build with no write call keeps its own tracker false, proving trackers are not shared across build() calls')
 

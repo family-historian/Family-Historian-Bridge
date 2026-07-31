@@ -119,4 +119,22 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(lower).toMatch(/session has ended|session ends|click start again/);
     expect(RUN_LUA_DESCRIPTION).toMatch(/writeSessionRolledBack/);
   });
+
+  it("names all eight fhu methods excluded from run_lua (modal-dialog and filesystem-writing) so Claude doesn't suggest them", () => {
+    for (const name of [
+      "fhu.getParam",
+      "fhu.createUpdateFact",
+      "fhu.pickIndividualPrompt",
+      "fhu.yes",
+      "fhu.stripCommas",
+      "fhu.saveOptions",
+      "fhu.loadOptions",
+      "fhu.resetOptions",
+    ]) {
+      expect(RUN_LUA_DESCRIPTION).toContain(name);
+    }
+    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/modal dialog/);
+    expect(lower).toMatch(/hang/);
+  });
 });

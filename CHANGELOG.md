@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### fhu sandbox escape hatches
+- Eight `fhu` (`fhUtils`) methods that bypassed the sandbox entirely are now replaced
+  with an error-raising wrapper, in both Read-only and Read-write: `getParam`,
+  `createUpdateFact`, `pickIndividualPrompt`, and `yes` open a real modal dialog inside
+  FH via `iup.Popup` and would hang a headless `run_lua` call; `saveOptions`,
+  `loadOptions`, and `resetOptions` read/write a plugin-data file on disk directly,
+  bypassing this project's filesystem exclusion policy. `stripCommas` is the one
+  conditional case — safe called with just its text argument, and now raises the same
+  error only when its optional `sQuestion`/`sTitle`/`hParent` arguments are present.
+  `createUpdateFact` is also a write method, but the new check takes priority, so it
+  never forwards to the real (hang-prone) function even under Read-write. Raising a
+  named error rather than leaving these silently absent (nil, like the raw `fh*`
+  exclusions) gives Claude a self-correctable message instead of a generic "attempt to
+  call a nil value". (#22)
+
 ### GEDCOM knowledge corpus
 - Added Data Reference qualifier codes (Date, Name, Place/lat-long) to
   `gedcom-knowledge-corpus.jsonl`, transcribed from an FH developer-supplied source

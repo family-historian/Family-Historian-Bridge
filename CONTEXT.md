@@ -38,7 +38,16 @@ _Avoid_: Permission level, mode (alone)
 **Sandbox**:
 The restricted Lua environment (`_ENV` table passed to `load()`) that a submitted script
 runs inside. Built as an allowlist — only explicitly added globals are visible — rather
-than starting from the real environment and stripping known-dangerous ones.
+than starting from the real environment and stripping known-dangerous ones. `fhu`
+(`require('fhUtils')`) is exposed as a proxy, never the raw FH-shipped module, so its
+methods can be gated the same way: besides the write-gating in **Access mode**, eight
+`fhu` methods (`getParam`, `createUpdateFact`, `pickIndividualPrompt`, `yes`,
+`stripCommas` when called with its optional UI arguments, `saveOptions`, `loadOptions`,
+`resetOptions`) are replaced with an error-raising wrapper in both Read-only and
+Read-write — unconditionally, regardless of access mode — because they either pop a real
+modal dialog (hanging a headless `run_lua` call) or read/write a file on disk directly,
+bypassing this project's filesystem exclusion below (issue #22). See `bridge/sandbox.lua`
+for the authoritative list and reasons.
 _Avoid_: Denylist, restricted mode
 
 **FH auto-undo**:

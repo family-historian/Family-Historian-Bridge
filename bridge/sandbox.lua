@@ -57,6 +57,46 @@ end
 
 local FHU_WRITE_METHODS = toSet(FHU_WRITE_METHOD_NAMES)
 
+-- fhu methods that pop a real iup.Popup(dlg) modal dialog and block waiting for a human
+-- to click a button, or that read/write straight to disk -- neither is survivable in
+-- run_lua's headless script->JSON-return model, and both bypass this sandbox's env the
+-- same way fhu's write methods do (issue #22, found by reading fhUtils.lua's actual
+-- source). Unconditional: excluded in both Read-only and Read-write, since neither risk
+-- has anything to do with access mode. createUpdateFact is *also* a write method
+-- (FHU_WRITE_METHOD_NAMES above) -- this table takes priority over that in the proxy loop
+-- below, so it never forwards to the real (hang-prone) function even under Read-write;
+-- it's still absent under Read-only via the ordinary write gate, unchanged.
+-- stripCommas is handled separately (buildStripCommas below): safe with just its text
+-- argument, unsafe only when called with its optional sQuestion/sTitle/hParent args.
+local FHU_UNSUPPORTED_REASONS = {
+  getParam = 'it opens a modal dialog and would hang a headless run_lua script',
+  createUpdateFact = 'it calls getParam internally, which opens a modal dialog and would hang a headless run_lua script',
+  pickIndividualPrompt = 'it opens a modal dialog and would hang a headless run_lua script',
+  yes = 'it opens a modal dialog and would hang a headless run_lua script',
+  saveOptions = 'it writes directly to disk, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  loadOptions = 'it reads directly from disk, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  resetOptions = 'it writes directly to disk, which this project\'s filesystem exclusion policy does not allow over run_lua',
+}
+
+local function unsupportedFhu(name, reason)
+  return function()
+    error('fhu.' .. name .. ' is not supported over run_lua: ' .. reason)
+  end
+end
+
+-- stripCommas(s, sQuestion, sTitle, hParent) (server/data/fh-help-corpus.jsonl): the
+-- three optional trailing args are what make it prompt via iup.Popup -- called with just
+-- s, it's pure string cleanup. Pass through to the real function when none of them are
+-- present; raise the same style of error as the unconditional methods above otherwise.
+local function buildStripCommas(realStripCommas)
+  return function(s, sQuestion, sTitle, hParent)
+    if sQuestion ~= nil or sTitle ~= nil or hParent ~= nil then
+      error('fhu.stripCommas is not supported over run_lua with its optional sQuestion/sTitle/hParent arguments: it opens a modal dialog and would hang a headless run_lua script. Call it with just the text argument instead.')
+    end
+    return realStripCommas(s)
+  end
+end
+
 -- M.build's accessMode ("read-only"/"read-write") is threaded through from the bridge
 -- dialog's toggle; returns the sandbox env plus a tracker table ({wrote = boolean}) the
 -- caller can inspect after running a script to see whether any wrapped write primitive
@@ -203,12 +243,19 @@ function M.build(accessMode)
   -- methods can be gated by accessMode and tracked the same as the raw primitives below
   -- (issue #22 found the raw module was reachable read-only, since fhu bypasses env and
   -- calls real fh* globals directly regardless of what this sandbox otherwise allows).
-  -- Every non-write method is passed through by reference, unchanged.
+  -- The modal-dialog/filesystem-write check runs first and takes priority over write
+  -- gating (see FHU_UNSUPPORTED_REASONS above -- this is what keeps createUpdateFact from
+  -- ever forwarding, despite also being a write method). Every other method is passed
+  -- through by reference, unchanged.
   do
     local realFhu = require('fhUtils')
     local fhuProxy = {}
     for name, value in pairs(realFhu) do
-      if FHU_WRITE_METHODS[name] then
+      if FHU_UNSUPPORTED_REASONS[name] then
+        fhuProxy[name] = unsupportedFhu(name, FHU_UNSUPPORTED_REASONS[name])
+      elseif name == 'stripCommas' then
+        fhuProxy[name] = buildStripCommas(value)
+      elseif FHU_WRITE_METHODS[name] then
         if accessMode == "read-write" then
           fhuProxy[name] = trackedWrite(value)
         end
