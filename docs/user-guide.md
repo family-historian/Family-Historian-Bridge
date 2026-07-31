@@ -180,6 +180,20 @@ This is a different mode from the live Q&A above, not an extension of it:
   you install — that's the entire purpose of the flag, so don't skip past them just
   because "an AI wrote it."
 
+Once you've reviewed it, you have two ways to install it:
+
+- **Manual** — save the text yourself as a `.fh_lua` file and install it the normal FH way
+  (double-click on Windows, or **Tools -> Plugins -> New/Import**), as described above.
+- **Ask Claude to install it** — say so ("install it", "add it to my plugins") and Claude
+  will call `install_fh_plugin` to write it straight into FH's Plugins folder. This needs
+  an active Bridge Session (same as asking a live question) to look up where that folder
+  is; if no Session is running, Claude will ask you to confirm the location instead (see
+  "Where FH's Plugins folder is" above). It never overwrites an existing file — asking to
+  install the same plugin again after a tweak adds "V2", then "V3", and so on, to both the
+  filename and the plugin's own title. FH doesn't rescan its Plugins folder while the
+  Plugins Dialog is open, so close and reopen **Tools -> Plugins** afterwards if you have it
+  open, then select the new entry and click **Run**.
+
 Tell Claude which kind you want — a **Report** plugin (shows in FH's Report Window) or a
 **Query** plugin (shows a list in FH's Query Window) — and what it should do.
 

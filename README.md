@@ -12,7 +12,8 @@ scripts to a companion FH plugin over a local TCP socket.
 - Let Claude write the user a complete, standalone FH Report or Query plugin to install
   and run themselves — a separate, human-reviewed path that isn't bound by the Bridge
   Session's Access mode, since the user runs it under FH's own permission model, not the
-  Bridge's.
+  Bridge's. On the user's explicit say-so, Claude can also write it straight into FH's
+  Plugins folder for them (`install_fh_plugin`), rather than them saving it by hand.
 - Keep everything local: both halves talk to each other on `127.0.0.1` only. The one
   deliberate exception is an explicit, user-triggered check for an updated copy of FH8's
   bundled help content from family-historian.co.uk.

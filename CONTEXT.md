@@ -88,6 +88,21 @@ answer.
 _Avoid_: Plugin generator (alone, without the trust-model distinction from `run_lua` —
 that distinction is the point of this tool existing separately)
 
+**install_fh_plugin**:
+The MCP tool (issue #24) that writes a plugin `author_fh_plugin` generated directly into
+FH's Plugins folder, so the user doesn't have to save the file and find that folder
+themselves. A distinct, later step from `author_fh_plugin` — never called automatically as
+its follow-up, only on the user's explicit request to install what was just generated; see
+docs/adr/0008-install-fh-plugin-staged-write.md. Resolves the Plugins folder location live
+via `fhGetContextInfo("CI_APP_DATA_FOLDER")` through an active Bridge Session (falling back
+to a user-confirmed `path` parameter when no Session is running), and never overwrites —
+each install gets the next unused `V<N>` suffix on both the filename and the plugin's own
+`@Title` header. Writes via the MCP server's own filesystem access, not through the Bridge
+or `run_lua`'s sandbox; `fhSaveTextFile` and the rest of `run_lua`'s excluded-function list
+are unaffected by this tool's existence.
+_Avoid_: Publish, upload (this project's own name for the operation is "install", matching
+FH's own Tools -> Plugins terminology)
+
 **Source template**:
 An FH template definition (e.g. "Census Record", "Birth Certificate") that declares the
 citation field/subfield names a SOUR record created from it will have. Distinct from a
