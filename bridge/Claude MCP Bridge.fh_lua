@@ -32,9 +32,9 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 -- Read-only sandbox regardless of the Session's access mode, via the LUA_RO request form
 -- (issue #16) — see requestFraming.lua.
 --
--- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, watchdog.lua, and
--- timeoutDisplay.lua must all be copied together into FH's Plugins folder (so require()
--- can find the sibling modules) —
+-- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, watchdog.lua,
+-- timeoutDisplay.lua, requestFraming.lua, and sourceHelper.lua must all be copied together
+-- into FH's Plugins folder (so require() can find the sibling modules) —
 -- see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/.
 -- This file itself is then loaded via Tools -> Plugins in FH, same as any other plugin.
 
