@@ -120,6 +120,20 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(RUN_LUA_DESCRIPTION).toMatch(/writeSessionRolledBack/);
   });
 
+  it("steers Claude to call fhBridge.logActivity after every record-touching action in a Read-write Session", () => {
+    expect(RUN_LUA_DESCRIPTION).toMatch(/fhBridge\.logActivity/);
+    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/every record-touching action|after (every|each) (record-touching )?action/);
+    expect(lower).toMatch(/research note/);
+  });
+
+  it("documents the logActivity media detail for outstanding physical/digital items never attached", () => {
+    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/never (actually )?attached as media|never attached/);
+    expect(lower).toMatch(/to-do|#todo/);
+    expect(lower).toMatch(/photo|physical\/digital|digital item/);
+  });
+
   it("names all eight fhu methods excluded from run_lua (modal-dialog and filesystem-writing) so Claude doesn't suggest them", () => {
     for (const name of [
       "fhu.getParam",

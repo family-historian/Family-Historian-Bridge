@@ -212,5 +212,7 @@ itself. Optionally takes a still-needs-media detail (a name and, if mentioned, a
 which it renders as an indented `[ ] #ToDo Media to be added <name>` sub-line under the
 entry — plain FTF text the user ticks off by hand in FH, never touching the media file's
 bytes or the filesystem itself (issue #39, 2026-08-01 grilling session on issue #23).
+Steered from `run_lua`'s tool description, not a Skill (issue #40) — see
+docs/adr/0010-automatic-session-log-steered-from-run-lua.md for the full design.
 _Avoid_: Audit log, history (this project's own name for the operation is `logActivity`,
 and FH's own term for the record type is "Research Note")
