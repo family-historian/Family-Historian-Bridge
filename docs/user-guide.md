@@ -52,18 +52,15 @@ This produces `server/dist/index.js` — the file Claude Desktop will run.
 
 ### 3. Install the Bridge plugin into FH
 
-Copy these seven files from the project's `bridge` folder into FH's Plugins folder:
+Build the single-file plugin (from the project's root folder):
 
-- `Claude MCP Bridge.fh_lua`
-- `jsonEncode.lua`
-- `sandbox.lua`
-- `runScript.lua`
-- `watchdog.lua`
-- `requestFraming.lua`
-- `sourceHelper.lua`
+```bash
+lua bridge/scripts/build.lua
+```
 
-All seven must sit together in the same folder, so the plugin can find its own supporting
-files.
+This produces `bridge/dist/Claude MCP Bridge.fh_lua` — a self-contained bundle of the
+plugin and its supporting modules (see docs/adr/0009-bundle-bridge-plugin-for-install.md).
+Copy just that one file into FH's Plugins folder.
 
 **Where FH's Plugins folder is:**
 - Native Windows, **FH8**: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` — note

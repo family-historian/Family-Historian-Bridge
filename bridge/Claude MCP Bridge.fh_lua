@@ -32,11 +32,14 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 -- Read-only sandbox regardless of the Session's access mode, via the LUA_RO request form
 -- (issue #16) — see requestFraming.lua.
 --
--- Install: this file plus jsonEncode.lua, sandbox.lua, runScript.lua, watchdog.lua,
--- timeoutDisplay.lua, requestFraming.lua, and sourceHelper.lua must all be copied together
--- into FH's Plugins folder (so require() can find the sibling modules) —
--- see https://www.fhug.org.uk/kb/kb-article/lua-references-and-library-modules/.
--- This file itself is then loaded via Tools -> Plugins in FH, same as any other plugin.
+-- Install: this source form is split into sibling modules (require()'d below) purely so
+-- each one can be unit-tested standalone outside FH (see bridge/README.md). It is not
+-- itself the installable artifact — FH's own plugin convention expects one file, and
+-- install_fh_plugin can only write one file per call (see docs/adr/0009). Build the
+-- single-file artifact with:
+--   lua bridge/scripts/build.lua
+-- then copy just bridge/dist/Claude MCP Bridge.fh_lua into FH's Plugins folder and load
+-- it via Tools -> Plugins, same as any other plugin.
 
 -- fhInitialise must be the first function this plugin calls, before even require()
 -- (per FH's own docs) — "save_required" pops FH's own save-changes dialog (OK/Cancel)

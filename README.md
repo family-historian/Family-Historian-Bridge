@@ -59,9 +59,15 @@ Short version:
    npm run build
    ```
    This produces `server/dist/index.js`.
-3. **Install the Bridge plugin into FH** — copy `Claude MCP Bridge.fh_lua`, `jsonEncode.lua`,
-   `sandbox.lua`, `runScript.lua`, `watchdog.lua`, `requestFraming.lua`, and
-   `sourceHelper.lua` (all seven, together) from `bridge/` into FH's Plugins folder:
+3. **Install the Bridge plugin into FH** — build the single-file plugin, then copy just
+   that one file:
+   ```bash
+   lua bridge/scripts/build.lua
+   ```
+   This produces `bridge/dist/Claude MCP Bridge.fh_lua`, a self-contained bundle of the
+   plugin and its supporting modules (see
+   [docs/adr/0009-bundle-bridge-plugin-for-install.md](docs/adr/0009-bundle-bridge-plugin-for-install.md)).
+   Copy that one file into FH's Plugins folder:
    - Native Windows, FH8: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\` —
      note the `8`. A same-machine FH7 install has its own `Family Historian\Plugins\`
      (no version number) sitting right next to it, already populated with real plugins,

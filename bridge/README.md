@@ -37,8 +37,9 @@ implements.
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
 `timeoutDisplay.lua`, and `sourceHelper.lua` have standalone unit tests, in `tests/`
 (`*.test.lua`, run with a plain `lua` interpreter — no FH dependency). Keeping tests out of
-this folder means every file directly in `bridge/` is exactly what step 1 below copies —
-nothing to filter by name:
+this folder means every file directly in `bridge/` is exactly what `scripts/build.lua`
+bundles into the single installable file (see
+`docs/adr/0009-bundle-bridge-plugin-for-install.md`) — nothing to filter by name:
 
 ```bash
 lua bridge/tests/jsonEncode.test.lua
@@ -48,15 +49,23 @@ lua bridge/tests/runScript.test.lua
 lua bridge/tests/requestFraming.test.lua
 lua bridge/tests/timeoutDisplay.test.lua
 lua bridge/tests/sourceHelper.test.lua
+lua bridge/tests/build.test.lua
 ```
+
+`scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those seven files into
+`dist/Claude MCP Bridge.fh_lua` — the single file that actually gets installed (step 1
+below). Both are build tooling, not part of the plugin itself, same reason `tests/` is
+kept out of the top level: `dist/` is generated and gitignored, rebuilt with
+`lua bridge/scripts/build.lua`.
 
 `Claude MCP Bridge.fh_lua` itself (the socket/IUP dialog plumbing) has no automatable seam — FH is
 proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
 
 ## Manual test
 
-1. Copy every file directly in this folder (not the `tests/` subfolder) into FH's Plugins
-   folder (so `require()` can find the sibling modules) —
+1. Build the single-file plugin (`lua bridge/scripts/build.lua` from the repo root — see
+   docs/adr/0009-bundle-bridge-plugin-for-install.md) and copy the resulting
+   `bridge/dist/Claude MCP Bridge.fh_lua` into FH's Plugins folder —
    `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native Windows, or the
    equivalent path under CrossOver's virtual C: drive on Mac.
 2. In FH: Tools -> Plugins -> New, open `Claude MCP Bridge.fh_lua` from that folder, click Run.

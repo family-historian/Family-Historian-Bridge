@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Bundled build for installation
+- Fixed the Bridge plugin's own install-file-list comment, which had drifted out of sync
+  with `bridge/README.md`'s list (missing `requestFraming.lua` and `sourceHelper.lua`) —
+  the same drift already caught once in the 0.2.0 entry below, recurred.
+- Added `bridge/scripts/build.lua`, bundling the plugin's seven source files into one
+  self-contained `bridge/dist/Claude MCP Bridge.fh_lua` via `package.preload`, so the
+  installed artifact matches FH's own single-file plugin convention instead of requiring
+  seven files copied together. The source tree stays split for standalone per-module
+  testing (`bridge/tests/*.test.lua`, now including `build.test.lua` for the bundler
+  itself). See `docs/adr/0009-bundle-bridge-plugin-for-install.md`. Install docs
+  (`README.md`, `docs/user-guide.md`, `bridge/README.md`) and `docs/release.md` now point
+  at the bundled file instead of listing all seven source files.
+
 ### Save prompt and display refresh
 - The Bridge plugin now calls `fhInitialise(7, 0, 0, "save_required")` as its first
   statement, before any `require()`, so FH prompts to save unsaved changes the moment the
