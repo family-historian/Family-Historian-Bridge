@@ -17,11 +17,11 @@
 
 local M = {}
 
--- The seven sibling modules the entry file requires, directly or transitively (sandbox.lua
--- requires sourceHelper.lua from inside a function body, not at module load time). Order
--- here is arbitrary — see the note above.
+-- The eight sibling modules the entry file requires, directly or transitively (sandbox.lua
+-- requires sourceHelper.lua and sessionLogHelper.lua from inside a function body, not at
+-- module load time). Order here is arbitrary — see the note above.
 M.MODULE_NAMES = {
-  "jsonEncode", "requestFraming", "runScript", "sandbox", "sourceHelper",
+  "jsonEncode", "requestFraming", "runScript", "sandbox", "sessionLogHelper", "sourceHelper",
   "timeoutDisplay", "watchdog",
 }
 

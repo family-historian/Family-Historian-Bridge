@@ -191,6 +191,15 @@ local fakeSourceHelper = {
 }
 package.loaded.sourceHelper = fakeSourceHelper
 
+-- sessionLogHelper.lua (issue #36) is stubbed the same way, for the same reason: this test
+-- stays a pure allowlist check, independent of sessionLogHelper.lua's own behavior (covered
+-- by sessionLogHelper.test.lua). logActivity returns an identifiable value for the same
+-- forwarding-proof reason as fakeSourceHelper.citeSource above.
+local fakeSessionLogHelper = {
+  logActivity = function(ptrRecord, action) return 'logged:' .. tostring(action) end,
+}
+package.loaded.sessionLogHelper = fakeSessionLogHelper
+
 local env, tracker = sandbox.build()
 
 -- Allowed basics are present and are the real thing (not stand-ins).
@@ -415,6 +424,14 @@ local envReadWrite3, trackerReadWrite3 = sandbox.build("read-write")
 check(type(envReadWrite3.fhBridge) == 'table', 'read-write build includes fhBridge (require("sourceHelper"))')
 check(envReadWrite3.fhBridge.citeSource('ptr', 'my-source') == 'cited:my-source', 'wrapped fhBridge.citeSource forwards through to the real sourceHelper.citeSource')
 check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips the tracker too')
+
+-- fhBridge.logActivity (require('sessionLogHelper'), issue #36): present, wrapped, forwards
+-- through and flips the tracker the same way createSourceFromTemplate/citeSource do above.
+local envReadWrite6, trackerReadWrite6 = sandbox.build("read-write")
+check(type(envReadWrite6.fhBridge.logActivity) == 'function' and envReadWrite6.fhBridge.logActivity ~= fakeSessionLogHelper.logActivity,
+  'read-write fhBridge.logActivity is wrapped, not the raw function')
+check(envReadWrite6.fhBridge.logActivity('ptr', 'created') == 'logged:created', 'wrapped fhBridge.logActivity forwards through to the real sessionLogHelper.logActivity')
+check(trackerReadWrite6.wrote == true, 'calling a wrapped fhBridge.logActivity flips the tracker too')
 
 -- Modal-dialog and filesystem-writing fhu methods (issue #22): replaced with an
 -- error-raising wrapper rather than being forwarded to the real function or left as a

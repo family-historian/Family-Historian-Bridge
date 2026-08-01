@@ -33,12 +33,21 @@ implements.
   target item (an INDI/FAM record for a Whole-record citation, or a Fact item) instead of
   hand-assembling `fhCreateItem("SOUR", ...)` + `fhSetValueAsLink` — see
   `docs/adr/0006-cite-every-fact-a-source-supports.md`.
+- `sessionLogHelper.lua` — `fhBridge.logActivity(ptrRecord, action)` (issue #36), a
+  read-write-only helper that logs a Session's record-creating activity into one Research
+  Note (`_RNOT`) per Session: the first call in a Session creates a new note titled with a
+  creation timestamp and writes the first log entry into it; every subsequent call in the
+  same Session appends a further entry to that same note. Each entry's record reference is
+  a live FTF record link (`RichText:AddRecordLink`), not plain text. Exploits the Bridge
+  plugin being one continuously-running Lua process for a Session's lifetime: a
+  module-level Research Note pointer and RichText buffer persist across every `run_lua`
+  call via `require()`'s module caching, and reset on the next Session (fresh plugin load).
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
-`timeoutDisplay.lua`, and `sourceHelper.lua` have standalone unit tests, in `tests/`
-(`*.test.lua`, run with a plain `lua` interpreter — no FH dependency). Keeping tests out of
-this folder means every file directly in `bridge/` is exactly what `scripts/build.lua`
-bundles into the single installable file (see
+`timeoutDisplay.lua`, `sourceHelper.lua`, and `sessionLogHelper.lua` have standalone unit
+tests, in `tests/` (`*.test.lua`, run with a plain `lua` interpreter — no FH dependency).
+Keeping tests out of this folder means every file directly in `bridge/` is exactly what
+`scripts/build.lua` bundles into the single installable file (see
 `docs/adr/0009-bundle-bridge-plugin-for-install.md`) — nothing to filter by name:
 
 ```bash
@@ -49,10 +58,11 @@ lua bridge/tests/runScript.test.lua
 lua bridge/tests/requestFraming.test.lua
 lua bridge/tests/timeoutDisplay.test.lua
 lua bridge/tests/sourceHelper.test.lua
+lua bridge/tests/sessionLogHelper.test.lua
 lua bridge/tests/build.test.lua
 ```
 
-`scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those seven files into
+`scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those eight files into
 `dist/Claude MCP Bridge.fh_lua` — the single file that actually gets installed (step 1
 below). Both are build tooling, not part of the plugin itself, same reason `tests/` is
 kept out of the top level: `dist/` is generated and gitignored, rebuilt with
@@ -308,3 +318,31 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    `fhu.createIndi` as nil (step 11's negative case) — `fhu`'s write methods are gated the
    same way the raw write primitives are, so nothing is ever written and there's nothing
    for FH to roll back.
+16. `fhBridge.logActivity` (issue #36): with a real FH project open, select Read-write,
+   click Start:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   local p = fhNewItemPtr()
+   p:MoveToFirstRecord(\"INDI\")
+   fhBridge.logActivity(p, \"created\")
+   fhBridge.logActivity(p, \"fact added Birth\")
+   return \"ok\"
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: `"ok"`. Confirm in FH's own UI that exactly one new Research Note
+   record now exists (View -> Research Notes), titled with a creation timestamp, containing
+   two log entries, each with a working, clickable link to the Individual record (undo with
+   Ctrl-Z to clean up). Send a third `fhBridge.logActivity` call on the same Session and
+   confirm it appends a third entry to the SAME note rather than creating another one. Stop
+   the Session, click Start again (a new Session), and send one more `fhBridge.logActivity`
+   call: confirm this creates a second, separate Research Note rather than appending to the
+   first Session's note. Then repeat with Read-only selected instead and confirm the same
+   script now fails calling `fhBridge` as nil (step 11's negative case).

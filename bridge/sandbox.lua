@@ -14,7 +14,8 @@
 -- full write API (issue #14, 2026-07-30 grilling session decision) — all of it at once,
 -- with no further staging within read-write. See CONTEXT.md "Access mode". Read-write also
 -- wires env.fhBridge, this project's own sourceHelper.lua module (issue #18) — not part of
--- FH's write API itself, but calls it directly, so it's gated the same way.
+-- FH's write API itself, but calls it directly, so it's gated the same way. env.fhBridge
+-- also carries sessionLogHelper.lua's logActivity (issue #36), same reasoning.
 
 local M = {}
 
@@ -278,9 +279,15 @@ function M.build(accessMode)
     -- Fills the one gap fhUtils itself doesn't cover (issue #18) — calls the real fh*
     -- globals directly, same as fhUtils, so it must stay inside this read-write block.
     local realFhBridge = require('sourceHelper')
+    -- logActivity (issue #36) is a separate sibling module, not part of sourceHelper.lua's
+    -- own Source-record concerns, but exposed through the same env.fhBridge table and
+    -- gated the same read-write-only way, since it also calls the real fh* globals
+    -- directly.
+    local realSessionLogHelper = require('sessionLogHelper')
     env.fhBridge = {
       createSourceFromTemplate = trackedWrite(realFhBridge.createSourceFromTemplate),
       citeSource = trackedWrite(realFhBridge.citeSource),
+      logActivity = trackedWrite(realSessionLogHelper.logActivity),
     }
   end
 

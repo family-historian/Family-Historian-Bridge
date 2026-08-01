@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Session-log helper
+- Added `bridge/sessionLogHelper.lua`, exposing `fhBridge.logActivity(ptrRecord, action)`
+  (read-write only): logs a Session's record-creating activity into one Research Note
+  (`_RNOT`) per Session, creating it (titled with a creation timestamp) on the first call
+  and appending further entries to the same note on every subsequent call in that Session.
+  Each entry's record reference is a live, clickable FTF record link, not plain text. (#36)
+
 ### Bundled build for installation
 - Fixed the Bridge plugin's own install-file-list comment, which had drifted out of sync
   with `bridge/README.md`'s list (missing `requestFraming.lua` and `sourceHelper.lua`) —

@@ -200,3 +200,14 @@ a shared helper instead of each script hand-rolling `fhCreateItem("SOUR", ...)` 
 `fhSetValueAsLink`.
 _Avoid_: Add source, link source (this project's own name for the operation is
 `citeSource`, matching the domain term "citation")
+
+**logActivity**:
+The `fhBridge` helper (`sessionLogHelper.lua`) that logs a Read-write Session's
+record-creating activity into one Research Note (`_RNOT` record) per Session — creating it
+on the first call in a Session, titled with a creation timestamp, and appending a further
+entry to that same note on every subsequent call in the same Session. Distinct from a
+Whole-record citation or any other `SOUR`-citation concept above: a Research Note here is a
+Claude-authored activity log for the user to review, not a source attached to the data
+itself.
+_Avoid_: Audit log, history (this project's own name for the operation is `logActivity`,
+and FH's own term for the record type is "Research Note")
