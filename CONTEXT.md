@@ -214,5 +214,19 @@ entry — plain FTF text the user ticks off by hand in FH, never touching the me
 bytes or the filesystem itself (issue #39, 2026-08-01 grilling session on issue #23).
 Steered from `run_lua`'s tool description, not a Skill (issue #40) — see
 docs/adr/0010-automatic-session-log-steered-from-run-lua.md for the full design.
+
+**run_lua guidance (corpus entries)**:
+The `"run_lua guidance"`-titled entries in the GEDCOM knowledge corpus (call-shape
+gotchas, `citeSource` guidance, `writeSessionRolledBack` handling) — content that used to
+live directly in `run_lua`'s tool description until it was found that MCP clients loading
+tool descriptions via deferred/lazy schema-loading truncate long descriptions around ~2KB,
+silently. `RUN_LUA_DESCRIPTION` now keeps only a self-sufficient "safe zone" under that
+cutoff, plus an explicit instruction to call `search_gedcom_knowledge("run_lua guidance")`
+once per conversation to fetch the rest — a tool *result*, unlike a tool *schema
+description*, isn't subject to the same truncation. See
+docs/adr/0011-run-lua-description-truncation-workaround.md.
+_Avoid_: Assuming `RUN_LUA_DESCRIPTION`'s full text always reaches Claude — for any client
+using deferred tool loading, it doesn't, by design of this workaround as much as by the
+truncation itself.
 _Avoid_: Audit log, history (this project's own name for the operation is `logActivity`,
 and FH's own term for the record type is "Research Note")

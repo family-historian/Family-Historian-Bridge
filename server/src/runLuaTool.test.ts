@@ -101,23 +101,35 @@ describe("handleRunLua", () => {
 });
 
 describe("RUN_LUA_DESCRIPTION", () => {
-  it("names fhBridge.citeSource as the way to attach a citation, instead of hand-rolling fhCreateItem+fhSetValueAsLink", () => {
-    expect(RUN_LUA_DESCRIPTION).toMatch(/fhBridge\.citeSource/);
+  // citeSource guidance, the writeSessionRolledBack/auto-undo explanation, and the eight
+  // excluded-fhu-methods list used to be asserted here directly. They now live in
+  // server/data/gedcom-knowledge-corpus.jsonl instead (see gedcomKnowledge.test.ts's "run_lua
+  // guidance corpus entries" block) — moved out of this description's own literal text because
+  // MCP clients that load tool descriptions via deferred/lazy schema-loading truncate long
+  // descriptions around ~2KB (docs/adr/0011-run-lua-description-truncation-workaround.md).
+  // RUN_LUA_DESCRIPTION's own job now is just to point Claude at that corpus entry from within
+  // the safe (pre-truncation) zone — see the "safe zone" tests below.
+
+  it("keeps the safe zone (before the ~2KB deferred-tool-loading truncation point) self-sufficient with the core search-first/fhu-preference mandate", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET).toLowerCase();
+    expect(safeZone).toMatch(/search first/);
+    expect(safeZone).toMatch(/fhu/);
+    expect(safeZone).toMatch(/purpose-built helper/);
   });
 
-  it("instructs listing every fact a source supports and waiting for confirmation before writing any of them", () => {
-    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
-    expect(lower).toMatch(/isn't yet (in|entered)|not yet entered|gaps?/);
-    expect(lower).toMatch(/wait for the user's .*(confirmation|go-ahead)/);
+  it("tells Claude within the safe zone that this description can be truncated, and how to fetch the rest", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET);
+    expect(safeZone.toLowerCase()).toMatch(/truncat/);
+    expect(safeZone).toMatch(/search_gedcom_knowledge/);
+    expect(safeZone).toContain('"run_lua guidance"');
   });
 
-  it("documents write capability, FH's auto-undo safety net, and what writeSessionRolledBack means", () => {
-    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
-    expect(lower).toMatch(/read-write/);
-    expect(lower).toMatch(/auto-undo|automatic undo/);
-    expect(lower).toMatch(/plugin error/);
-    expect(lower).toMatch(/session has ended|session ends|click start again/);
-    expect(RUN_LUA_DESCRIPTION).toMatch(/writeSessionRolledBack/);
+  it("stays well under the observed ~2048-char truncation point up through the truncation notice itself", () => {
+    const noticeEnd = RUN_LUA_DESCRIPTION.indexOf('"run_lua guidance"') + '"run_lua guidance"'.length;
+    expect(noticeEnd).toBeGreaterThan(0);
+    expect(noticeEnd).toBeLessThan(2000);
   });
 
   it("steers Claude to call fhBridge.logActivity after every record-touching action in a Read-write Session", () => {
@@ -141,21 +153,4 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(lower).toMatch(/hand-typed|hand typed/);
   });
 
-  it("names all eight fhu methods excluded from run_lua (modal-dialog and filesystem-writing) so Claude doesn't suggest them", () => {
-    for (const name of [
-      "fhu.getParam",
-      "fhu.createUpdateFact",
-      "fhu.pickIndividualPrompt",
-      "fhu.yes",
-      "fhu.stripCommas",
-      "fhu.saveOptions",
-      "fhu.loadOptions",
-      "fhu.resetOptions",
-    ]) {
-      expect(RUN_LUA_DESCRIPTION).toContain(name);
-    }
-    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
-    expect(lower).toMatch(/modal dialog/);
-    expect(lower).toMatch(/hang/);
-  });
 });

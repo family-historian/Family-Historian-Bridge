@@ -166,6 +166,61 @@ describe("the real bundled corpus", () => {
   });
 });
 
+describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-truncation-workaround.md)", () => {
+  // These entries hold content that used to live directly in RUN_LUA_DESCRIPTION
+  // (runLuaTool.ts) but was moved out because MCP clients that load tool descriptions via
+  // deferred/lazy schema-loading truncate long descriptions around ~2KB — see
+  // runLuaTool.test.ts's "safe zone" tests for the pointer instruction that survives
+  // truncation and tells Claude to fetch this content via search_gedcom_knowledge.
+  const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
+  const corpus = loadGedcomKnowledgeFromFile(CORPUS_PATH);
+  const results = searchGedcomKnowledge(corpus, "run_lua guidance");
+  const combinedText = results.map((r) => r.text).join("\n");
+
+  it('finds all three "run_lua guidance" entries with a single query, via title match', () => {
+    expect(results.map((r) => r.id).sort()).toEqual([
+      "run-lua-guidance-call-shape-gotchas",
+      "run-lua-guidance-cite-every-fact",
+      "run-lua-guidance-write-session-rolled-back",
+    ]);
+  });
+
+  it("carries the eight excluded fhu methods (modal-dialog and filesystem-writing) so Claude doesn't suggest them", () => {
+    for (const name of [
+      "fhu.getParam",
+      "fhu.createUpdateFact",
+      "fhu.pickIndividualPrompt",
+      "fhu.yes",
+      "fhu.stripCommas",
+      "fhu.saveOptions",
+      "fhu.loadOptions",
+      "fhu.resetOptions",
+    ]) {
+      expect(combinedText).toContain(name);
+    }
+    expect(combinedText.toLowerCase()).toMatch(/modal dialog/);
+    expect(combinedText.toLowerCase()).toMatch(/hang/);
+  });
+
+  it("names fhBridge.citeSource as the way to attach a citation, instead of hand-rolling fhCreateItem+fhSetValueAsLink", () => {
+    expect(combinedText).toMatch(/fhBridge\.citeSource/);
+  });
+
+  it("instructs listing every fact a source supports and waiting for confirmation before writing any of them", () => {
+    const lower = combinedText.toLowerCase();
+    expect(lower).toMatch(/isn't yet (in|entered)|not yet entered|gaps?/);
+    expect(lower).toMatch(/wait for the user's .*(confirmation|go-ahead)/);
+  });
+
+  it("documents FH's auto-undo safety net and what writeSessionRolledBack means", () => {
+    const lower = combinedText.toLowerCase();
+    expect(lower).toMatch(/auto-undo|automatic undo/);
+    expect(lower).toMatch(/plugin error/);
+    expect(lower).toMatch(/session has ended|session ends|click start again/);
+    expect(combinedText).toMatch(/writeSessionRolledBack/);
+  });
+});
+
 describe("file separation from check_fh_help_updates (acceptance criterion)", () => {
   it("leaves the gedcom knowledge corpus untouched when the fh-help corpus is synced/updated", async () => {
     const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
