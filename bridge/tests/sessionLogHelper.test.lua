@@ -181,6 +181,84 @@ check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeFresh + 1,
 local freshNoteNode = recordsByTag["_RNOT"][#recordsByTag["_RNOT"]]
 check(freshNoteNode ~= noteNode, 'the fresh Session\'s note is a different record from the previous Session\'s')
 
+------------------------------------------------------------------
+-- Optional media detail (issue #39): appends an indented #ToDo sub-line under the entry,
+-- opt-in per call. Exact no-location wording is pinned to the 2026-08-01 grilling
+-- session's own Nellie Record birth-certificate example from issue #23/#39.
+------------------------------------------------------------------
+
+local indiD = fhCreateItem("INDI")
+local lastSaveBeforeMedia = setValueCalls[#setValueCalls]
+local segmentCountBeforeMedia = #lastSaveBeforeMedia.richText.segments
+
+freshSessionLogHelper.logActivity(indiD, "fact added Birth", { name = "bc-nellie.jpg" })
+
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeFresh + 1, 'a call with a media detail creates no additional _RNOT record')
+
+local lastSaveMedia = setValueCalls[#setValueCalls]
+check(lastSaveMedia.node == freshNoteNode, 'a call with a media detail still saves onto the same Session note')
+
+local segmentsMedia = lastSaveMedia.richText.segments
+check(#segmentsMedia == segmentCountBeforeMedia + 4,
+  'a media detail appends one extra segment (the sub-line) beyond the usual separator/prefix/link three')
+
+local sublineNoLocation = segmentsMedia[#segmentsMedia]
+check(sublineNoLocation.kind == 'text', 'the media sub-line is added as plain text')
+check(sublineNoLocation.text == '\n      [ ] #ToDo Media to be added bc-nellie.jpg',
+  'the media sub-line (no location) matches the grilling session\'s exact Nellie Record format')
+
+------------------------------------------------------------------
+-- Media detail with a location: the location appears in the sub-line too.
+------------------------------------------------------------------
+
+local indiE = fhCreateItem("INDI")
+local segmentCountBeforeLocation = #segmentsMedia
+
+freshSessionLogHelper.logActivity(indiE, "fact added Marriage", { name = "cert.jpg", location = "family archive box" })
+
+local lastSaveLocation = setValueCalls[#setValueCalls]
+local segmentsLocation = lastSaveLocation.richText.segments
+check(#segmentsLocation == segmentCountBeforeLocation + 4,
+  'a media detail with a location also appends exactly one sub-line segment')
+
+local sublineWithLocation = segmentsLocation[#segmentsLocation]
+check(sublineWithLocation.text == '\n      [ ] #ToDo Media to be added cert.jpg (family archive box)',
+  'the media sub-line includes the location when one is given')
+
+------------------------------------------------------------------
+-- No media detail: strictly opt-in, no sub-line appended (matches the blocking ticket's
+-- own two-argument calls).
+------------------------------------------------------------------
+
+local indiF = fhCreateItem("INDI")
+local segmentCountBeforeNoMedia = #segmentsLocation
+
+freshSessionLogHelper.logActivity(indiF, "created")
+
+local lastSaveNoMedia = setValueCalls[#setValueCalls]
+local segmentsNoMedia = lastSaveNoMedia.richText.segments
+check(#segmentsNoMedia == segmentCountBeforeNoMedia + 3,
+  'calling logActivity without a media detail appends no sub-line (opt-in per call)')
+
+------------------------------------------------------------------
+-- A media table missing "name" errors before touching the buffer, rather than leaving a
+-- stray, never-flushed entry behind for the next successful call to inherit.
+------------------------------------------------------------------
+
+local indiG = fhCreateItem("INDI")
+local segmentCountBeforeBadMedia = #segmentsNoMedia
+local setValueCallCountBeforeBadMedia = #setValueCalls
+
+local ok = pcall(freshSessionLogHelper.logActivity, indiG, "created", { location = "family archive box" })
+
+check(ok == false, 'a media table without a name raises an error rather than silently proceeding')
+check(#setValueCalls == setValueCallCountBeforeBadMedia, 'the failed call never saved anything to the note')
+
+freshSessionLogHelper.logActivity(indiG, "created")
+local lastSaveAfterBadMedia = setValueCalls[#setValueCalls]
+check(#lastSaveAfterBadMedia.richText.segments == segmentCountBeforeBadMedia + 3,
+  'the buffer is unaffected by the earlier failed call -- no stray entry was left behind')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

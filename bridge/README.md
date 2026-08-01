@@ -33,15 +33,21 @@ implements.
   target item (an INDI/FAM record for a Whole-record citation, or a Fact item) instead of
   hand-assembling `fhCreateItem("SOUR", ...)` + `fhSetValueAsLink` — see
   `docs/adr/0006-cite-every-fact-a-source-supports.md`.
-- `sessionLogHelper.lua` — `fhBridge.logActivity(ptrRecord, action)` (issue #36), a
-  read-write-only helper that logs a Session's record-creating activity into one Research
-  Note (`_RNOT`) per Session: the first call in a Session creates a new note titled with a
-  creation timestamp and writes the first log entry into it; every subsequent call in the
-  same Session appends a further entry to that same note. Each entry's record reference is
-  a live FTF record link (`RichText:AddRecordLink`), not plain text. Exploits the Bridge
-  plugin being one continuously-running Lua process for a Session's lifetime: a
-  module-level Research Note pointer and RichText buffer persist across every `run_lua`
-  call via `require()`'s module caching, and reset on the next Session (fresh plugin load).
+- `sessionLogHelper.lua` — `fhBridge.logActivity(ptrRecord, action, media)` (issue #36; the
+  optional `media` param from issue #39), a read-write-only helper that logs a Session's
+  record-creating activity into one Research Note (`_RNOT`) per Session: the first call in
+  a Session creates a new note titled with a creation timestamp and writes the first log
+  entry into it; every subsequent call in the same Session appends a further entry to that
+  same note. Each entry's record reference is a live FTF record link
+  (`RichText:AddRecordLink`), not plain text. Exploits the Bridge plugin being one
+  continuously-running Lua process for a Session's lifetime: a module-level Research Note
+  pointer and RichText buffer persist across every `run_lua` call via `require()`'s module
+  caching, and reset on the next Session (fresh plugin load). `media` is an optional
+  `{name, location}` table for media the user still needs to add by hand once the Session
+  ends — when given, it appends an indented `[ ] #ToDo Media to be added <name>` sub-line
+  (plain FTF text, not an interactive checkbox) under that entry, with the location in
+  parentheses when one was mentioned. This never touches the media file's bytes or the
+  filesystem; the user drags the file into FH themselves after the Session ends.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
 `timeoutDisplay.lua`, `sourceHelper.lua`, and `sessionLogHelper.lua` have standalone unit
@@ -346,3 +352,10 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    call: confirm this creates a second, separate Research Note rather than appending to the
    first Session's note. Then repeat with Read-only selected instead and confirm the same
    script now fails calling `fhBridge` as nil (step 11's negative case).
+17. `fhBridge.logActivity`'s optional `media` param (issue #39): on a Read-write Session,
+   send `fhBridge.logActivity(p, "fact added Birth", {name = "bc-nellie.jpg"})`. Confirm the
+   note gets a new entry with an indented `[ ] #ToDo Media to be added bc-nellie.jpg`
+   sub-line directly under it. Send another call with
+   `{name = "cert.jpg", location = "family archive box"}` and confirm that sub-line reads
+   `[ ] #ToDo Media to be added cert.jpg (family archive box)`. Send a plain two-argument
+   call again and confirm it appends an entry with no sub-line at all.

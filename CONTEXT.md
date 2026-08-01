@@ -208,6 +208,9 @@ on the first call in a Session, titled with a creation timestamp, and appending 
 entry to that same note on every subsequent call in the same Session. Distinct from a
 Whole-record citation or any other `SOUR`-citation concept above: a Research Note here is a
 Claude-authored activity log for the user to review, not a source attached to the data
-itself.
+itself. Optionally takes a still-needs-media detail (a name and, if mentioned, a location),
+which it renders as an indented `[ ] #ToDo Media to be added <name>` sub-line under the
+entry — plain FTF text the user ticks off by hand in FH, never touching the media file's
+bytes or the filesystem itself (issue #39, 2026-08-01 grilling session on issue #23).
 _Avoid_: Audit log, history (this project's own name for the operation is `logActivity`,
 and FH's own term for the record type is "Research Note")
