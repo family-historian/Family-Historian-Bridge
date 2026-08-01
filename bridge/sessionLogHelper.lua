@@ -29,7 +29,7 @@ end
 -- Given an item pointer to the record an action concerns (e.g. the Individual just
 -- created, or the one a fact was just added to) and a short description of what happened
 -- (e.g. "created", "fact added Birth"): on this Session's first call, creates a new _RNOT
--- record titled with a creation timestamp (e.g. "Claude session log — 2026-08-01 14:32")
+-- record titled with a creation timestamp (e.g. "Claude session log - 2026-08-01 14:32")
 -- and writes the first log entry into it. Every subsequent call in the same Session
 -- appends a further entry to that same note, leaving every earlier entry untouched, and
 -- never creates a second note. The record reference in each entry is a live FTF record
@@ -66,7 +66,7 @@ function M.logActivity(ptrRecord, action, media)
     textPtr = fhNewItemPtr()
     textPtr:MoveTo(notePtr, "~.TEXT")
     buffer = fhNewRichText()
-    buffer:AddText("Claude session log — " .. timestamp() .. "\n", false)
+    buffer:AddText("Claude session log - " .. timestamp() .. "\n", false)
   else
     buffer:AddText("\n", false)
   end
