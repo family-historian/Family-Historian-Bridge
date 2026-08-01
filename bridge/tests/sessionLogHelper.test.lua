@@ -1,9 +1,10 @@
 -- Standalone tests for sessionLogHelper.lua. Run with: lua bridge/tests/sessionLogHelper.test.lua
 -- No FH/socket dependency. Builds a small in-memory fake item-pointer/record-tree double,
 -- scoped narrowly to only the globals sessionLogHelper.lua actually calls: fhCreateItem,
--- fhNewRichText (returning a fake RichText object with AddText/AddRecordLink), fhSetValueAsRichText,
--- fhGetQualifiedRecordId -- same style as sourceHelper.test.lua's fake tree, not reused
--- directly since sessionLogHelper.lua only ever creates records, never walks them.
+-- fhNewItemPtr (and its MoveTo method, to reach a _RNOT record's auto-created TEXT
+-- subfield), fhNewRichText (returning a fake RichText object with AddText/AddRecordLink),
+-- fhSetValueAsRichText -- same style as sourceHelper.test.lua's fake tree, not reused
+-- directly since sessionLogHelper.lua only ever creates records, never walks existing ones.
 
 package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 
@@ -78,16 +79,6 @@ end
 
 fhNewItemPtr = newPtr
 
--- Qualified record id prefixes, per fhGetQualifiedRecordId's own documented table (only
--- the two tags this test needs).
-local QUALIFIED_PREFIX = { INDI = "I", _RNOT = "E" }
-
-fhGetQualifiedRecordId = function(ptr)
-  local node = currentNode(ptr)
-  if not node then return "" end
-  return (QUALIFIED_PREFIX[node.tag] or "?") .. tostring(node.id)
-end
-
 ------------------------------------------------------------------
 -- Fake RichText object: records an ordered list of segments, either plain-text
 -- (AddText) or a real record-link entry (AddRecordLink) that stores the actual target
@@ -154,8 +145,8 @@ check(titleSegment.rich == false, 'title text is added as plain (non-FTF) text')
 local firstLink = segments[3]
 check(firstLink.kind == 'reclink', 'the record reference is a real record link, not plain text')
 check(firstLink.node == currentNode(indiA), 'the record link points at the record passed to logActivity')
-check(firstLink.display == 'I' .. tostring(currentNode(indiA).id),
-  'the record link\'s display label is the record\'s qualified id (fhGetQualifiedRecordId)')
+check(firstLink.display == nil,
+  'AddRecordLink is called with no display-text argument, so FH treats the link as "automatic" -- showing the record\'s own live-updating display name rather than a name/id frozen at log time')
 
 ------------------------------------------------------------------
 -- Second call (same simulated Session): appends to the SAME note
@@ -179,8 +170,7 @@ check(segments2[3].kind == 'reclink' and segments2[3].node == firstLink.node and
 local secondLink = segments2[6]
 check(secondLink.kind == 'reclink', 'the second entry\'s record reference is also a real record link')
 check(secondLink.node == currentNode(indiB), 'the second record link points at the second record passed to logActivity')
-check(secondLink.display == 'I' .. tostring(currentNode(indiB).id),
-  'the second record link\'s display label is that record\'s own qualified id')
+check(secondLink.display == nil, 'the second record link is also "automatic" (no display-text argument)')
 
 local actionText = segments2[5]
 check(actionText.kind == 'text' and contains(actionText.text, 'fact added Birth'),

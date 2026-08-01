@@ -33,9 +33,11 @@ end
 -- and writes the first log entry into it. Every subsequent call in the same Session
 -- appends a further entry to that same note, leaving every earlier entry untouched, and
 -- never creates a second note. The record reference in each entry is a live FTF record
--- link (RichText's AddRecordLink), labelled with the record's qualified id
--- (fhGetQualifiedRecordId) -- not plain text -- so opening the note in FH lets the user
--- click straight through to each record touched.
+-- link (RichText's AddRecordLink, called with no display-text argument so FH treats it as
+-- an "automatic" link) -- not plain text -- so opening the note in FH lets the user click
+-- straight through to each record touched, and the label always shows that record's
+-- current display name (e.g. the person's name), updating on its own if that name later
+-- changes, rather than a name or id frozen at the moment this entry was logged.
 --
 -- media (optional, issue #39): a {name, location} table describing media the user still
 -- needs to add by hand once the Session ends -- this project never touches the media
@@ -72,7 +74,7 @@ function M.logActivity(ptrRecord, action, media)
   end
 
   buffer:AddText(timestamp() .. " - " .. action .. ": ", false)
-  buffer:AddRecordLink(ptrRecord, fhGetQualifiedRecordId(ptrRecord))
+  buffer:AddRecordLink(ptrRecord)
 
   if media then
     local subline = "\n      [ ] #ToDo Media to be added " .. media.name

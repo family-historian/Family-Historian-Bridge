@@ -134,6 +134,13 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(lower).toMatch(/photo|physical\/digital|digital item/);
   });
 
+  it("steers Claude to compose a fact-related logActivity action from fhGetDisplayText rather than a hand-typed label", () => {
+    expect(RUN_LUA_DESCRIPTION).toMatch(/fhGetDisplayText/);
+    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/fact/);
+    expect(lower).toMatch(/hand-typed|hand typed/);
+  });
+
   it("names all eight fhu methods excluded from run_lua (modal-dialog and filesystem-writing) so Claude doesn't suggest them", () => {
     for (const name of [
       "fhu.getParam",
