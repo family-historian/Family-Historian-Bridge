@@ -7,17 +7,18 @@
 --
 -- Exploits that the whole Bridge plugin is one continuously-running Lua process for a
 -- Session's lifetime: the module-level state below (the Research Note's own item pointer,
--- and the RichText buffer mirroring everything saved to it so far) persists naturally
--- across every run_lua call in that Session, via require()'s module caching -- and is gone
--- on the next Session, since a fresh plugin load runs this file's top level again from
--- scratch. This means M.logActivity never needs to read the note's existing content back
--- from FH and merge into it, and callers never need to track or pass back a note pointer of
--- their own.
+-- a pointer to its one mandatory TEXT subfield, and the RichText buffer mirroring
+-- everything saved to it so far) persists naturally across every run_lua call in that
+-- Session, via require()'s module caching -- and is gone on the next Session, since a
+-- fresh plugin load runs this file's top level again from scratch. This means
+-- M.logActivity never needs to read the note's existing content back from FH and merge
+-- into it, and callers never need to track or pass back a note pointer of their own.
 
 local M = {}
 
 -- nil until this Session's first M.logActivity call.
 local notePtr = nil
+local textPtr = nil
 local buffer = nil
 
 local function timestamp()
@@ -55,6 +56,15 @@ function M.logActivity(ptrRecord, action, media)
 
   if not notePtr then
     notePtr = fhCreateItem("_RNOT")
+    -- FH auto-creates a _RNOT record's one mandatory TEXT subfield as part of fhCreateItem
+    -- itself -- fhSetValueAsRichText must target that child item, not notePtr itself
+    -- (confirmed live: fhSetValueAsRichText(notePtr, ...) silently returns false and
+    -- writes nothing, since the record's own top-level pointer never held the value).
+    -- MoveTo's "~.TEXT" reaches the already-created child directly, no fhCreateItem call
+    -- needed (a second fhCreateItem("TEXT", notePtr) would fight the "exactly one" TEXT
+    -- subfield FH already made).
+    textPtr = fhNewItemPtr()
+    textPtr:MoveTo(notePtr, "~.TEXT")
     buffer = fhNewRichText()
     buffer:AddText("Claude session log — " .. timestamp() .. "\n", false)
   else
@@ -72,7 +82,7 @@ function M.logActivity(ptrRecord, action, media)
     buffer:AddText(subline, false)
   end
 
-  fhSetValueAsRichText(notePtr, buffer)
+  fhSetValueAsRichText(textPtr, buffer)
 end
 
 return M

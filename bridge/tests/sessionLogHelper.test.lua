@@ -45,9 +45,18 @@ local function currentNode(ptr)
   return ptr.list and ptr.list[ptr.index]
 end
 
+-- Real FH auto-creates a _RNOT record's one mandatory TEXT subfield as part of
+-- fhCreateItem('_RNOT') itself (confirmed live 2026-08-01: fhSetValueAsRichText on the
+-- record's own top-level pointer silently returns false and writes nothing -- the value
+-- only ever lived on this child). Modelled here as a node.textNode set at creation time,
+-- reached via ptr:MoveTo(notePtr, '~.TEXT') the same way sessionLogHelper.lua does.
 fhCreateItem = function(tag)
   local node = { tag = tag, id = nextId }
   nextId = nextId + 1
+  if tag == '_RNOT' then
+    node.textNode = { tag = 'TEXT', id = nextId }
+    nextId = nextId + 1
+  end
   recordsByTag[tag] = recordsByTag[tag] or {}
   table.insert(recordsByTag[tag], node)
   local ptr = newPtr()
@@ -55,6 +64,19 @@ fhCreateItem = function(tag)
   ptr.index = #recordsByTag[tag]
   return ptr
 end
+
+function PtrMethods:MoveTo(otherPtr, dataRef)
+  local node = currentNode(otherPtr)
+  if dataRef == '~.TEXT' and node and node.textNode then
+    self.list = { node.textNode }
+    self.index = 1
+  else
+    self.list = nil
+    self.index = nil
+  end
+end
+
+fhNewItemPtr = newPtr
 
 -- Qualified record id prefixes, per fhGetQualifiedRecordId's own documented table (only
 -- the two tags this test needs).
@@ -119,7 +141,7 @@ check(#(recordsByTag["_RNOT"] or {}) == rnotBefore + 1, 'first call creates exac
 
 local noteNode = recordsByTag["_RNOT"][#recordsByTag["_RNOT"]]
 local lastSave = setValueCalls[#setValueCalls]
-check(lastSave.node == noteNode, 'fhSetValueAsRichText is called on the new _RNOT record\'s own pointer')
+check(lastSave.node == noteNode.textNode, 'fhSetValueAsRichText is called on the new _RNOT record\'s TEXT subfield, not the record\'s own pointer')
 
 local segments = lastSave.richText.segments
 check(#segments == 3, 'one call produces a title segment, an entry-prefix segment, and one record link')
@@ -144,7 +166,7 @@ sessionLogHelper.logActivity(indiB, "fact added Birth")
 check(#(recordsByTag["_RNOT"] or {}) == rnotBefore + 1, 'second call creates no additional _RNOT record')
 
 local lastSave2 = setValueCalls[#setValueCalls]
-check(lastSave2.node == noteNode, 'second call still saves onto the same _RNOT record')
+check(lastSave2.node == noteNode.textNode, 'second call still saves onto the same _RNOT record\'s TEXT subfield')
 
 local segments2 = lastSave2.richText.segments
 check(#segments2 == 6, 'second call appends a further entry rather than replacing the buffer')
@@ -196,7 +218,7 @@ freshSessionLogHelper.logActivity(indiD, "fact added Birth", { name = "bc-nellie
 check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeFresh + 1, 'a call with a media detail creates no additional _RNOT record')
 
 local lastSaveMedia = setValueCalls[#setValueCalls]
-check(lastSaveMedia.node == freshNoteNode, 'a call with a media detail still saves onto the same Session note')
+check(lastSaveMedia.node == freshNoteNode.textNode, 'a call with a media detail still saves onto the same Session note\'s TEXT subfield')
 
 local segmentsMedia = lastSaveMedia.richText.segments
 check(#segmentsMedia == segmentCountBeforeMedia + 4,
