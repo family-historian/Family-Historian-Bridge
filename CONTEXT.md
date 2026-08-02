@@ -213,7 +213,13 @@ which it renders as an indented `[ ] #ToDo Media to be added <name>` sub-line un
 entry — plain FTF text the user ticks off by hand in FH, never touching the media file's
 bytes or the filesystem itself (issue #39, 2026-08-01 grilling session on issue #23).
 Steered from `run_lua`'s tool description, not a Skill (issue #40) — see
-docs/adr/0010-automatic-session-log-steered-from-run-lua.md for the full design.
+docs/adr/0010-automatic-session-log-steered-from-run-lua.md for the full design. Prompt
+steering alone proved optional in practice (issue #42: a fresh Claude instance wrote
+records and never called `logActivity` at all), so the write-then-log invariant is now
+also enforced by the sandbox itself — a static pre-scan in `runScript.lua` plus a runtime
+backstop via `sandbox.lua`'s `tracker.logged` flag, rejecting or rolling back a script that
+writes without logging (issue #43) — see
+docs/adr/0012-enforce-write-then-log-via-pre-scan-and-runtime-check.md.
 
 **run_lua guidance (corpus entries)**:
 The `"run_lua guidance"`-titled entries in the GEDCOM knowledge corpus (call-shape

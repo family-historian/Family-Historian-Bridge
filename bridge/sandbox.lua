@@ -58,6 +58,19 @@ end
 
 local FHU_WRITE_METHODS = toSet(FHU_WRITE_METHOD_NAMES)
 
+-- Union of both write-name lists above, exported alongside M.build so runScript.lua's
+-- static pre-scan (issue #43, docs/adr/0012) reuses this exact list rather than a second,
+-- driftable copy. Enforcement doesn't care *which* write function fires, only whether
+-- logActivity was also called, so a flat combined list is all it needs.
+local WRITE_NAMES = {}
+for _, name in ipairs(WRITE_PRIMITIVE_NAMES) do
+  table.insert(WRITE_NAMES, name)
+end
+for _, name in ipairs(FHU_WRITE_METHOD_NAMES) do
+  table.insert(WRITE_NAMES, name)
+end
+M.WRITE_NAMES = WRITE_NAMES
+
 -- fhu methods that pop a real iup.Popup(dlg) modal dialog and block waiting for a human
 -- to click a button, or that read/write straight to disk -- neither is survivable in
 -- run_lua's headless script->JSON-return model, and both bypass this sandbox's env the
@@ -99,19 +112,35 @@ local function buildStripCommas(realStripCommas)
 end
 
 -- M.build's accessMode ("read-only"/"read-write") is threaded through from the bridge
--- dialog's toggle; returns the sandbox env plus a tracker table ({wrote = boolean}) the
--- caller can inspect after running a script to see whether any wrapped write primitive
--- was actually called -- kept out of env itself so the sandboxed script can't read or
--- tamper with its own tracker.
+-- dialog's toggle; returns the sandbox env plus a tracker table
+-- ({wrote = boolean, logged = boolean}) the caller can inspect after running a script to
+-- see whether any wrapped write primitive was actually called, and separately whether
+-- fhBridge.logActivity was -- kept out of env itself so the sandboxed script can't read
+-- or tamper with its own tracker.
 function M.build(accessMode)
   accessMode = accessMode or "read-only"
   local env = {}
-  local tracker = { wrote = false }
+  local tracker = { wrote = false, logged = false }
 
   local function trackedWrite(fn)
     return function(...)
       tracker.wrote = true
       return fn(...)
+    end
+  end
+
+  -- logActivity really does mutate the tree (creates/updates a _RNOT record), so it must
+  -- still flip tracker.wrote exactly like every other write primitive -- a script that
+  -- calls only logActivity and then errors must stay eligible for ADR 0005's existing
+  -- rollback path. Composes trackedWrite rather than reimplementing its wrote-flip, and
+  -- additionally flips tracker.logged, which trackedWrite alone can't do, since that flag
+  -- needs to mean "logActivity specifically was called," not "some write happened" (issue
+  -- #43, docs/adr/0012).
+  local function trackedLog(fn)
+    local write = trackedWrite(fn)
+    return function(...)
+      tracker.logged = true
+      return write(...)
     end
   end
 
@@ -287,7 +316,7 @@ function M.build(accessMode)
     env.fhBridge = {
       createSourceFromTemplate = trackedWrite(realFhBridge.createSourceFromTemplate),
       citeSource = trackedWrite(realFhBridge.citeSource),
-      logActivity = trackedWrite(realSessionLogHelper.logActivity),
+      logActivity = trackedLog(realSessionLogHelper.logActivity),
     }
   end
 

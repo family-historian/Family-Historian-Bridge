@@ -318,6 +318,27 @@ check(env.fhBridge == nil, 'fhBridge absent under read-only (calls real fh* glob
 -- accessMode (a read-only script can never flip it, since it has no write functions).
 check(type(tracker) == 'table' and tracker.wrote == false, 'read-only build returns a tracker with wrote = false')
 
+-- Write-then-log tracker (issue #43, docs/adr/0012): tracker.logged starts false
+-- alongside tracker.wrote, same independence-from-accessMode reasoning.
+check(tracker.logged == false, 'read-only build returns a tracker with logged = false')
+
+-- Combined write-name set (issue #43): exported alongside M.build so runScript.lua's
+-- static pre-scan reuses this exact list rather than a second, driftable copy. Checked as
+-- a set-membership regression guard, not by exact list identity, so the list order (or a
+-- future new write primitive being appended) doesn't make this test brittle.
+do
+  local nameSet = {}
+  for _, name in ipairs(sandbox.WRITE_NAMES) do
+    nameSet[name] = true
+  end
+  check(nameSet['fhSetLabelledText'] == true, 'WRITE_NAMES includes fhSetLabelledText (from WRITE_PRIMITIVE_NAMES)')
+  check(nameSet['fhCreateItem'] == true, 'WRITE_NAMES includes fhCreateItem (from WRITE_PRIMITIVE_NAMES)')
+  check(nameSet['fhGetFactTag'] == true, 'WRITE_NAMES includes fhGetFactTag (from WRITE_PRIMITIVE_NAMES)')
+  check(nameSet['createIndi'] == true, 'WRITE_NAMES includes createIndi (from FHU_WRITE_METHOD_NAMES)')
+  check(nameSet['createTextFromSource'] == true, 'WRITE_NAMES includes createTextFromSource (from FHU_WRITE_METHOD_NAMES)')
+  check(nameSet['addWitness'] == true, 'WRITE_NAMES includes addWitness (from FHU_WRITE_METHOD_NAMES)')
+end
+
 -- Dangerous globals must be absent — the whole point of an allowlist sandbox.
 check(env.os.execute == nil, 'os.execute absent')
 check(env.os.remove == nil, 'os.remove absent')
@@ -432,6 +453,21 @@ check(type(envReadWrite6.fhBridge.logActivity) == 'function' and envReadWrite6.f
   'read-write fhBridge.logActivity is wrapped, not the raw function')
 check(envReadWrite6.fhBridge.logActivity('ptr', 'created') == 'logged:created', 'wrapped fhBridge.logActivity forwards through to the real sessionLogHelper.logActivity')
 check(trackerReadWrite6.wrote == true, 'calling a wrapped fhBridge.logActivity flips the tracker too')
+
+-- tracker.logged (issue #43, docs/adr/0012): only fhBridge.logActivity flips it, not any
+-- other write primitive -- proves logged and wrote are genuinely independent signals, not
+-- the same flag under two names.
+check(trackerReadWrite6.logged == true, 'calling fhBridge.logActivity flips tracker.logged')
+
+local envReadWrite7, trackerReadWrite7 = sandbox.build("read-write")
+check(envReadWrite7.fhCreateItem('INDI') == 'created:INDI', 'wrapped fhCreateItem still forwards through')
+check(trackerReadWrite7.wrote == true, 'calling a raw write primitive flips tracker.wrote')
+check(trackerReadWrite7.logged == false, 'calling a raw write primitive that is not logActivity leaves tracker.logged false')
+
+local envReadWrite8, trackerReadWrite8 = sandbox.build("read-write")
+envReadWrite8.fhu.createIndi('Jane /Doe/', 'Female')
+check(trackerReadWrite8.wrote == true, 'calling fhu.createIndi flips tracker.wrote')
+check(trackerReadWrite8.logged == false, 'calling fhu.createIndi (not logActivity) leaves tracker.logged false')
 
 -- Modal-dialog and filesystem-writing fhu methods (issue #22): replaced with an
 -- error-raising wrapper rather than being forwarded to the real function or left as a

@@ -38,6 +38,20 @@ package.loaded.fhUtils = {
   createIndi = function(sName) return 'indi:' .. tostring(sName) end,
 }
 
+-- sourceHelper/sessionLogHelper (require('sourceHelper')/require('sessionLogHelper') inside
+-- sandbox.build()) are this project's own modules, not FH-shipped -- resolvable for real via
+-- package.path, but their real implementations call further real fh* globals this plain-lua
+-- test process doesn't stub. Stub via package.loaded the same way fhUtils is stubbed above,
+-- needed as a prerequisite for the write-then-log tests further down (issue #43), which
+-- exercise fhBridge.logActivity as the one avenue to flip tracker.logged.
+package.loaded.sourceHelper = {
+  createSourceFromTemplate = function() end,
+  citeSource = function() end,
+}
+package.loaded.sessionLogHelper = {
+  logActivity = function(ptrRecord, action) return 'logged:' .. tostring(action) end,
+}
+
 check(runScript.run('return {ok=true}') == '{"ok":true}', 'trivial script returns encoded result')
 check(runScript.run('return 42') == '42', 'script returning a bare number')
 check(runScript.run('return nil') == 'null', 'script returning nil')
@@ -92,7 +106,10 @@ check(runScript.run("return os.execute('echo hi')", 'read-write'):find('"error"'
 -- nothing for FH's auto-undo to act on, so it behaves the same as read-only. Read-only
 -- never has anything to undo at all, so it never returns a second value either way.
 do
-  local response, rethrow = runScript.run("fhu.createIndi('X'); error('boom')", 'read-write')
+  -- Includes a logActivity mention/call so this passes the write-then-log pre-scan (issue
+  -- #43) and reaches the runtime error the way it did before that enforcement existed --
+  -- this test is about the send-then-rethrow mechanism, not the pre-scan itself.
+  local response, rethrow = runScript.run("fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); error('boom')", 'read-write')
   check(contains(response, '"error"') and contains(response, 'boom'),
     'write-mode runtime error after a tracked write still sends a normal JSON error response')
   check(contains(response, '"writeSessionRolledBack":true'),
@@ -131,6 +148,67 @@ do
   check(contains(response, 'failed to compile'), 'a compile error is still reported as such in write mode')
   check(rethrow == nil, 'a compile error never rethrows, even in write mode (the script never ran)')
 end
+
+-- Write-then-log enforcement (issue #43, docs/adr/0012): static pre-scan plus a runtime
+-- backstop, so a script that writes without logging is rejected before it ever runs when
+-- the sandbox can tell from the source alone, and via the ADR 0005 rethrow/auto-undo
+-- mechanism when it can't.
+
+-- Read-only script containing a write-name call: rejected before execution, clear
+-- message, no rethrow value (same treatment as today's compile-error path).
+do
+  local response, rethrow = runScript.run("fhu.createIndi('X')", 'read-only')
+  check(contains(response, '"error"') and contains(response, 'createIndi') and contains(response, 'Read-only'),
+    'read-only script calling a write-capable function is rejected before execution with a clear message')
+  check(rethrow == nil, 'a read-only pre-scan rejection returns no second value')
+end
+
+-- Read-write script containing a write-name call with no logActivity mention: rejected
+-- before execution, clear message, no rethrow value.
+do
+  local response, rethrow = runScript.run("fhu.createIndi('X')", 'read-write')
+  check(contains(response, '"error"') and contains(response, 'createIndi') and contains(response, 'logActivity'),
+    'read-write script calling a write-capable function with no logActivity mention is rejected before execution')
+  check(not contains(response, 'writeSessionRolledBack'),
+    'a pre-scan rejection carries no writeSessionRolledBack hint (nothing executed, nothing to roll back)')
+  check(rethrow == nil, 'a pre-scan rejection returns no second value (nothing executed)')
+end
+
+-- Read-write script containing both a write-name call and a logActivity mention: the
+-- pre-scan doesn't block a legitimate script, and it completes normally (real write
+-- followed by a real logActivity call, so the runtime backstop passes too).
+check(contains(
+  runScript.run("fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); return {ok=true}", 'read-write'),
+  '"ok":true'),
+  'a read-write script that both writes and logs passes the pre-scan and runs normally')
+
+-- Read-write script that calls a write function but logActivity's only appearance in the
+-- source never actually executes (dead code): passes the pre-scan (the text is present),
+-- but is caught by the post-run backstop.
+do
+  local response, rethrow = runScript.run(
+    "fhu.createIndi('X'); if false then fhBridge.logActivity('ptr', 'never runs') end",
+    'read-write')
+  check(contains(response, '"error"') and contains(response, 'logActivity'),
+    'a write with only dead-code logActivity passes the pre-scan but is caught by the runtime backstop')
+  check(contains(response, '"writeSessionRolledBack":true'),
+    'the runtime backstop response carries the writeSessionRolledBack hint')
+  check(rethrow ~= nil, 'the runtime backstop returns a non-nil second value to re-raise')
+end
+
+-- Read-write script that calls only fhBridge.logActivity (no other write call): completes
+-- normally, no backstop error -- proves tracker.wrote and tracker.logged both flip from
+-- the same call and don't false-positive against each other.
+check(contains(runScript.run("fhBridge.logActivity('ptr', 'reminder'); return {ok=true}", 'read-write'), '"ok":true'),
+  'a script that only calls fhBridge.logActivity (no other write) completes normally with no backstop error')
+
+-- Read-write script that batches several writes and a single logActivity call at the end:
+-- passes, proving the backstop requires "logging happened," not "logging happened once
+-- per write."
+check(contains(runScript.run(
+  "fhu.createIndi('A'); fhu.createIndi('B'); fhu.createIndi('C'); fhBridge.logActivity('ptr', 'created A, B, C'); return {ok=true}",
+  'read-write'), '"ok":true'),
+  'a script that batches several writes with a single trailing logActivity call completes normally')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
