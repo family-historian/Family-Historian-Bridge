@@ -5,6 +5,7 @@ import {
   loadGedcomKnowledgeFromFile,
   parseGedcomKnowledgeCorpus,
   searchGedcomKnowledge,
+  SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION,
 } from "./gedcomKnowledge.js";
 import type { GedcomKnowledgeEntry } from "./gedcomKnowledge.js";
 import { checkFhHelpUpdates } from "./fhHelpUpdate.js";
@@ -151,6 +152,24 @@ describe("the real bundled corpus", () => {
     expect(results.length).toBeGreaterThan(0);
   });
 
+  it("returns the canonical Name/Date/Place qualifier-code entries for their respective queries, not just fh-help scraps (acceptance criterion)", () => {
+    // Before this, an agent asked to filter individuals by a name part (e.g. "find everyone
+    // named Stephen") had no reason to search this corpus for the qualifier and instead
+    // rediscovered ":GIVEN_ALL" indirectly by grepping fh-help sample scripts — see the new
+    // bullet on run-lua-guidance-call-shape-gotchas below.
+    const nameResults = searchGedcomKnowledge(corpus, "name qualifiers");
+    expect(nameResults.map((r) => r.id)).toContain("data-reference-qualifiers-name");
+    const nameEntry = nameResults.find((r) => r.id === "data-reference-qualifiers-name")!;
+    expect(nameEntry.text).toMatch(/GIVEN_ALL/);
+    expect(nameEntry.text).toMatch(/SURNAME/);
+
+    const dateResults = searchGedcomKnowledge(corpus, "date qualifiers");
+    expect(dateResults.map((r) => r.id)).toContain("data-reference-qualifiers-date");
+
+    const placeResults = searchGedcomKnowledge(corpus, "place and lat/long qualifiers");
+    expect(placeResults.map((r) => r.id)).toContain("data-reference-qualifiers-place-latlong");
+  });
+
   it("does not contain excluded raw-export wire mechanics (ADR 0003 scope)", () => {
     // _SRCT is deliberately not in this list: it's also a live record-type tag (Source
     // Template record), reachable via run_lua the same way as INDI/FAM/SOUR — see
@@ -224,6 +243,12 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText).toMatch(/fhBridge\.citeSource/);
   });
 
+  it("points at the Name/Date/Place qualifier-code entries instead of leaving them to be rediscovered via fh-help sample scripts (issue #49)", () => {
+    expect(combinedText).toMatch(/name qualifiers/);
+    expect(combinedText).toMatch(/data-reference-qualifiers-name/);
+    expect(combinedText).toMatch(/GIVEN_ALL/);
+  });
+
   it("instructs listing every fact a source supports and waiting for confirmation before writing any of them", () => {
     const lower = combinedText.toLowerCase();
     expect(lower).toMatch(/isn't yet (in|entered)|not yet entered|gaps?/);
@@ -236,6 +261,14 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(lower).toMatch(/plugin error/);
     expect(lower).toMatch(/session has ended|session ends|click start again/);
     expect(combinedText).toMatch(/writeSessionRolledBack/);
+  });
+});
+
+describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION topic list (issue #49)", () => {
+  it("lists Data Reference qualifier codes as a searchable topic, so an agent has a cue to look here before grepping fh-help sample scripts", () => {
+    const lower = SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/qualifier code/);
+    expect(lower).toMatch(/name qualifiers/);
   });
 });
 
