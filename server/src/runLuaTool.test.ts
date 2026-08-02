@@ -203,6 +203,22 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(safeZone).toMatch(/purpose-built helper/);
   });
 
+  it("scopes the fhu-before-hand-rolling mandate to reads as well as writes, not just tree mutations (issue #46)", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET).toLowerCase();
+    expect(safeZone).toMatch(/reads and writes|read and write access/);
+    expect(safeZone).toMatch(/movetofirstrecord/);
+    expect(safeZone).toMatch(/fhu\.records/);
+    expect(safeZone).not.toMatch(/matters most for a read-write session/);
+  });
+
+  it("doesn't tell Claude to call require('fhUtils') for fhu — it's already a global in this sandbox (issue #46/#48)", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET).toLowerCase();
+    expect(safeZone).not.toMatch(/fhu \(require\(/);
+    expect(safeZone).toMatch(/already a global/);
+  });
+
   it("tells Claude within the safe zone that this description can be truncated, and how to fetch the rest", () => {
     const SAFE_ZONE_BUDGET = 2000;
     const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET);

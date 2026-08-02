@@ -38,8 +38,11 @@ _Avoid_: Permission level, mode (alone)
 **Sandbox**:
 The restricted Lua environment (`_ENV` table passed to `load()`) that a submitted script
 runs inside. Built as an allowlist — only explicitly added globals are visible — rather
-than starting from the real environment and stripping known-dangerous ones. `fhu`
-(`require('fhUtils')`) is exposed as a proxy, never the raw FH-shipped module, so its
+than starting from the real environment and stripping known-dangerous ones. `fhu` is
+exposed as a preloaded global (a proxy over what `require('fhUtils')` returns in an
+ordinary, non-sandboxed FH plugin), never the raw FH-shipped module — `require` itself
+isn't in the allowlist, so `require('fhUtils')` returns nil inside this sandbox; always
+reference `fhu.<method>` directly. Being a proxy also means its
 methods can be gated the same way: besides the write-gating in **Access mode**, eight
 `fhu` methods (`getParam`, `createUpdateFact`, `pickIndividualPrompt`, `yes`,
 `stripCommas` when called with its optional UI arguments, `saveOptions`, `loadOptions`,

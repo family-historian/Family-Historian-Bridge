@@ -177,12 +177,30 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
   const results = searchGedcomKnowledge(corpus, "run_lua guidance");
   const combinedText = results.map((r) => r.text).join("\n");
 
-  it('finds all three "run_lua guidance" entries with a single query, via title match', () => {
+  it('finds all four "run_lua guidance" entries with a single query, via title match', () => {
     expect(results.map((r) => r.id).sort()).toEqual([
       "run-lua-guidance-call-shape-gotchas",
       "run-lua-guidance-cite-every-fact",
+      "run-lua-guidance-fhu-is-a-global",
       "run-lua-guidance-write-session-rolled-back",
     ]);
+  });
+
+  it("lists fhu.records/fhu.allItems/fhu.indiList as the check-first iteration helpers, alongside the mutation helpers (issue #47)", () => {
+    expect(combinedText).toMatch(/fhu\.records/);
+    expect(combinedText).toMatch(/fhu\.allItems/);
+    expect(combinedText).toMatch(/fhu\.indiList/);
+    expect(combinedText.toLowerCase()).toMatch(/movetofirstrecord\/movenext/);
+  });
+
+  it("tells Claude fhu is already a global in this sandbox and require('fhUtils') returns nil here (issue #48)", () => {
+    expect(combinedText).toMatch(/require\('fhUtils'\)|require\("fhUtils"\)/);
+    expect(combinedText.toLowerCase()).toMatch(/already a global/);
+    expect(combinedText.toLowerCase()).toMatch(/nil/);
+    // Distinguishes this from an ordinary FH plugin (e.g. author_fh_plugin output), where
+    // require('fhUtils') genuinely is correct — this fact is bridge-sandbox-specific, not
+    // a general FH one, which is why it lives here and not in the scraped fh-help corpus.
+    expect(combinedText).toMatch(/author_fh_plugin/);
   });
 
   it("carries the eight excluded fhu methods (modal-dialog and filesystem-writing) so Claude doesn't suggest them", () => {
