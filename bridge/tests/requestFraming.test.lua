@@ -39,10 +39,16 @@ check(requestFraming.resolveAccessMode({ forceReadOnly = false }, "read-write") 
 check(requestFraming.resolveAccessMode({ forceReadOnly = false }, "read-only") == "read-only",
   'resolveAccessMode uses the Session\'s own Access mode when not forced (read-only Session)')
 
+local version = requestFraming.parse("VERSION 0.4.0")
+check(version ~= nil, 'VERSION <server-version> parses (issue #45)')
+check(version.kind == "version", 'VERSION <server-version> has kind "version"')
+check(version.serverVersion == "0.4.0", 'VERSION <server-version> carries the server version string')
+
 check(requestFraming.parse("") == nil, 'empty header is malformed')
 check(requestFraming.parse("LUA") == nil, 'LUA with no byte count is malformed')
 check(requestFraming.parse("LUA -1") == nil, 'LUA with a negative byte count is malformed')
 check(requestFraming.parse("LUA_RO") == nil, 'LUA_RO with no byte count is malformed')
+check(requestFraming.parse("VERSION") == nil, 'VERSION with no version string is malformed')
 check(requestFraming.parse("GARBAGE 1") == nil, 'an unrecognized verb is malformed')
 
 if failures > 0 then

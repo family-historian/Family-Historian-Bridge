@@ -2,6 +2,7 @@ import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BridgeConnectionRefusedError,
+  queryBridgeVersion,
   runLuaOnBridge,
 } from "./bridgeClient.js";
 
@@ -58,6 +59,78 @@ function startFakeBridge(
     });
   });
 }
+
+// A fake Bridge that only understands the bodyless VERSION <server-version> framing
+// (issue #45) — mirrors startFakeBridge's shape but for a single-line request/response
+// with no following byte-counted body.
+function startFakeVersionBridge(
+  handleVersion: (serverVersion: string) => string,
+): Promise<{ port: number; close: () => Promise<void> }> {
+  return new Promise((resolve) => {
+    const server = net.createServer((socket) => {
+      let buffered = Buffer.alloc(0);
+
+      socket.on("data", (chunk) => {
+        const chunkBuf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "utf8");
+        buffered = Buffer.concat([buffered, chunkBuf]);
+
+        const newlineIndex = buffered.indexOf("\n");
+        if (newlineIndex === -1) return;
+
+        const header = buffered.subarray(0, newlineIndex).toString("utf8");
+        const match = header.match(/^VERSION (.+)$/);
+        if (!match) {
+          socket.end(JSON.stringify({ error: "expected STOP or LUA <n>" }));
+          return;
+        }
+        socket.end(handleVersion(match[1] as string));
+      });
+    });
+
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        throw new Error("expected an AddressInfo from a TCP server");
+      }
+      resolve({
+        port: address.port,
+        close: () => new Promise((res) => server.close(() => res())),
+      });
+    });
+  });
+}
+
+describe("queryBridgeVersion", () => {
+  let cleanup: (() => Promise<void>) | undefined;
+
+  afterEach(async () => {
+    await cleanup?.();
+    cleanup = undefined;
+  });
+
+  it("sends VERSION <server-version> and returns the Bridge's raw response", async () => {
+    let receivedVersion: string | undefined;
+    const { port, close } = await startFakeVersionBridge((serverVersion) => {
+      receivedVersion = serverVersion;
+      return '{"version":"0.4.0"}';
+    });
+    cleanup = close;
+
+    const result = await queryBridgeVersion("0.5.0", { port });
+
+    expect(receivedVersion).toBe("0.5.0");
+    expect(result).toBe('{"version":"0.4.0"}');
+  });
+
+  it("throws BridgeConnectionRefusedError when nothing is listening (no Session running)", async () => {
+    const { port, close } = await startFakeVersionBridge(() => "unused");
+    await close();
+
+    await expect(queryBridgeVersion("0.5.0", { port })).rejects.toBeInstanceOf(
+      BridgeConnectionRefusedError,
+    );
+  });
+});
 
 describe("runLuaOnBridge", () => {
   let cleanup: (() => Promise<void>) | undefined;

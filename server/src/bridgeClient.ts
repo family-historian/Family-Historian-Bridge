@@ -27,15 +27,13 @@ export interface RunLuaOnBridgeOptions {
 }
 
 /**
- * Sends a Lua script to the Bridge under the LUA <n> / LUA_RO <n> length-prefixed framing
- * (see bridge/bridge.fh_lua, bridge/requestFraming.lua) and resolves with the raw response
- * body once the Bridge closes the connection. Does not parse the response — the caller
- * (the run_lua / describe_project tool) decides how to interpret it.
+ * Opens a connection to the Bridge, sends `payload` verbatim, and resolves with the raw
+ * response body once the Bridge closes the connection. Shared low-level plumbing for both
+ * the LUA/LUA_RO framing (runLuaOnBridge) and the bodyless VERSION framing
+ * (queryBridgeVersion) — connect/timeout/error handling is identical between them, only
+ * the bytes sent differ.
  */
-export function runLuaOnBridge(
-  script: string,
-  options: RunLuaOnBridgeOptions = {},
-): Promise<string> {
+function sendRawToBridge(payload: Buffer, options: RunLuaOnBridgeOptions = {}): Promise<string> {
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const port = options.port ?? DEFAULT_BRIDGE_PORT;
   const timeoutMs = options.timeoutMs ?? 30_000;
@@ -71,10 +69,7 @@ export function runLuaOnBridge(
     });
 
     socket.on("connect", () => {
-      const scriptBytes = Buffer.from(script, "utf8");
-      const verb = options.forceReadOnly ? "LUA_RO" : "LUA";
-      const header = Buffer.from(`${verb} ${scriptBytes.byteLength}\n`, "utf8");
-      socket.end(Buffer.concat([header, scriptBytes]));
+      socket.end(payload);
     });
 
     socket.on("data", (chunk) => {
@@ -85,4 +80,36 @@ export function runLuaOnBridge(
       succeed(Buffer.concat(chunks).toString("utf8"));
     });
   });
+}
+
+/**
+ * Sends a Lua script to the Bridge under the LUA <n> / LUA_RO <n> length-prefixed framing
+ * (see bridge/bridge.fh_lua, bridge/requestFraming.lua) and resolves with the raw response
+ * body once the Bridge closes the connection. Does not parse the response — the caller
+ * (the run_lua / describe_project tool) decides how to interpret it.
+ */
+export function runLuaOnBridge(
+  script: string,
+  options: RunLuaOnBridgeOptions = {},
+): Promise<string> {
+  const scriptBytes = Buffer.from(script, "utf8");
+  const verb = options.forceReadOnly ? "LUA_RO" : "LUA";
+  const header = Buffer.from(`${verb} ${scriptBytes.byteLength}\n`, "utf8");
+  return sendRawToBridge(Buffer.concat([header, scriptBytes]), options);
+}
+
+/**
+ * Sends this server's own version to the Bridge under the bodyless VERSION <server-version>
+ * framing (see bridge/requestFraming.lua, issue #45) and resolves with the Bridge's raw
+ * response — a `{"version": "..."}` JSON object from a Bridge that supports this, or the
+ * older `{"error": "expected STOP or LUA <n>"}` rejection from one that predates it. Sent
+ * as its own connection ahead of every LUA/LUA_RO request, not cached — the server has no
+ * other way to observe when a Bridge Session actually started or restarted.
+ */
+export function queryBridgeVersion(
+  serverVersion: string,
+  options: RunLuaOnBridgeOptions = {},
+): Promise<string> {
+  const header = Buffer.from(`VERSION ${serverVersion}\n`, "utf8");
+  return sendRawToBridge(header, options);
 }

@@ -17,12 +17,12 @@
 
 local M = {}
 
--- The eight sibling modules the entry file requires, directly or transitively (sandbox.lua
+-- The sibling modules the entry file requires, directly or transitively (sandbox.lua
 -- requires sourceHelper.lua and sessionLogHelper.lua from inside a function body, not at
 -- module load time). Order here is arbitrary — see the note above.
 M.MODULE_NAMES = {
   "jsonEncode", "requestFraming", "runScript", "sandbox", "sessionLogHelper", "sourceHelper",
-  "timeoutDisplay", "watchdog",
+  "timeoutDisplay", "versionCompare", "watchdog",
 }
 
 -- Must match bridge/Claude MCP Bridge.fh_lua's Install comment byte-for-byte — if that
@@ -56,10 +56,24 @@ local function replaceOnce(haystack, needle, replacement, label)
   return haystack:sub(1, startIdx - 1) .. replacement .. haystack:sub(endIdx + 1)
 end
 
+-- The Bridge's version lives only in this comment header today, not anywhere its own
+-- running code can read (issue #45) — extracted here at build time and injected as a
+-- runtime constant below, so the header stays the single source of truth instead of a
+-- hand-synced duplicate (see docs/release.md's version-drift note).
+local function extractVersion(entrySource)
+  local version = entrySource:match("@Version:%s*(%S+)")
+  if not version then
+    error("could not find an @Version header in the entry source to inject as BRIDGE_VERSION — " ..
+      "the header changed or is missing; update bundler.lua or restore the header")
+  end
+  return version
+end
+
 -- entrySource: raw text of bridge/Claude MCP Bridge.fh_lua.
 -- readModule(name): function(name) -> raw text of bridge/<name>.lua.
 -- Returns the bundled source as a string.
 function M.buildBundle(entrySource, readModule)
+  local version = extractVersion(entrySource)
   local out = replaceOnce(entrySource, INSTALL_COMMENT_SOURCE, INSTALL_COMMENT_BUNDLED, "Install comment")
 
   local splitIdx = out:find(FH_INITIALISE_LINE, 1, true)
@@ -72,6 +86,7 @@ function M.buildBundle(entrySource, readModule)
   local after = out:sub(splitPoint)
 
   local pieces = { before, "\n-- Bundled sibling modules (generated — see bridge/scripts/build.lua)\n" }
+  table.insert(pieces, string.format("local BRIDGE_VERSION = %q -- injected from the @Version header above\n", version))
   for _, name in ipairs(M.MODULE_NAMES) do
     table.insert(pieces, string.format("package.preload[%q] = function()\n%s\nend\n", name, readModule(name)))
   end

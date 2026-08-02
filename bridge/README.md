@@ -11,9 +11,13 @@ implements.
   than partway through (issue #33) — Cancel there ends the plugin before the dialog is
   ever built. Also calls `fhUpdateDisplay()` after every accepted request, so any change a
   write script made is reflected on FH's own screen right away (issue #33).
-- `requestFraming.lua` — parses a request's first line (`STOP` / `LUA <n>` / `LUA_RO <n>`)
-  into a structured form; `LUA_RO` forces the Read-only sandbox regardless of the
-  Session's own Access mode (issue #16 — used exclusively by `describe_project`).
+- `requestFraming.lua` — parses a request's first line (`STOP` / `LUA <n>` / `LUA_RO <n>` /
+  `VERSION <server-version>`) into a structured form; `LUA_RO` forces the Read-only sandbox
+  regardless of the Session's own Access mode (issue #16 — used exclusively by
+  `describe_project`). `VERSION <server-version>` (issue #45) carries no body — the
+  server's version travels in the header line itself, ahead of every actual
+  `LUA`/`LUA_RO` connection; see `versionCompare.lua` below and the entry file's own
+  handling of `request.kind == "version"`.
 - `runScript.lua` — compiles and runs a submitted script inside the sandbox (guarded by
   the watchdog), returns a JSON-encoded result or error.
 - `sandbox.lua` — builds the allowlist `_ENV` a script executes inside.
@@ -24,6 +28,12 @@ implements.
   idle-timeout spin-box and its live countdown label (issue #34): minutes-to-seconds
   conversion, `M:SS` formatting, and clamping a spin-box reading to the ticket's stated
   5–120 minute range.
+- `versionCompare.lua` — compares this Bridge's version against the server's (issue #45),
+  returning `"match"` / `"warn"` / `"block"` (strict major-version-only; inert while this
+  project is pre-1.0, since major is `0` on both sides today — see the module's own
+  comment). The Bridge's own version isn't hand-duplicated anywhere: `BRIDGE_VERSION` is
+  injected as a runtime constant by `scripts/build.lua`/`scripts/bundler.lua`, parsed
+  straight from this file's own `@Version` header at build time.
 - `sourceHelper.lua` — `fhBridge.createSourceFromTemplate(...)` (issue #18), a read-write-
   only helper that creates a fully populated templated Source record in one call instead of
   hand-assembling the `_SRCT`-link + metafield-shortcut dance every time. Wired into the
@@ -50,10 +60,10 @@ implements.
   filesystem; the user drags the file into FH themselves after the Session ends.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
-`timeoutDisplay.lua`, `sourceHelper.lua`, and `sessionLogHelper.lua` have standalone unit
-tests, in `tests/` (`*.test.lua`, run with a plain `lua` interpreter — no FH dependency).
-Keeping tests out of this folder means every file directly in `bridge/` is exactly what
-`scripts/build.lua` bundles into the single installable file (see
+`timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, and `versionCompare.lua`
+have standalone unit tests, in `tests/` (`*.test.lua`, run with a plain `lua` interpreter —
+no FH dependency). Keeping tests out of this folder means every file directly in `bridge/`
+is exactly what `scripts/build.lua` bundles into the single installable file (see
 `docs/adr/0009-bundle-bridge-plugin-for-install.md`) — nothing to filter by name:
 
 ```bash
@@ -65,14 +75,17 @@ lua bridge/tests/requestFraming.test.lua
 lua bridge/tests/timeoutDisplay.test.lua
 lua bridge/tests/sourceHelper.test.lua
 lua bridge/tests/sessionLogHelper.test.lua
+lua bridge/tests/versionCompare.test.lua
 lua bridge/tests/build.test.lua
 ```
 
-`scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those eight files into
+`scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those sibling modules into
 `dist/Claude MCP Bridge.fh_lua` — the single file that actually gets installed (step 1
-below). Both are build tooling, not part of the plugin itself, same reason `tests/` is
-kept out of the top level: `dist/` is generated and gitignored, rebuilt with
-`lua bridge/scripts/build.lua`.
+below) — and also parse this file's own `@Version` header to inject a runtime
+`BRIDGE_VERSION` constant (issue #45), since the header itself isn't readable by the
+plugin's own running code otherwise. Both are build tooling, not part of the plugin
+itself, same reason `tests/` is kept out of the top level: `dist/` is generated and
+gitignored, rebuilt with `lua bridge/scripts/build.lua`.
 
 `Claude MCP Bridge.fh_lua` itself (the socket/IUP dialog plumbing) has no automatable seam — FH is
 proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
@@ -359,3 +372,24 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    `{name = "cert.jpg", location = "family archive box"}` and confirm that sub-line reads
    `[ ] #ToDo Media to be added cert.jpg (family archive box)`. Send a plain two-argument
    call again and confirm it appends an entry with no sub-line at all.
+18. Version mismatch reporting (issue #45): click Start, then send a `VERSION` request
+   claiming a different server version than the Bridge's own, and confirm the reply and the
+   dialog both reflect it:
+   ```bash
+   python3 -c "
+   import socket
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=5)
+   s.sendall(b'VERSION 0.0.1\n')
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: a JSON object `{"version": "<the Bridge's actual version>"}`. Confirm
+   the dialog's status label now also shows a "Version mismatch" line. Then send a trivial
+   script (step 5) on the same Session and confirm the mismatch line is *still* shown
+   alongside the normal "Last request handled at ..." line — it must not vanish the moment
+   the next ordinary request is handled. Finally, send another `VERSION` request that
+   matches the Bridge's own version (check the dialog title bar/`@Version` header for the
+   exact string, or just send the same one back) and confirm the mismatch line disappears
+   from the next status update.

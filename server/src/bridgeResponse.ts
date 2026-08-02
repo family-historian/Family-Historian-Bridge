@@ -7,7 +7,7 @@ import { BridgeConnectionRefusedError } from "./bridgeClient.js";
 // connection failure or a malformed response means the same thing regardless of which
 // tool triggered it.
 
-function textResult(text: string, isError = false): CallToolResult {
+export function textResult(text: string, isError = false): CallToolResult {
   return { content: [{ type: "text", text }], isError };
 }
 

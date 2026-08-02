@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -11,6 +10,7 @@ import type { FhHelpCorpusStore } from "./fhHelp.js";
 import { makeDefaultFhHelpUpdateDeps, registerCheckFhHelpUpdatesTool } from "./fhHelpUpdate.js";
 import { loadGedcomKnowledgeFromFile, registerGedcomKnowledgeTools } from "./gedcomKnowledge.js";
 import type { GedcomKnowledgeStore } from "./gedcomKnowledge.js";
+import { SERVER_VERSION } from "./serverVersion.js";
 
 // The corpus.jsonl produced by the sibling fh-help/fh8-help-site project. Bundled here,
 // kept up to date via the check_fh_help_updates tool (see fhHelpUpdate.ts) rather than
@@ -28,11 +28,6 @@ const FH_HELP_CORPUS_SOURCE_URL = "https://family-historian.co.uk/help/fh8/corpu
 const GEDCOM_KNOWLEDGE_CORPUS_PATH = fileURLToPath(
   new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url),
 );
-
-const PACKAGE_JSON_PATH = fileURLToPath(new URL("../package.json", import.meta.url));
-const { version: SERVER_VERSION } = JSON.parse(readFileSync(PACKAGE_JSON_PATH, "utf-8")) as {
-  version: string;
-};
 
 const server = new McpServer({
   name: "fh-mcp-bridge",

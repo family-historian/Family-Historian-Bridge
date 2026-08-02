@@ -1,14 +1,19 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { runLuaOnBridge as defaultRunLuaOnBridge } from "./bridgeClient.js";
-import { describeBridgeConnectionError, interpretBridgeResponse } from "./bridgeResponse.js";
+import {
+  queryBridgeVersion as defaultQueryBridgeVersion,
+  runLuaOnBridge as defaultRunLuaOnBridge,
+} from "./bridgeClient.js";
+import { SERVER_VERSION } from "./serverVersion.js";
+import { runVersionCheckedScript, type BridgeScriptDeps } from "./versionCheck.js";
 
-export interface RunLuaDeps {
-  runLuaOnBridge: (script: string) => Promise<string>;
-}
+export type RunLuaDeps = BridgeScriptDeps;
 
-const defaultDeps: RunLuaDeps = { runLuaOnBridge: defaultRunLuaOnBridge };
+const defaultDeps: RunLuaDeps = {
+  runLuaOnBridge: defaultRunLuaOnBridge,
+  queryBridgeVersion: () => defaultQueryBridgeVersion(SERVER_VERSION),
+};
 
 // Steers Claude's own behavior when it uses this tool — see CONTEXT.md's "Clarifying
 // question" entry and docs/adr/0001-arbitrary-sandboxed-lua-execution.md.
@@ -30,14 +35,7 @@ export async function handleRunLua(
   input: { script: string },
   deps: RunLuaDeps = defaultDeps,
 ): Promise<CallToolResult> {
-  let raw: string;
-  try {
-    raw = await deps.runLuaOnBridge(input.script);
-  } catch (err) {
-    return describeBridgeConnectionError(err);
-  }
-
-  return interpretBridgeResponse(raw);
+  return runVersionCheckedScript(deps, SERVER_VERSION, input.script);
 }
 
 export function registerRunLuaTool(

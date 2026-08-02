@@ -63,6 +63,22 @@ local firstPreloadIdx = bundled:find('package.preload[', 1, true)
 assertTrue(fhInitIdx ~= nil and firstPreloadIdx ~= nil and fhInitIdx < firstPreloadIdx,
   'bundle is spliced in after the fhInitialise(...) call')
 
+-- BRIDGE_VERSION (issue #45): extracted from the real entry's own @Version header, so this
+-- assertion doesn't need updating on every version bump.
+local expectedVersion = realEntrySource:match('@Version:%s*(%S+)')
+assertTrue(expectedVersion ~= nil, "test setup: real entry source must carry an @Version header")
+local versionIdx = bundled:find('local BRIDGE_VERSION = ' .. string.format('%q', expectedVersion), 1, true)
+assertTrue(versionIdx ~= nil, 'bundled output injects BRIDGE_VERSION parsed from the @Version header')
+assertTrue(fhInitIdx ~= nil and versionIdx ~= nil and firstPreloadIdx ~= nil and
+  fhInitIdx < versionIdx and versionIdx < firstPreloadIdx,
+  'BRIDGE_VERSION is injected after fhInitialise(...) and before the bundled modules, so it is in scope for the rest of the file')
+
+-- A missing/changed @Version header must fail loudly, not silently ship a bundle with no
+-- runtime-readable version (defeats the whole point of issue #45).
+local entryMissingVersion = realEntrySource:gsub('@Version:%s*%S+', '@NoVersionHeader: nope', 1)
+local versionOk = pcall(bundler.buildBundle, entryMissingVersion, fakeReadModule)
+assertEqual(versionOk, false, 'a missing @Version header makes buildBundle fail loudly, not silently')
+
 -- The rest of the entry file (the actual dialog/socket logic) must survive untouched.
 assertTrue(bundled:find('socket = require("socket")', 1, true) ~= nil,
   'socket require survives after the bundled modules')

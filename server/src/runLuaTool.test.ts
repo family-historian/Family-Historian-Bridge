@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
-import { handleRunLua, RUN_LUA_DESCRIPTION } from "./runLuaTool.js";
+import { handleRunLua, RUN_LUA_DESCRIPTION, type RunLuaDeps } from "./runLuaTool.js";
+import { SERVER_VERSION } from "./serverVersion.js";
+
+// A queryBridgeVersion stub that reports a Bridge on the exact same version as the
+// server — i.e. "match", so version-check tests below don't have to think about it.
+const matchingVersion: RunLuaDeps["queryBridgeVersion"] = async () =>
+  JSON.stringify({ version: SERVER_VERSION });
 
 describe("handleRunLua", () => {
   it("returns the script's result as text on success", async () => {
     const result = await handleRunLua(
       { script: "return {ok=true}" },
-      { runLuaOnBridge: async () => '{"ok":true}' },
+      { runLuaOnBridge: async () => '{"ok":true}', queryBridgeVersion: matchingVersion },
     );
 
     expect(result.isError).toBeFalsy();
@@ -19,6 +25,7 @@ describe("handleRunLua", () => {
       {
         runLuaOnBridge: async () =>
           '{"error":"[string \\"run_lua\\"]:1: boom"}',
+        queryBridgeVersion: matchingVersion,
       },
     );
 
@@ -33,6 +40,7 @@ describe("handleRunLua", () => {
       {
         runLuaOnBridge: async () =>
           '{"error":"[string \\"run_lua\\"]:1: boom","writeSessionRolledBack":true}',
+        queryBridgeVersion: matchingVersion,
       },
     );
 
@@ -51,6 +59,7 @@ describe("handleRunLua", () => {
         runLuaOnBridge: async () => {
           throw new BridgeConnectionRefusedError();
         },
+        queryBridgeVersion: matchingVersion,
       },
     );
 
@@ -67,6 +76,7 @@ describe("handleRunLua", () => {
         runLuaOnBridge: async () => {
           throw new Error("ECONNRESET");
         },
+        queryBridgeVersion: matchingVersion,
       },
     );
 
@@ -78,7 +88,7 @@ describe("handleRunLua", () => {
   it("surfaces a malformed (non-JSON) response from the Bridge as an error", async () => {
     const result = await handleRunLua(
       { script: "return 1" },
-      { runLuaOnBridge: async () => "not json" },
+      { runLuaOnBridge: async () => "not json", queryBridgeVersion: matchingVersion },
     );
 
     expect(result.isError).toBe(true);
@@ -90,6 +100,7 @@ describe("handleRunLua", () => {
       {
         runLuaOnBridge: async () =>
           "PROJECT_NAME: Lichfield Memorial\nPROJECT_FILE: C:\\...\nGEDCOM_FILE: \nAPP_MODE: \nAPP_VERSION: 8\nEND\n",
+        queryBridgeVersion: matchingVersion,
       },
     );
 
@@ -97,6 +108,80 @@ describe("handleRunLua", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/bridge_prototype_v2/);
     expect(text).toMatch(/bridge\.fh_lua/);
+  });
+});
+
+describe("handleRunLua version check (issue #45)", () => {
+  it("never runs the script and returns an error when the Bridge's major version differs from the server's", async () => {
+    let scriptRan = false;
+    const result = await handleRunLua(
+      { script: "return 1" },
+      {
+        runLuaOnBridge: async () => {
+          scriptRan = true;
+          return "1";
+        },
+        queryBridgeVersion: async () => JSON.stringify({ version: "999.0.0" }),
+      },
+    );
+
+    expect(scriptRan).toBe(false);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("999.0.0");
+    expect(text.toLowerCase()).toContain("major");
+  });
+
+  it("still runs the script and appends a note on a minor/patch version mismatch", async () => {
+    const result = await handleRunLua(
+      { script: "return 1" },
+      {
+        runLuaOnBridge: async () => '{"ok":true}',
+        queryBridgeVersion: async () => JSON.stringify({ version: `${SERVER_VERSION}-does-not-match` }),
+      },
+    );
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('{"ok":true}');
+    expect(text.toLowerCase()).toContain("note");
+  });
+
+  it("still runs the script and appends a note when the Bridge doesn't support version reporting", async () => {
+    const result = await handleRunLua(
+      { script: "return 1" },
+      {
+        runLuaOnBridge: async () => '{"ok":true}',
+        queryBridgeVersion: async () => '{"error": "expected STOP or LUA <n>"}',
+      },
+    );
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('{"ok":true}');
+    expect(text.toLowerCase()).toMatch(/doesn't support version reporting/);
+  });
+
+  it("tells Claude to ask the user to click Start when the version check itself can't connect, without ever attempting the script", async () => {
+    let scriptRan = false;
+    const result = await handleRunLua(
+      { script: "return 1" },
+      {
+        runLuaOnBridge: async () => {
+          scriptRan = true;
+          return "1";
+        },
+        queryBridgeVersion: async () => {
+          throw new BridgeConnectionRefusedError();
+        },
+      },
+    );
+
+    expect(scriptRan).toBe(false);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/no .*session/i);
+    expect(text).toMatch(/click start/i);
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
 import type { InstallFhPluginDeps } from "./installFhPluginTool.js";
 import { GET_PLUGINS_APP_DATA_FOLDER_SCRIPT, handleInstallFhPlugin } from "./installFhPluginTool.js";
+import { SERVER_VERSION } from "./serverVersion.js";
 
 const PLUGIN_SOURCE = `--[[
 @Title: Surname Census
@@ -14,6 +15,7 @@ fhOutputResultSetColumn("Surname", "text", {}, 0)`;
 function makeDeps(overrides: Partial<InstallFhPluginDeps> = {}): InstallFhPluginDeps {
   return {
     runLuaOnBridge: async () => JSON.stringify("C:\\ProgramData\\Calico Pie\\Family Historian 8"),
+    queryBridgeVersion: async () => JSON.stringify({ version: SERVER_VERSION }),
     readdir: async () => [],
     writeFile: async () => {},
     ...overrides,
@@ -279,5 +281,81 @@ describe("handleInstallFhPlugin — versioning and write behaviour", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/close and reopen/i);
     expect(text).toMatch(/plugins dialog/i);
+  });
+});
+
+describe("handleInstallFhPlugin version check (issue #45)", () => {
+  it("never looks up the Plugins folder and errors when the Bridge's major version differs from the server's", async () => {
+    let folderLookupRan = false;
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        runLuaOnBridge: async () => {
+          folderLookupRan = true;
+          return JSON.stringify("C:\\ProgramData\\Calico Pie\\Family Historian 8");
+        },
+        queryBridgeVersion: async () => JSON.stringify({ version: "999.0.0" }),
+      }),
+    );
+
+    expect(folderLookupRan).toBe(false);
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("999.0.0");
+    expect(text.toLowerCase()).toContain("major");
+  });
+
+  it("appends a version-mismatch note to the success message on a minor/patch mismatch", async () => {
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        queryBridgeVersion: async () => JSON.stringify({ version: `${SERVER_VERSION}-does-not-match` }),
+      }),
+    );
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/close and reopen/i);
+    expect(text.toLowerCase()).toContain("note");
+  });
+
+  it("falls back to the explicit path, with no error, when the version check itself can't connect (same as the folder lookup's own fallback)", async () => {
+    let writtenPath: string | undefined;
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE, path: "C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugins" },
+      makeDeps({
+        runLuaOnBridge: async () => {
+          throw new BridgeConnectionRefusedError();
+        },
+        queryBridgeVersion: async () => {
+          throw new BridgeConnectionRefusedError();
+        },
+        writeFile: async (filePath) => {
+          writtenPath = filePath;
+        },
+      }),
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(writtenPath).toBe("C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugins\\Surname Census V1.fh_lua");
+  });
+
+  it("still surfaces the folder lookup's own tailored no-Session error when the version check also can't connect and no path was given", async () => {
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        runLuaOnBridge: async () => {
+          throw new BridgeConnectionRefusedError();
+        },
+        queryBridgeVersion: async () => {
+          throw new BridgeConnectionRefusedError();
+        },
+      }),
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/click start/i);
+    expect(text).toMatch(/path/i);
   });
 });

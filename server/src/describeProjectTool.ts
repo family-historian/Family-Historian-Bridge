@@ -1,30 +1,36 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  queryBridgeVersion as defaultQueryBridgeVersion,
   runLuaOnBridge as defaultRunLuaOnBridge,
   type RunLuaOnBridgeOptions,
 } from "./bridgeClient.js";
-import { describeBridgeConnectionError, interpretBridgeResponse } from "./bridgeResponse.js";
+import { SERVER_VERSION } from "./serverVersion.js";
+import { runVersionCheckedScript, type BridgeScriptDeps } from "./versionCheck.js";
 
-export interface DescribeProjectDeps {
-  runLuaOnBridge: (script: string) => Promise<string>;
-}
+export type DescribeProjectDeps = BridgeScriptDeps;
 
 // Forces the Bridge's Read-only sandbox regardless of the Session's own Access mode
 // (issue #16) — this script is fixed and known to never call a write function, so it
 // runs at least privilege rather than inheriting whatever mode the Session happens to be
 // in. See bridge/requestFraming.lua's LUA_RO form and CONTEXT.md's "describe_project" entry.
-// Takes the underlying runLuaOnBridge as a parameter (rather than hardcoding the import)
-// purely so tests can verify forceReadOnly is actually passed, without a live Bridge.
+// Takes the underlying runLuaOnBridge/queryBridgeVersion as parameters (rather than
+// hardcoding the imports) purely so tests can verify forceReadOnly is actually passed,
+// without a live Bridge.
 export function makeDescribeProjectDeps(
   runLuaOnBridge: (script: string, options?: RunLuaOnBridgeOptions) => Promise<string>,
+  queryBridgeVersion: () => Promise<string>,
 ): DescribeProjectDeps {
   return {
     runLuaOnBridge: (script) => runLuaOnBridge(script, { forceReadOnly: true }),
+    queryBridgeVersion,
   };
 }
 
-const defaultDeps: DescribeProjectDeps = makeDescribeProjectDeps(defaultRunLuaOnBridge);
+const defaultDeps: DescribeProjectDeps = makeDescribeProjectDeps(
+  defaultRunLuaOnBridge,
+  () => defaultQueryBridgeVersion(SERVER_VERSION),
+);
 
 // Steers Claude's own behavior when it uses this tool — see CONTEXT.md's "describe_project"
 // entry and docs/adr/0002-describe-project-no-server-cache.md for why it recomputes every time.
@@ -126,14 +132,7 @@ return {
 export async function handleDescribeProject(
   deps: DescribeProjectDeps = defaultDeps,
 ): Promise<CallToolResult> {
-  let raw: string;
-  try {
-    raw = await deps.runLuaOnBridge(DESCRIBE_PROJECT_SCRIPT);
-  } catch (err) {
-    return describeBridgeConnectionError(err);
-  }
-
-  return interpretBridgeResponse(raw);
+  return runVersionCheckedScript(deps, SERVER_VERSION, DESCRIBE_PROJECT_SCRIPT);
 }
 
 export function registerDescribeProjectTool(

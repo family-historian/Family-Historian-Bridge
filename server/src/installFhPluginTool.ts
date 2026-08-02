@@ -4,13 +4,17 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   BridgeConnectionRefusedError,
+  queryBridgeVersion as defaultQueryBridgeVersion,
   runLuaOnBridge as defaultRunLuaOnBridge,
   type RunLuaOnBridgeOptions,
 } from "./bridgeClient.js";
 import { describeBridgeConnectionError, interpretBridgeResponse } from "./bridgeResponse.js";
+import { SERVER_VERSION } from "./serverVersion.js";
+import { appendVersionNote, checkBridgeVersion } from "./versionCheck.js";
 
 export interface InstallFhPluginDeps {
   runLuaOnBridge: (script: string, options?: RunLuaOnBridgeOptions) => Promise<string>;
+  queryBridgeVersion: () => Promise<string>;
   readdir: (dirPath: string) => Promise<string[]>;
   writeFile: (filePath: string, content: string) => Promise<void>;
 }
@@ -30,14 +34,27 @@ function joinPluginsFolder(appDataFolder: string): string {
 async function resolvePluginsFolder(
   deps: InstallFhPluginDeps,
   explicitPath: string | undefined,
-): Promise<{ path: string } | { errorResult: CallToolResult }> {
+): Promise<{ path: string; versionNote: string | null } | { errorResult: CallToolResult }> {
+  // issue #45: checked ahead of the live folder-lookup connection below, same as
+  // run_lua/describe_project. A genuine version-mismatch block stops here, since the
+  // lookup below would hit the same incompatible Bridge. A connection-error block just
+  // means "couldn't reach the Bridge to check its version" — the lookup below makes the
+  // exact same connection attempt and already has its own tailored no-Session message and
+  // explicit-path fallback, so that's left to handle it rather than surfacing a second,
+  // less specific error first.
+  const versionCheck = await checkBridgeVersion(deps.queryBridgeVersion, SERVER_VERSION);
+  if (versionCheck.block && versionCheck.reason === "version-mismatch") {
+    return { errorResult: versionCheck.block };
+  }
+  const versionNote = versionCheck.block ? null : versionCheck.note;
+
   let raw: string;
   try {
     raw = await deps.runLuaOnBridge(GET_PLUGINS_APP_DATA_FOLDER_SCRIPT, { forceReadOnly: true });
   } catch (err) {
     if (err instanceof BridgeConnectionRefusedError) {
       if (explicitPath) {
-        return { path: explicitPath };
+        return { path: explicitPath, versionNote: null };
       }
       return {
         errorResult: textResult(
@@ -63,7 +80,7 @@ async function resolvePluginsFolder(
       ),
     };
   }
-  return { path: joinPluginsFolder(appDataFolder) };
+  return { path: joinPluginsFolder(appDataFolder), versionNote };
 }
 
 const TITLE_LINE_PATTERN = /^@Title:[ \t]*(.*)$/m;
@@ -151,14 +168,18 @@ export async function handleInstallFhPlugin(
     return textResult(`Could not write the plugin file to ${fullPath}: ${message}`, true);
   }
 
-  return textResult(
-    `Installed as "${filename}" in FH's Plugins folder (${resolved.path}).\n\nFH doesn't rescan its Plugins folder live — if the Plugins Dialog (Tools -> Plugins) is currently open, close and reopen it so the new entry appears, then select it and click Run (or tick Add To Tools Menu to run it again later).`,
+  return appendVersionNote(
+    textResult(
+      `Installed as "${filename}" in FH's Plugins folder (${resolved.path}).\n\nFH doesn't rescan its Plugins folder live — if the Plugins Dialog (Tools -> Plugins) is currently open, close and reopen it so the new entry appears, then select it and click Run (or tick Add To Tools Menu to run it again later).`,
+    ),
+    resolved.versionNote,
   );
 }
 
 function makeDefaultInstallFhPluginDeps(): InstallFhPluginDeps {
   return {
     runLuaOnBridge: defaultRunLuaOnBridge,
+    queryBridgeVersion: () => defaultQueryBridgeVersion(SERVER_VERSION),
     readdir: (dirPath) => fs.readdir(dirPath),
     // "wx" refuses to overwrite an existing file — a last-line-of-defence race guard on
     // top of the version-number scan above, not a substitute for it.

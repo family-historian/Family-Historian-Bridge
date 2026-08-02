@@ -58,11 +58,19 @@ local runScript = require("runScript")
 local json = require("jsonEncode")
 local requestFraming = require("requestFraming")
 local timeoutDisplay = require("timeoutDisplay")
+local versionCompare = require("versionCompare")
 
 local PORT = 8734
 local DEFAULT_IDLE_TIMEOUT_MINUTES = 5 -- unchanged from the previous hardcoded 300s default
 local server = nil
 local lastActivityTime = nil
+-- Set by a VERSION request (issue #45), cleared on a match or a fresh Start. A VERSION
+-- check arrives on its own connection, handled and closed within a single poll tick — a
+-- mismatch noted only in that tick's own status update would be overwritten by the very
+-- next tick's normal "Last request handled..." line before a user ever saw it. Appending
+-- this to every subsequent status update instead keeps a real mismatch visible for the
+-- rest of the Session, not just the one tick it was detected on.
+local currentVersionWarning = nil
 
 local lblStatus = iup.label{title="Not listening.", padding="10x10"}
 local togReadOnly  = iup.toggle{title="Read-only", value="ON"}
@@ -140,6 +148,10 @@ local pendingRethrow = nil
 --                     Runs under the Session's own current Access mode.
 --   LUA_RO <n>     -- same, but forces the Read-only sandbox regardless of the Session's
 --                     Access mode (issue #16 — used exclusively by describe_project).
+--   VERSION <v>    -- issue #45: no body. Replies with this Bridge's own version and
+--                     compares it against the server's, surfacing a mismatch via
+--                     currentVersionWarning (see above) rather than the LUA/LUA_RO
+--                     response shape.
 -- This replaces the prototype's single-line-only receive("*l") read, which could not
 -- carry a multi-line Lua script.
 function timPoll:action_cb()
@@ -181,6 +193,20 @@ function timPoll:action_cb()
         return btnStop:action()
     end
 
+    if request.kind == "version" then
+        lastActivityTime = os.time()
+        local severity = versionCompare.compare(BRIDGE_VERSION, request.serverVersion)
+        client:send(json.encode({ version = BRIDGE_VERSION }) .. "\n")
+        client:close()
+        if severity == "match" then
+            currentVersionWarning = nil
+        else
+            currentVersionWarning = "\nVersion mismatch: Bridge " .. BRIDGE_VERSION .. " vs server " ..
+                request.serverVersion .. (severity == "block" and " (major version differs)" or "")
+        end
+        return
+    end
+
     lastActivityTime = os.time()
 
     local script = client:receive(request.byteCount)
@@ -201,7 +227,7 @@ function timPoll:action_cb()
     fhUpdateDisplay()
 
     lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
-        "\nLast request handled at " .. os.date("%H:%M:%S")
+        "\nLast request handled at " .. os.date("%H:%M:%S") .. (currentVersionWarning or "")
 
     -- Send-then-rethrow (docs/adr/0005): a write-mode runtime error is already reported to
     -- the client above. To give FH's own auto-undo an actual chance to fire, the whole
@@ -228,6 +254,7 @@ function btnStart:action()
     end
     server:settimeout(0)
     lastActivityTime = os.time()
+    currentVersionWarning = nil
     timPoll.run = "YES"
     btnStart.active = "NO"
     btnStop.active = "YES"

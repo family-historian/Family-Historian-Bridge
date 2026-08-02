@@ -112,6 +112,21 @@ are unaffected by this tool's existence.
 _Avoid_: Publish, upload (this project's own name for the operation is "install", matching
 FH's own Tools -> Plugins terminology)
 
+**Version check**:
+A `VERSION` request the server sends over its own connection ahead of every
+`run_lua`/`describe_project`/`install_fh_plugin` call that talks to the Bridge, comparing
+its own version against the running Bridge's (issue #45) — catches a stale Bridge plugin
+left installed against a freshly upgraded server, or vice versa, since a mismatch doesn't
+necessarily break the wire protocol on its own. A matching or minor/patch-differing version
+just gets noted in the tool's result text and the Bridge's own dialog; a differing major
+version blocks the call entirely with an error instead of running the real request (inert
+today, pre-1.0 — see docs/adr/0013-bridge-server-version-mismatch-check.md for the full
+wire protocol, severity policy, and the backward-compatible handling of a Bridge that
+predates this check).
+_Avoid_: Handshake (there's no persistent per-Session handshake — every check is its own
+bodyless connection, same connection-per-request model as every other request; see
+**Session**'s own _Avoid_ note)
+
 **Source template**:
 An FH template definition (e.g. "Census Record", "Birth Certificate") that declares the
 citation field/subfield names a SOUR record created from it will have. Distinct from a

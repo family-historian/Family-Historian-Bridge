@@ -8,6 +8,11 @@
 --                  (issue #16 — describe_project's fixed script always uses this)
 -- Both are followed by exactly n bytes: the script body, read separately by the caller.
 -- STOP takes no byte-count and carries no script body.
+-- VERSION <server-version> -- issue #45: sent as its own connection ahead of every
+--                             LUA/LUA_RO request, carrying the server's version so each
+--                             side can compare it against its own (see versionCompare.lua
+--                             and Claude MCP Bridge.fh_lua's VERSION handling). Carries no
+--                             separate body — the version travels in the header line.
 
 local M = {}
 
@@ -27,6 +32,11 @@ function M.parse(header)
   local count = header:match("^LUA (%d+)$")
   if count then
     return { kind = "lua", byteCount = tonumber(count), forceReadOnly = false }
+  end
+
+  local serverVersion = header:match("^VERSION (%S+)$")
+  if serverVersion then
+    return { kind = "version", serverVersion = serverVersion }
   end
 
   return nil
