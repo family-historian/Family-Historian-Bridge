@@ -2,11 +2,50 @@
 
 ## Unreleased
 
+## 0.5.0
+
 ### Server version reporting
 - Fixed the MCP server's self-reported `version` (seen by clients in the `initialize`
   handshake), which was hardcoded to `0.1.0` and never tracked `server/package.json`'s
   actual version across the 0.2.0-0.4.0 releases. It now reads `version` from
   `package.json` at startup. (#44)
+
+### Bridge/server version-mismatch detection
+- The server now sends a `VERSION` request over its own connection ahead of every
+  `run_lua`/`describe_project`/`install_fh_plugin` call, comparing the Bridge's and
+  server's versions: a major-version mismatch refuses the real request, anything else
+  just appends a note. An old Bridge that doesn't know the `VERSION` verb gets a
+  specific "reinstall the Bridge plugin" message instead of a generic error.
+  `BRIDGE_VERSION` is now injected into the Bridge bundle at build time from the
+  existing `@Version` header, so it's readable at runtime without a hand-synced
+  duplicate. Design worked out interactively in issue #45's comments; see
+  `docs/adr/0013-bridge-server-version-mismatch-check.md`. (#45)
+
+### fh-help and GEDCOM knowledge corpus guidance
+- `RUN_LUA_DESCRIPTION` and the truncation-safe call-shape-gotchas corpus entry both
+  scoped the "check `fhu` first" reminder to write mutations only, steering an LLM to
+  hand-roll `MoveToFirstRecord`/`MoveNext` instead of `fhu.records(type)` for a
+  read-only iteration; the guidance now covers reads too. Also documents that `fhu` is
+  already a global in this sandbox — `require('fhUtils')` returns `nil` here, unlike in
+  an ordinary FH plugin. Fixes the same misleading phrasing in `CONTEXT.md`'s Sandbox
+  entry. (#46, #47, #48)
+- `search_gedcom_knowledge`'s own topic list, and the run-lua-guidance bundle, now
+  surface the Data Reference qualifier codes (name/date/place-latlong) that already
+  existed in the corpus but had no cue pointing to them — a session had previously
+  rediscovered qualifiers like `:GIVEN_ALL` indirectly via fh-help sample scripts
+  instead. (#49)
+- Synced the bundled fh-help corpus (993 -> 994 topics) after upstream fh-help fixes:
+  `fhu.<name>` title aliases so exact-name grep works, and a dedicated "Iterating over
+  records" entry that outranks the raw sample scripts for iteration-flavored queries.
+- Added a help-corpus entry documenting the `fhNewItemPtr()` vs `fhCreateItem()`
+  iteration gotcha, after a session used `fhCreateItem()` to set up iteration when
+  `fhNewItemPtr()` was needed — `fhCreateItem()` creates real database records while
+  `fhNewItemPtr()` creates an empty pointer for navigation, so the mistake left unwanted
+  items in the database and triggered write-protection errors.
+- Trimmed `RUN_LUA_DESCRIPTION`, which had grown to 3.59 KB and exceeded the MCP
+  client's 2KB truncation limit, back within budget: the iteration-gotcha guidance now
+  lives only in the help corpus (discoverable via
+  `search_fh_help("fhNewItemPtr iteration")`), not duplicated in the tool description.
 
 ## 0.4.0
 
