@@ -33,7 +33,12 @@ end
 local bundled = bundler.buildBundle(entrySource, readModule)
 
 local distDir = bridgeDir .. "dist"
-os.execute('mkdir -p "' .. distDir .. '"')
+local isWindows = package.config:sub(1, 1) == "\\"
+if isWindows then
+  os.execute('mkdir "' .. distDir .. '" >NUL 2>&1')
+else
+  os.execute('mkdir -p "' .. distDir .. '"')
+end
 
 local outPath = distDir .. "/Claude MCP Bridge.fh_lua"
 local outFile, err = io.open(outPath, "wb")
