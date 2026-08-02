@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -28,9 +29,14 @@ const GEDCOM_KNOWLEDGE_CORPUS_PATH = fileURLToPath(
   new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url),
 );
 
+const PACKAGE_JSON_PATH = fileURLToPath(new URL("../package.json", import.meta.url));
+const { version: SERVER_VERSION } = JSON.parse(readFileSync(PACKAGE_JSON_PATH, "utf-8")) as {
+  version: string;
+};
+
 const server = new McpServer({
   name: "fh-mcp-bridge",
-  version: "0.1.0",
+  version: SERVER_VERSION,
 });
 
 registerRunLuaTool(server);

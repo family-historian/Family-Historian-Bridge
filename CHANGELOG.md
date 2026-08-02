@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Server version reporting
+- Fixed the MCP server's self-reported `version` (seen by clients in the `initialize`
+  handshake), which was hardcoded to `0.1.0` and never tracked `server/package.json`'s
+  actual version across the 0.2.0-0.4.0 releases. It now reads `version` from
+  `package.json` at startup. (#44)
+
 ## 0.4.0
 
 ### Session-log helper
