@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### `fhGetFlagTag`/`fhGetFactTag` read-only lookup
+- `run_lua`'s Read-only sandbox no longer excludes `fhGetFlagTag`/`fhGetFactTag`
+  entirely — their pure `bCreateIfNone=false` lookup branch now works read-only
+  (returning an existing flag/fact type's tag, or `""` if not found), while the
+  `bCreateIfNone=true` schema-creating branch still raises a clear error there. Both
+  functions were previously blocked outright even for a lookup that can never mutate
+  the tree. (#51)
+
 ## 0.5.0
 
 ### Server version reporting

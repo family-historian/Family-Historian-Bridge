@@ -27,6 +27,11 @@ This tool's output is text only — it never writes the plugin file to disk itse
 // functions below (fhCreateItem and the fhSet* setters) are reachable via run_lua too, but
 // only during a read-write Session (issue #14) — author_fh_plugin has no way to know the
 // Session's Access mode, so it flags them unconditionally, erring toward review.
+// fhGetFactTag/fhGetFlagTag (issue #51) are no longer a bare exclusion in Read-only —
+// sandbox.lua now guards them so their pure-lookup bCreateIfNone=false branch works there
+// — but their bCreateIfNone=true schema-creating branch is still excluded read-only, and
+// author_fh_plugin still can't tell which branch a given call uses without evaluating it,
+// so both names stay flagged here unconditionally, same reasoning as the fhSet* setters.
 export const SANDBOX_EXCLUDED_FUNCTIONS = [
   "fhCreateItem",
   "fhDeleteItem",

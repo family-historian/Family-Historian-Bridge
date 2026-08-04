@@ -22,9 +22,14 @@ local M = {}
 -- Raw fh* primitives that mutate the GEDCOM tree (or can, via bCreateIfNone) -- wrapped
 -- below to flip a per-build write tracker, so runScript.lua/M.run can tell whether a
 -- since-failed script actually wrote anything before it errored (issue #15,
--- docs/adr/0005). fhGetFactTag/fhGetFlagTag are conservatively tracked on every call, not
--- just a bCreateIfNone=true one -- same reasoning that already excludes them from
--- Read-only outright below: cheaper to over-flag a possible write than silently miss one.
+-- docs/adr/0005). fhGetFactTag/fhGetFlagTag are conservatively tracked on every call under
+-- Read-write, not just a bCreateIfNone=true one -- cheaper to over-flag a possible write
+-- than silently miss one. Both stay in this list (and hence in WRITE_NAMES below, so
+-- runScript.lua's static pre-scan keeps flagging any script that calls either name) even
+-- though, as of issue #51, they're no longer entirely excluded from Read-only -- see the
+-- guarded wrappers below M.build's local-function definitions: each has a genuine
+-- pure-lookup branch (bCreateIfNone=false) with no possible mutation, so only the
+-- bCreateIfNone=true branch actually needs the write gate.
 local WRITE_PRIMITIVE_NAMES = {
   'fhSetLabelledText', 'fhSetValueAsAge', 'fhSetValueAsDate', 'fhSetValueAsInteger',
   'fhSetValueAsLink', 'fhSetValueAsRichText', 'fhSetValueAsText', 'fhCreateItem',
@@ -108,6 +113,35 @@ local function buildStripCommas(realStripCommas)
       error('fhu.stripCommas is not supported over run_lua with its optional sQuestion/sTitle/hParent arguments: it opens a modal dialog and would hang a headless run_lua script. Call it with just the text argument instead.')
     end
     return realStripCommas(s)
+  end
+end
+
+-- fhGetFlagTag(strFlagName, bCreateIfNone[, bFactFlag]) (issue #51): a pure lookup when
+-- bCreateIfNone is not true -- returns the existing tag, or "" if the flag type isn't
+-- found, per FH's own docs (fhGetFlagTag.htm) -- but bCreateIfNone=true can create a new
+-- flag-type definition, which is a real write. Guarded the same way buildStripCommas
+-- guards its optional UI args: forward through on the safe branch, raise a clear error on
+-- the write-capable one. Read-only only -- M.build overwrites this with the full,
+-- unguarded, tracked version under Read-write (see WRITE_PRIMITIVE_NAMES's own comment).
+local function buildGuardedGetFlagTag(realGetFlagTag)
+  return function(strFlagName, bCreateIfNone, bFactFlag)
+    if bCreateIfNone then
+      error('fhGetFlagTag is not supported over run_lua with bCreateIfNone = true in a Read-only session: it can create a new flag-type definition, which is a write. Call it with bCreateIfNone = false to look up an existing flag\'s tag without creating one, or start a Read-write Session.')
+    end
+    return realGetFlagTag(strFlagName, bCreateIfNone, bFactFlag)
+  end
+end
+
+-- fhGetFactTag(strFactName, strFactType, strRecTag, bCreateIfNone) (issue #51): same shape
+-- and same reasoning as fhGetFlagTag above -- bCreateIfNone is this function's last
+-- positional argument instead of its second, but the pure-lookup-vs-create split is
+-- identical (fhGetFactTag.htm).
+local function buildGuardedGetFactTag(realGetFactTag)
+  return function(strFactName, strFactType, strRecTag, bCreateIfNone)
+    if bCreateIfNone then
+      error('fhGetFactTag is not supported over run_lua with bCreateIfNone = true in a Read-only session: it can create a new custom fact type, which is a write. Call it with bCreateIfNone = false to look up an existing fact type\'s tag without creating one, or start a Read-write Session.')
+    end
+    return realGetFactTag(strFactName, strFactType, strRecTag, bCreateIfNone)
   end
 end
 
@@ -268,6 +302,14 @@ function M.build(accessMode)
 
   -- Miscellaneous
   env.fhBeginsWithVowel = fhBeginsWithVowel
+
+  -- fhGetFlagTag/fhGetFactTag (issue #51): guarded partial read-only availability -- see
+  -- buildGuardedGetFlagTag/buildGuardedGetFactTag above and WRITE_PRIMITIVE_NAMES's own
+  -- comment. Set here, unconditionally, so both access modes get a value; the Read-write
+  -- block below overwrites both with the full, unguarded, tracked version when
+  -- accessMode == "read-write", same override pattern as everything else in that block.
+  env.fhGetFlagTag = buildGuardedGetFlagTag(fhGetFlagTag)
+  env.fhGetFactTag = buildGuardedGetFactTag(fhGetFactTag)
 
   -- fhu (require('fhUtils')) is never the raw module -- always a proxy, so its write
   -- methods can be gated by accessMode and tracked the same as the raw primitives below

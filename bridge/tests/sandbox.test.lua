@@ -104,8 +104,15 @@ fhDeleteItem = function() end
 fhMoveItemAfter = function() end
 fhMoveItemBefore = function() end
 fhSrcEnableAutoTitle = function() end
-fhGetFactTag = function() end
-fhGetFlagTag = function() end
+-- Recording stubs, not no-ops (issue #51): the guarded-forwarding assertions below need to
+-- prove the real function actually ran with the original arguments, not just that some
+-- function was called.
+fhGetFactTag = function(strFactName, strFactType, strRecTag, bCreateIfNone)
+  return 'facttag:' .. tostring(strFactName) .. ':' .. tostring(strFactType) .. ':' .. tostring(strRecTag) .. ':' .. tostring(bCreateIfNone)
+end
+fhGetFlagTag = function(strFlagName, bCreateIfNone, bFactFlag)
+  return 'flagtag:' .. tostring(strFlagName) .. ':' .. tostring(bCreateIfNone) .. ':' .. tostring(bFactFlag)
+end
 fhSetStringEncoding = function() end
 fhSetConversionLossFlag = function() end
 fhShellExecute = function() end
@@ -365,8 +372,32 @@ check(env.fhDeleteItem == nil, 'fhDeleteItem absent (mutates the GEDCOM tree —
 check(env.fhMoveItemAfter == nil, 'fhMoveItemAfter absent (mutates the GEDCOM tree — reserved for Read-write)')
 check(env.fhMoveItemBefore == nil, 'fhMoveItemBefore absent (mutates the GEDCOM tree — reserved for Read-write)')
 check(env.fhSrcEnableAutoTitle == nil, 'fhSrcEnableAutoTitle absent (mutates a Source record\'s flag — reserved for Read-write)')
-check(env.fhGetFactTag == nil, 'fhGetFactTag absent (can create a new fact-type definition via bCreateIfNone — excluded entirely rather than wrapped, to keep the allowlist a flat reference-through list)')
-check(env.fhGetFlagTag == nil, 'fhGetFlagTag absent (same bCreateIfNone concern as fhGetFactTag)')
+-- fhGetFactTag/fhGetFlagTag (issue #51): unlike the rest of WRITE_PRIMITIVE_NAMES, these are
+-- NOT entirely excluded from Read-only — each has a genuine pure-lookup branch
+-- (bCreateIfNone = false/nil) that returns an existing tag (or "" if not found) with no
+-- possible mutation, per FH's own docs (fhGetFlagTag.htm, fhGetFactTag.htm). Guarded like
+-- fhu.stripCommas above: forward through on the safe branch, raise a clear error on the
+-- write-capable one (bCreateIfNone = true).
+check(type(env.fhGetFactTag) == 'function' and env.fhGetFactTag ~= fhGetFactTag, 'fhGetFactTag present under read-only, but as the guarded wrapper, not the raw function')
+check(env.fhGetFactTag('Birth', 'Event', 'INDI', false) == 'facttag:Birth:Event:INDI:false', 'read-only fhGetFactTag forwards through on the safe bCreateIfNone = false branch')
+check(env.fhGetFactTag('Birth', 'Event', 'INDI') == 'facttag:Birth:Event:INDI:nil', 'read-only fhGetFactTag forwards through when bCreateIfNone is omitted (nil, same as false)')
+do
+  local ok, err = pcall(env.fhGetFactTag, 'Hobby', 'Attribute', 'INDI', true)
+  check(not ok, 'read-only fhGetFactTag raises when bCreateIfNone = true')
+  check(type(err) == 'string' and err:find('fhGetFactTag', 1, true) ~= nil and err:find('bCreateIfNone', 1, true) ~= nil,
+    'read-only fhGetFactTag error message names the function and bCreateIfNone')
+end
+
+check(type(env.fhGetFlagTag) == 'function' and env.fhGetFlagTag ~= fhGetFlagTag, 'fhGetFlagTag present under read-only, but as the guarded wrapper, not the raw function')
+check(env.fhGetFlagTag('Living', false) == 'flagtag:Living:false:nil', 'read-only fhGetFlagTag forwards through on the safe bCreateIfNone = false branch')
+check(env.fhGetFlagTag('Living') == 'flagtag:Living:nil:nil', 'read-only fhGetFlagTag forwards through when bCreateIfNone is omitted (nil, same as false)')
+check(env.fhGetFlagTag('Preferred', false, true) == 'flagtag:Preferred:false:true', 'read-only fhGetFlagTag forwards its optional bFactFlag argument through too')
+do
+  local ok, err = pcall(env.fhGetFlagTag, 'Important', true)
+  check(not ok, 'read-only fhGetFlagTag raises when bCreateIfNone = true')
+  check(type(err) == 'string' and err:find('fhGetFlagTag', 1, true) ~= nil and err:find('bCreateIfNone', 1, true) ~= nil,
+    'read-only fhGetFlagTag error message names the function and bCreateIfNone')
+end
 check(env.fhSetLabelledText == nil, 'fhSetLabelledText absent under read-only (reserved for Read-write)')
 check(env.fhSetValueAsAge == nil, 'fhSetValueAsAge absent under read-only (reserved for Read-write)')
 check(env.fhSetValueAsDate == nil, 'fhSetValueAsDate absent under read-only (reserved for Read-write)')
@@ -468,6 +499,20 @@ local envReadWrite8, trackerReadWrite8 = sandbox.build("read-write")
 envReadWrite8.fhu.createIndi('Jane /Doe/', 'Female')
 check(trackerReadWrite8.wrote == true, 'calling fhu.createIndi flips tracker.wrote')
 check(trackerReadWrite8.logged == false, 'calling fhu.createIndi (not logActivity) leaves tracker.logged false')
+
+-- fhGetFactTag/fhGetFlagTag under read-write (issue #51): the FULL, unguarded function —
+-- unlike the read-only guarded wrapper above, bCreateIfNone = true still forwards through
+-- rather than erroring, and every call (even bCreateIfNone = false) still flips the tracker
+-- conservatively, exactly as before this change (see WRITE_PRIMITIVE_NAMES's own comment).
+local envReadWrite9, trackerReadWrite9 = sandbox.build("read-write")
+check(envReadWrite9.fhGetFactTag('Hobby', 'Attribute', 'INDI', true) == 'facttag:Hobby:Attribute:INDI:true',
+  'read-write fhGetFactTag forwards through even with bCreateIfNone = true')
+check(trackerReadWrite9.wrote == true, 'calling read-write fhGetFactTag flips the tracker even though this call used bCreateIfNone = true')
+
+local envReadWrite10, trackerReadWrite10 = sandbox.build("read-write")
+check(envReadWrite10.fhGetFlagTag('Living', false) == 'flagtag:Living:false:nil',
+  'read-write fhGetFlagTag forwards through with bCreateIfNone = false too (not just true)')
+check(trackerReadWrite10.wrote == true, 'calling read-write fhGetFlagTag flips the tracker conservatively even on the bCreateIfNone = false branch')
 
 -- Modal-dialog and filesystem-writing fhu methods (issue #22): replaced with an
 -- error-raising wrapper rather than being forwarded to the real function or left as a

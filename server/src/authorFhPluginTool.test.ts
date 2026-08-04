@@ -150,24 +150,38 @@ describe("handleAuthorFhPlugin", () => {
 });
 
 describe("SANDBOX_EXCLUDED_FUNCTIONS", () => {
-  it("matches every function bridge/tests/sandbox.test.lua asserts is absent from run_lua's sandbox", () => {
+  it("matches every function bridge/tests/sandbox.test.lua asserts is absent or partially guarded under run_lua's Read-only sandbox", () => {
     const sandboxTestLuaPath = fileURLToPath(
       new URL("../../bridge/tests/sandbox.test.lua", import.meta.url),
     );
     const sandboxTestLua = readFileSync(sandboxTestLuaPath, "utf-8");
 
-    // sandbox.test.lua asserts each excluded FH function absent with `env.fhX == nil`;
+    // sandbox.test.lua asserts each hard-excluded FH function absent with `env.fhX == nil`;
     // allowed functions are instead asserted `== <realGlobal>`, so this pattern picks out
-    // exactly the excluded set without needing to parse the whole file. fhBridge is gated
-    // the same read-write-only way (env.fhBridge == nil under read-only, issue #18) but
-    // isn't a real FH API function — it's this project's own sourceHelper.lua module alias,
-    // never something a hand-authored plugin would call — so it doesn't belong in
+    // exactly the hard-excluded set without needing to parse the whole file. fhBridge is
+    // gated the same read-write-only way (env.fhBridge == nil under read-only, issue #18)
+    // but isn't a real FH API function — it's this project's own sourceHelper.lua module
+    // alias, never something a hand-authored plugin would call — so it doesn't belong in
     // SANDBOX_EXCLUDED_FUNCTIONS and must be filtered back out here.
-    const excludedInLua = [...sandboxTestLua.matchAll(/env\.(fh\w+) == nil/g)]
+    const hardExcludedInLua = [...sandboxTestLua.matchAll(/env\.(fh\w+) == nil/g)]
       .map((m) => m[1])
       .filter((name) => name !== "fhBridge");
 
-    expect(excludedInLua.length).toBeGreaterThan(0);
+    // fhGetFactTag/fhGetFlagTag (issue #51) aren't a hard `== nil` exclusion any more —
+    // sandbox.lua guards them instead, so their pure-lookup bCreateIfNone=false branch
+    // works read-only while bCreateIfNone=true still errors. author_fh_plugin can't tell
+    // which branch a given call uses without evaluating it, so it still flags both names
+    // unconditionally (see authorFhPluginTool.ts's own comment) — same treatment as a hard
+    // exclusion from this test's point of view. Picked out by the distinguishing phrase in
+    // sandbox.test.lua's own assertion label, rather than the `== nil` pattern above.
+    const guardedInLua = [
+      ...sandboxTestLua.matchAll(/env\.(fh\w+) ~= fh\w+.*guarded wrapper, not the raw function/g),
+    ].map((m) => m[1]);
+
+    const excludedInLua = [...hardExcludedInLua, ...guardedInLua];
+
+    expect(hardExcludedInLua.length).toBeGreaterThan(0);
+    expect(guardedInLua.length).toBe(2);
     expect(new Set(SANDBOX_EXCLUDED_FUNCTIONS)).toEqual(new Set(excludedInLua));
   });
 });

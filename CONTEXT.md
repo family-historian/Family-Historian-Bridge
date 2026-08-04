@@ -26,13 +26,16 @@ _Avoid_: Connection (a session can span many short-lived socket connections, one
 
 **Access mode**:
 The read-only/read-write toggle set by the user at session Start. Read-only exposes only
-FH's read API inside the sandbox; read-write additionally exposes FH's full write API —
-`fhSetLabelledText`, every `fhSetValueAs*` setter (`Age`/`Date`/`Integer`/`Link`/
-`RichText`/`Text`), `fhCreateItem`, `fhDeleteItem`, `fhMoveItemAfter`/`fhMoveItemBefore`,
-`fhSrcEnableAutoTitle`, and `fhGetFactTag`/`fhGetFlagTag` (including their
-`bCreateIfNone=true` schema-creating path) — all at once; there is no further staging
-within read-write. See docs/adr/0005-write-mode-errors-rethrown-for-fh-auto-undo.md for
-how a write script's own runtime errors are handled.
+FH's read API inside the sandbox — plus, as of issue #51, a guarded partial exposure of
+`fhGetFactTag`/`fhGetFlagTag`: their pure-lookup branch (`bCreateIfNone=false`) works
+read-only, while their `bCreateIfNone=true` schema-creating branch raises a clear error
+instead. Read-write additionally exposes FH's full write API — `fhSetLabelledText`, every
+`fhSetValueAs*` setter (`Age`/`Date`/`Integer`/`Link`/`RichText`/`Text`), `fhCreateItem`,
+`fhDeleteItem`, `fhMoveItemAfter`/`fhMoveItemBefore`, `fhSrcEnableAutoTitle`, and the full,
+unguarded `fhGetFactTag`/`fhGetFlagTag` (including their `bCreateIfNone=true`
+schema-creating path) — all at once; there is no further staging within read-write. See
+docs/adr/0005-write-mode-errors-rethrown-for-fh-auto-undo.md for how a write script's own
+runtime errors are handled.
 _Avoid_: Permission level, mode (alone)
 
 **Sandbox**:
