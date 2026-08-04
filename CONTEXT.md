@@ -86,6 +86,14 @@ confirmed living person). See
 docs/adr/0014-describe-project-flag-census-and-data-quality-namespace.md for why
 `flagCensus` is Individual-record-flags-only (Fact Flags are a separate mechanism, not
 covered) and why `dataQuality` is its own namespace rather than a bare top-level count.
+Also returns `contextInfo` (issue #51 — this half of the ask was missed from the first
+pass and added on a later review) — the 9 documented `fhGetContextInfo` `CI_*` keys that
+are plain strings/booleans (`CI_PROJECT_NAME`, `CI_PROJECT_FILE`, `CI_GEDCOM_FILE`,
+`CI_PROJECT_PUBLIC_FOLDER`, `CI_PROJECT_DATA_FOLDER`, `CI_PLUGIN_NAME`,
+`CI_APP_DATA_FOLDER`, `CI_APP_MODE`, `CI_STRING_ENCODING`). `CI_APP_HWND`/`CI_PARENT_HWND`
+are excluded — they return Lua light userdata, which `bridge/jsonEncode.lua` can't encode
+at all — as are the report/book-only `CI_BOOK_CONTEXT`/`CI_BOOK_ITEM_HEADING`, which are
+meaningless outside a report plugin's book context.
 Recomputed on every call; see docs/adr/0002-describe-project-no-server-cache.md for why
 it isn't cached. Always executes in the Read-only sandbox regardless of the Session's own
 Access mode — its script is fixed and known to never call a write function, so there's no

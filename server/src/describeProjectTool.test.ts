@@ -137,6 +137,51 @@ describe("DESCRIBE_PROJECT_DESCRIPTION flagCensus/dataQuality shape (issue #51)"
   });
 });
 
+describe("DESCRIBE_PROJECT_DESCRIPTION contextInfo shape (issue #51)", () => {
+  it("documents contextInfo and lists the CI_* keys it carries", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"contextInfo"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/CI_PROJECT_NAME/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/CI_APP_MODE/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/CI_STRING_ENCODING/);
+  });
+
+  it("explains why the window-handle and book-only CI_* keys are excluded", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/CI_APP_HWND/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/CI_PARENT_HWND/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/CI_BOOK_CONTEXT/);
+  });
+});
+
+describe("DESCRIBE_PROJECT_SCRIPT contextInfo logic (issue #51)", () => {
+  it("calls fhGetContextInfo for every documented string/bool CI_* key", () => {
+    for (const key of [
+      "CI_PROJECT_NAME",
+      "CI_PROJECT_FILE",
+      "CI_GEDCOM_FILE",
+      "CI_PROJECT_PUBLIC_FOLDER",
+      "CI_PROJECT_DATA_FOLDER",
+      "CI_PLUGIN_NAME",
+      "CI_APP_DATA_FOLDER",
+      "CI_APP_MODE",
+      "CI_STRING_ENCODING",
+    ]) {
+      expect(DESCRIBE_PROJECT_SCRIPT).toMatch(new RegExp(`"${key}"`));
+    }
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/contextInfo\[key\] = fhGetContextInfo\(key\)/);
+  });
+
+  it("omits the userdata (window handle) and book-only CI_* keys", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/"CI_APP_HWND"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/"CI_PARENT_HWND"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/"CI_BOOK_CONTEXT"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/"CI_BOOK_ITEM_HEADING"/);
+  });
+
+  it("returns contextInfo alongside the existing top-level keys", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/contextInfo = contextInfo,/);
+  });
+});
+
 describe("DESCRIBE_PROJECT_SCRIPT flagCensus/dataQuality logic (issue #51)", () => {
   // Full traversal correctness against a fake FH item-pointer tree was checked manually
   // (no fake-tree fixture exists in this repo for the Lua side — bridge/tests/*.test.lua
