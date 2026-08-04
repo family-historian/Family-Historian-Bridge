@@ -78,7 +78,10 @@ Create `fh-mcp-bridge-vX.Y.Z/` containing:
   `bridge/*.lua` source modules, `bridge/tests/`, `bridge/scripts/`, and `.DS_Store` (if
   present) — none of those ship; the bundle is the only artifact end users need.
 - `server/dist/`, `server/package.json`, `server/package-lock.json`,
-  `server/data/` (the two corpus `.jsonl` files). **Excludes** `server/src/` and
+  the whole `server/data/` directory — not just the two corpus `.jsonl` files, but also
+  `fh-help-corpus.meta.json` (read at runtime by `server/src/index.ts`; easy to miss
+  since it's not a corpus file itself, but the server won't start without it — this doc
+  undercounted it until caught while packaging 0.6.0). **Excludes** `server/src/` and
   `server/node_modules/` — the zip ships runtime deps only, installed fresh by the end
   user (step 8 below), not the dev/build toolchain.
 - `docs/user-guide.md`
