@@ -79,6 +79,26 @@ local entryMissingVersion = realEntrySource:gsub('@Version:%s*%S+', '@NoVersionH
 local versionOk = pcall(bundler.buildBundle, entryMissingVersion, fakeReadModule)
 assertEqual(versionOk, false, 'a missing @Version header makes buildBundle fail loudly, not silently')
 
+-- @LastUpdated is stamped with the build date (default: today, but overridable here so the
+-- assertion doesn't depend on the real current date), not left at whatever date the source
+-- entry file happened to carry.
+local existingLastUpdated = realEntrySource:match('@LastUpdated:%s*(%S+)')
+assertTrue(existingLastUpdated ~= nil, 'test setup: real entry source must carry an @LastUpdated header')
+local bundledWithFixedDate = bundler.buildBundle(realEntrySource, fakeReadModule, '2099-01-02')
+assertTrue(bundledWithFixedDate:find('@LastUpdated: 2099-01-02', 1, true) ~= nil,
+  '@LastUpdated header is stamped with the supplied build date')
+assertTrue(existingLastUpdated == '2099-01-02' or
+  bundledWithFixedDate:find('@LastUpdated: ' .. existingLastUpdated, 1, true) == nil,
+  '@LastUpdated header no longer carries the stale source-file date')
+assertTrue(bundled:find('@LastUpdated: ' .. os.date('%Y-%m-%d'), 1, true) ~= nil,
+  'buildBundle defaults the @LastUpdated stamp to the real current date when no override is given')
+
+-- A missing/changed @LastUpdated header must fail loudly, not silently ship a bundle with
+-- a stale or absent build-date stamp.
+local entryMissingLastUpdated = realEntrySource:gsub('@LastUpdated:%s*%S+', '@NoLastUpdatedHeader: nope', 1)
+local lastUpdatedOk = pcall(bundler.buildBundle, entryMissingLastUpdated, fakeReadModule)
+assertEqual(lastUpdatedOk, false, 'a missing @LastUpdated header makes buildBundle fail loudly, not silently')
+
 -- The rest of the entry file (the actual dialog/socket logic) must survive untouched.
 assertTrue(bundled:find('socket = require("socket")', 1, true) ~= nil,
   'socket require survives after the bundled modules')

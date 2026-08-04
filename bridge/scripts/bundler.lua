@@ -69,12 +69,29 @@ local function extractVersion(entrySource)
   return version
 end
 
+-- The header's @LastUpdated date is hand-maintained in the source entry file but should
+-- reflect when the shipped artifact was actually built, not when someone last remembered
+-- to bump the comment by hand — so buildBundle stamps it with today's date on every build.
+-- todayDate is injectable (defaults to os.date here) so tests can assert against a fixed
+-- value instead of the real current date.
+local function stampLastUpdated(entrySource, todayDate)
+  local existing = entrySource:match("@LastUpdated:%s*(%S+)")
+  if not existing then
+    error("could not find an @LastUpdated header in the entry source to stamp with today's " ..
+      "date — the header changed or is missing; update bundler.lua or restore the header")
+  end
+  local stamped = entrySource:gsub("(@LastUpdated:%s*)%S+", "%1" .. todayDate, 1)
+  return stamped
+end
+
 -- entrySource: raw text of bridge/Claude MCP Bridge.fh_lua.
 -- readModule(name): function(name) -> raw text of bridge/<name>.lua.
+-- todayDate: optional "YYYY-MM-DD" override for the @LastUpdated stamp (default: today).
 -- Returns the bundled source as a string.
-function M.buildBundle(entrySource, readModule)
+function M.buildBundle(entrySource, readModule, todayDate)
   local version = extractVersion(entrySource)
-  local out = replaceOnce(entrySource, INSTALL_COMMENT_SOURCE, INSTALL_COMMENT_BUNDLED, "Install comment")
+  local out = stampLastUpdated(entrySource, todayDate or os.date("%Y-%m-%d"))
+  out = replaceOnce(out, INSTALL_COMMENT_SOURCE, INSTALL_COMMENT_BUNDLED, "Install comment")
 
   local splitIdx = out:find(FH_INITIALISE_LINE, 1, true)
   if not splitIdx then
