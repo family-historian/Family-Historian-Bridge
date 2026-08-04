@@ -58,12 +58,28 @@ Returns JSON shaped as:
     "livingStatusAmbiguousCount": <count of Individuals with a resolved birth date, no
       DEAT/BURI/CREM fact, and no Living flag set — likely missing death data, not
       confirmed living; don't presume these are alive without checking further>
+  },
+  "contextInfo": {
+    "CI_PROJECT_NAME": "<currently open project's name>",
+    "CI_PROJECT_FILE": "<project file's path>",
+    "CI_GEDCOM_FILE": "<GEDCOM file's path, \\"\\" in Gedcom Mode (new) — no name yet>",
+    "CI_PROJECT_PUBLIC_FOLDER": "<project's public folder path>",
+    "CI_PROJECT_DATA_FOLDER": "<project's data folder path>",
+    "CI_PLUGIN_NAME": "<this plugin's name>",
+    "CI_APP_DATA_FOLDER": "<FH's own application data folder path>",
+    "CI_APP_MODE": "<\\"Project Mode\\" | \\"Gedcom Mode\\" | \\"Gedcom Mode (new)\\">",
+    "CI_STRING_ENCODING": "<\\"ANSI\\" | \\"UTF-8\\">"
   }
 }
 
 flagCensus covers Individual record flags only (Living/Private plus any project-specific
 custom ones) — Family record flags and Fact flags (Preferred/Tentative/Rejected/Private on
-a specific fact) aren't covered here.`;
+a specific fact) aren't covered here.
+
+contextInfo carries every fhGetContextInfo() value that's actually usable here: the two
+window-handle values (CI_APP_HWND/CI_PARENT_HWND) and the two report/book-only values
+(CI_BOOK_CONTEXT/CI_BOOK_ITEM_HEADING, meaningless outside a report plugin's book context)
+are omitted — see the script's own comment for why.`;
 
 // Fixed, built-in script (not Claude-authored — see CONTEXT.md "describe_project"). Runs
 // through the same sandbox/transport as run_lua, so it's limited to the same read-only
@@ -158,6 +174,35 @@ do
   end
 end
 
+local contextInfo = {}
+do
+  -- issue #51's original ask ("add all values from fhGetContextInfo") was missed from
+  -- the itemized follow-up plan and only caught on a later review pass. Of the 11
+  -- documented CI_* keys (FH help: fhGetContextInfo), two are deliberately left out:
+  --   - CI_APP_HWND / CI_PARENT_HWND return Lua light userdata (a window handle), not a
+  --     string/number/bool — bridge/jsonEncode.lua has no case for "userdata" and
+  --     errors ("cannot encode value of type userdata to JSON"), so including them
+  --     verbatim would break this call entirely. They're also meaningless here anyway:
+  --     both exist to parent a dialog you're about to show, and this script never does.
+  --   - CI_BOOK_CONTEXT / CI_BOOK_ITEM_HEADING only mean anything for a report plugin
+  --     running inside a book (return false/"" otherwise) — not applicable to
+  --     describe_project's own fixed script, so left out rather than always-empty noise.
+  local keys = {
+    "CI_PROJECT_NAME",
+    "CI_PROJECT_FILE",
+    "CI_GEDCOM_FILE",
+    "CI_PROJECT_PUBLIC_FOLDER",
+    "CI_PROJECT_DATA_FOLDER",
+    "CI_PLUGIN_NAME",
+    "CI_APP_DATA_FOLDER",
+    "CI_APP_MODE",
+    "CI_STRING_ENCODING",
+  }
+  for _, key in ipairs(keys) do
+    contextInfo[key] = fhGetContextInfo(key)
+  end
+end
+
 local flagCensus = {}
 local livingStatusAmbiguousCount = 0
 do
@@ -214,6 +259,7 @@ return {
   dataQuality = {
     livingStatusAmbiguousCount = livingStatusAmbiguousCount,
   },
+  contextInfo = contextInfo,
 }
 `;
 

@@ -23,6 +23,16 @@
   would otherwise silently get wrong. See
   docs/adr/0014-describe-project-flag-census-and-data-quality-namespace.md. (#51)
 
+### describe_project: contextInfo (issue #51 follow-up)
+- `describe_project` now also returns `contextInfo` — every documented `fhGetContextInfo`
+  `CI_*` value that's a plain string/boolean (`CI_PROJECT_NAME`, `CI_PROJECT_FILE`,
+  `CI_GEDCOM_FILE`, `CI_PROJECT_PUBLIC_FOLDER`, `CI_PROJECT_DATA_FOLDER`,
+  `CI_PLUGIN_NAME`, `CI_APP_DATA_FOLDER`, `CI_APP_MODE`, `CI_STRING_ENCODING`). This was
+  part of the original #51 request but was missed from the itemized implementation plan;
+  caught on a later review pass. `CI_APP_HWND`/`CI_PARENT_HWND` (window handles — Lua
+  light userdata, which the Bridge's JSON encoder can't represent) and the report/book-only
+  `CI_BOOK_CONTEXT`/`CI_BOOK_ITEM_HEADING` are deliberately left out. (#51)
+
 ### GEDCOM knowledge corpus Date/DatePoint guidance
 - Added two entries to `run-lua-guidance-call-shape-gotchas`: `Date`/`DatePoint` objects
   have no `GetDatePoint()` method (`dt:GetDatePt1()`/`dt:GetDatePt2()` are the correct
