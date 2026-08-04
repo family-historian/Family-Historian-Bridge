@@ -10,6 +10,19 @@
   functions were previously blocked outright even for a lookup that can never mutate
   the tree. (#51)
 
+### describe_project: flag census and a data-quality signal
+- `describe_project` now returns `flagCensus` — a per-tag breakdown of Individual record
+  flags (`__LIVING`/`__PRIVATE` and any project-specific custom ones), each with its
+  occurrence count and a human-readable label — instead of only the single aggregate
+  `_FLGS` count `tagCensus` already gave. Answering "how many living people are in this
+  project" previously required a full `run_lua` script; it's now a direct read of
+  `flagCensus.__LIVING`.
+- Also returns `dataQuality.livingStatusAmbiguousCount`: Individuals with a resolved
+  birth date, no `DEAT`/`BURI`/`CREM` fact, and no Living flag set — the shape of a
+  missing-data gap that the common "no death record therefore presumed living" heuristic
+  would otherwise silently get wrong. See
+  docs/adr/0014-describe-project-flag-census-and-data-quality-namespace.md. (#51)
+
 ## 0.5.0
 
 ### Server version reporting

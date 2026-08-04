@@ -76,11 +76,20 @@ script)
 The MCP tool (issue #10) that runs a fixed, built-in Lua script — not a Claude-authored
 one — returning record counts per record type plus a distinct-tag census (INDI and FAM
 child items, SOUR record child items, and Source template definitions), each tag paired
-with its occurrence count. Recomputed on every call; see
-docs/adr/0002-describe-project-no-server-cache.md for why it isn't cached. Always executes
-in the Read-only sandbox regardless of the Session's own Access mode — its script is
-fixed and known to never call a write function, so there's no reason to ever run it with
-write capability available even during a read-write Session.
+with its occurrence count. Also returns `flagCensus` (issue #51) — a per-tag breakdown of
+Individual record flags (`__LIVING`/`__PRIVATE` plus any project-specific custom ones),
+each with its occurrence count and a human-readable label resolved via
+`fhGetTypeInfo(ptr, "label")` — and `dataQuality` (issue #51), a namespace for data-gap
+signals, currently just `livingStatusAmbiguousCount` (Individuals with a resolved birth
+date, no `DEAT`/`BURI`/`CREM` fact, and no Living flag — likely a missing-data gap, not a
+confirmed living person). See
+docs/adr/0014-describe-project-flag-census-and-data-quality-namespace.md for why
+`flagCensus` is Individual-record-flags-only (Fact Flags are a separate mechanism, not
+covered) and why `dataQuality` is its own namespace rather than a bare top-level count.
+Recomputed on every call; see docs/adr/0002-describe-project-no-server-cache.md for why
+it isn't cached. Always executes in the Read-only sandbox regardless of the Session's own
+Access mode — its script is fixed and known to never call a write function, so there's no
+reason to ever run it with write capability available even during a read-write Session.
 _Avoid_: Census tool, project summary (there is exactly one tool with this name and shape)
 
 **author_fh_plugin**:

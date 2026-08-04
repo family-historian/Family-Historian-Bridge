@@ -47,8 +47,23 @@ Returns JSON shaped as:
     "individualAndFamily": { "<tag, e.g. BIRT, _ATTR-REGIMENT>": <occurrence count>, ... },
     "source": { "<tag>": <occurrence count>, ... },
     "sourceTemplateFields": { "<field code, e.g. TX-PAGE>": <occurrence count>, ... }
+  },
+  "flagCensus": {
+    "<flag tag, e.g. __LIVING/__PRIVATE or a project-specific custom flag>": {
+      "count": <occurrence count>,
+      "label": "<human-readable flag name, e.g. \\"Living\\">"
+    }, ...
+  },
+  "dataQuality": {
+    "livingStatusAmbiguousCount": <count of Individuals with a resolved birth date, no
+      DEAT/BURI/CREM fact, and no Living flag set — likely missing death data, not
+      confirmed living; don't presume these are alive without checking further>
   }
-}`;
+}
+
+flagCensus covers Individual record flags only (Living/Private plus any project-specific
+custom ones) — Family record flags and Fact flags (Preferred/Tentative/Rejected/Private on
+a specific fact) aren't covered here.`;
 
 // Fixed, built-in script (not Claude-authored — see CONTEXT.md "describe_project"). Runs
 // through the same sandbox/transport as run_lua, so it's limited to the same read-only
@@ -64,6 +79,30 @@ Returns JSON shaped as:
 // the field's code (e.g. "TX-PAGE") — the tag itself is always "_FIELD", so tallying by
 // tag alone (as done for INDI/FAM/SOUR) wouldn't distinguish one declared field from
 // another.
+//
+// flagCensus/dataQuality (issue #51): a single combined walk over every INDI's own direct
+// children, run separately from tallyChildTagsOf above (which tallies INDI+FAM together
+// and doesn't look inside a _FLGS item) since both new pieces are Individual-only and both
+// need a per-record view, not just an aggregate tag count:
+//   - Record flags (FH help: "Record Flags can only be set on Individual records") live as
+//     children of an INDI's own "_FLGS" item — a Fact's nested _FLGS (Preferred/Tentative/
+//     Rejected/Private fact flags) is a separate mechanism, deliberately not walked here
+//     (see fact-flag-vs-record-flag in the GEDCOM knowledge corpus). Each flag instance is
+//     tallied by its own tag (e.g. "__LIVING"), with a human-readable label resolved via
+//     fhGetTypeInfo(ptr, "label") the first time each tag is seen — there's no read-only
+//     tag-name enumeration API (fhGetFlagTag only maps a known name to its tag, and even
+//     after issue #51's other fix, only round-trips a name you already have), but
+//     fhGetTypeInfo works on any item pointer, flag instances included, and returns the
+//     same display label FH itself shows for that flag type.
+//   - The "living status ambiguous" data-quality count targets a specific false-positive
+//     in the common "no death record therefore presumed living" heuristic: an Individual
+//     with a resolved birth date, no DEAT/BURI/CREM fact, and no Living flag set is exactly
+//     the shape of a data gap (e.g. a 108-year-old with no death record and no Living flag
+//     — almost certainly missing data, not a real living person). "~.BIRT.DATE:YEAR" is a
+//     Data Reference qualifier (see data-reference-qualifiers-date in the GEDCOM knowledge
+//     corpus) — it resolves to "" both when there's no BIRT fact at all and when there is
+//     one but its date doesn't resolve to a value, so this only counts a *resolved* birth
+//     date, not mere BIRT-tag presence.
 export const DESCRIBE_PROJECT_SCRIPT = `
 local recordCounts = {}
 local walker = fhNewItemPtr()
@@ -119,12 +158,61 @@ do
   end
 end
 
+local flagCensus = {}
+local livingStatusAmbiguousCount = 0
+do
+  local record = fhNewItemPtr()
+  local child = fhNewItemPtr()
+  local flag = fhNewItemPtr()
+  record:MoveToFirstRecord("INDI")
+  while record:IsNotNull() do
+    local livingFlagSeen = false
+    local deathFactSeen = false
+    child:MoveToFirstChildItem(record)
+    while child:IsNotNull() do
+      local childTag = fhGetTag(child)
+      if childTag == "_FLGS" then
+        flag:MoveToFirstChildItem(child)
+        while flag:IsNotNull() do
+          local flagTag = fhGetTag(flag)
+          if flagTag == "__LIVING" then
+            livingFlagSeen = true
+          end
+          local existing = flagCensus[flagTag]
+          if existing then
+            existing.count = existing.count + 1
+          else
+            flagCensus[flagTag] = { count = 1, label = fhGetTypeInfo(flag, "label") }
+          end
+          flag:MoveNext()
+        end
+      elseif childTag == "DEAT" or childTag == "BURI" or childTag == "CREM" then
+        deathFactSeen = true
+      end
+      child:MoveNext()
+    end
+
+    if not deathFactSeen and not livingFlagSeen then
+      local birthYear = fhGetItemText(record, "~.BIRT.DATE:YEAR")
+      if birthYear ~= "" then
+        livingStatusAmbiguousCount = livingStatusAmbiguousCount + 1
+      end
+    end
+
+    record:MoveNext()
+  end
+end
+
 return {
   recordCounts = recordCounts,
   tagCensus = {
     individualAndFamily = individualAndFamily,
     source = source,
     sourceTemplateFields = sourceTemplateFields,
+  },
+  flagCensus = flagCensus,
+  dataQuality = {
+    livingStatusAmbiguousCount = livingStatusAmbiguousCount,
   },
 }
 `;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BridgeConnectionRefusedError, type RunLuaOnBridgeOptions } from "./bridgeClient.js";
 import {
+  DESCRIBE_PROJECT_DESCRIPTION,
   DESCRIBE_PROJECT_SCRIPT,
   handleDescribeProject,
   makeDescribeProjectDeps,
@@ -113,6 +114,63 @@ describe("handleDescribeProject", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/bridge_prototype_v2/);
     expect(text).toMatch(/bridge\.fh_lua/);
+  });
+});
+
+describe("DESCRIBE_PROJECT_DESCRIPTION flagCensus/dataQuality shape (issue #51)", () => {
+  it("documents flagCensus as a per-tag {count, label} map, not a bare aggregate", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"flagCensus"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"count"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"label"/);
+  });
+
+  it("scopes flagCensus to Individual record flags, explicitly excluding Family/Fact flags", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/individual record flags/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/Fact flags/);
+  });
+
+  it("documents dataQuality.livingStatusAmbiguousCount and its DEAT/BURI/CREM/Living-flag criteria", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"dataQuality"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"livingStatusAmbiguousCount"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/DEAT\/BURI\/CREM/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/living flag/);
+  });
+});
+
+describe("DESCRIBE_PROJECT_SCRIPT flagCensus/dataQuality logic (issue #51)", () => {
+  // Full traversal correctness against a fake FH item-pointer tree was checked manually
+  // (no fake-tree fixture exists in this repo for the Lua side — bridge/tests/*.test.lua
+  // tests sandbox.lua's allowlist plumbing, not this script's own traversal logic). These
+  // are lightweight regression guards on the script text itself, same spirit as the exact
+  // equality check in "runs the fixed built-in script" above, just narrower — catching an
+  // accidental deletion/rename of a key piece of the new logic, not full behavior.
+  it("walks INDI's own _FLGS children only, not FAM's (record flags are Individual-only)", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/record:MoveToFirstRecord\("INDI"\)/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/childTag == "_FLGS"/);
+  });
+
+  it("requires a resolved birth date via the DATE:YEAR qualifier, not just BIRT-tag presence", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/"~\.BIRT\.DATE:YEAR"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/birthYear ~= ""/);
+  });
+
+  it("checks all three death-indicating fact tags, and the Living flag, before counting a record as ambiguous", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(
+      /childTag == "DEAT" or childTag == "BURI" or childTag == "CREM"/,
+    );
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/flagTag == "__LIVING"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/not deathFactSeen and not livingFlagSeen/);
+  });
+
+  it("resolves each flag tag's human label via fhGetTypeInfo only once per tag, not once per instance", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/fhGetTypeInfo\(flag, "label"\)/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/existing\.count = existing\.count \+ 1/);
+  });
+
+  it("returns flagCensus and dataQuality alongside the existing recordCounts/tagCensus keys", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/flagCensus = flagCensus,/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/dataQuality = \{/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/livingStatusAmbiguousCount = livingStatusAmbiguousCount,/);
   });
 });
 
