@@ -58,11 +58,56 @@ implements.
   (plain FTF text, not an interactive checkbox) under that entry, with the location in
   parentheses when one was mentioned. This never touches the media file's bytes or the
   filesystem; the user drags the file into FH themselves after the Session ends.
+- `familyHelper.lua` — four read-only query helpers, unlike the two above: every fh*
+  function this module calls is a read primitive already granted in the Read-only half of
+  the sandbox, so `sandbox.lua` wires `env.fhBridge` up with these for BOTH access modes,
+  and only *adds* the read-write-only members above on top of that same table.
+  `fhBridge.getFamilyGroup(indiPtr, type)` (`type`: `"all"`/`"parents"`/`"siblings"`/
+  `"spouses"`, default `"all"`) walks every FAMC/FAMS record the Individual belongs to and
+  returns an array of `{ relationship, individual, family }` — `relationship` is
+  `"father"`/`"mother"`/`"sibling"`/`"spouse"`, and `family` identifies which FAMC/FAMS
+  record the relationship came through (so a caller can tell full siblings from half-
+  siblings, or one marriage from another, by comparing `.family.id`).
+  `fhBridge.getAncestors(indiPtr, maxGenerations)` walks the same FAMC chain breadth-first,
+  as far up as `maxGenerations` allows (omit/nil for unlimited), returning an array of
+  `{ generation, line, individual, family }` — `line` is an array of `"father"`/`"mother"`
+  steps from `indiPtr` down to that ancestor (e.g. `{"mother", "father"}` is the maternal
+  grandfather), left unresolved to an English title like "grandfather" since that's a
+  presentation choice, not this helper's job. Both dedupe by record id (pedigree collapse)
+  and never hand back a raw Item Pointer — `individual`/`family` are plain descriptor
+  tables (`id`, `qualifiedId`, plus `name`/`sex` for an individual), since jsonEncode.lua
+  cannot encode a pointer at all. `fhBridge.getAllDetails(ptr)` works on any item pointer
+  (a whole record or a single field/Fact) and recursively describes it and every child
+  item beneath it as one plain tree (`tag`, `id`/`qualifiedId` for record items, `value`
+  for items that store one, `link` for link-classed items — a descriptor of the linked
+  record, not the record's own fields, to avoid walking back out of the record passed in —
+  and `children`) — richtext fields go through `GetPlainText()` rather than raw FTF markup,
+  same reasoning as `run-lua-get-plain-text-from-richtext` in the gedcom-knowledge-corpus.
+  Every one of the three also accepts a qualified id string (e.g. `"I219"`, exactly the
+  form each `.qualifiedId` field above already uses) anywhere it takes a pointer, resolved
+  via `MoveToRecordById` — so a script can call e.g. `fhBridge.getAllDetails(entry.individual.qualifiedId)`
+  directly on a `getFamilyGroup`/`getAncestors` result entry, without first re-resolving it
+  to a live pointer by hand. `getFamilyGroup`/`getAncestors` (Individual-only) raise a clear
+  error if the qualified id resolves to a non-`INDI` record (e.g. passing a family's `"F13"`
+  by mistake); `getAllDetails` accepts any record type's qualified id, matching its own
+  "any record pointer" contract. `fhBridge.searchByName(forename, surname)` finds every
+  Individual whose given name(s) contain `forename` and whose surname contains `surname`,
+  matched case-insensitively as substrings, not exact/whole-word — `searchByName("Robert",
+  "Taubman")` also matches "Robert Henry TAUBMAN". Either argument may be omitted/`""` to
+  skip filtering on that part of the name; at least one must be given non-empty, or it
+  errors. Matches against the NAME field's `GIVEN_ALL`/`SURNAME` Data Reference qualifiers
+  (not the raw stored NAME text), so it matches consistently regardless of how a given
+  record orders/prefixes its name parts. Returns an array of the same descriptor shape as
+  `getFamilyGroup`/`getAncestors`' own `.individual` field, in FH's own record order (not
+  sorted). Unlike the other three, it doesn't take a pointer/qualified-id argument — it
+  scans every Individual record in the project itself (`MoveToFirstRecord("INDI")` +
+  `MoveNext()`).
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
-`timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, and `versionCompare.lua`
-have standalone unit tests, in `tests/` (`*.test.lua`, run with a plain `lua` interpreter —
-no FH dependency). Keeping tests out of this folder means every file directly in `bridge/`
+`timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, `familyHelper.lua`, and
+`versionCompare.lua` have standalone unit tests, in `tests/` (`*.test.lua`, run with a
+plain `lua` interpreter — no FH dependency). Keeping tests out of this folder means every
+file directly in `bridge/`
 is exactly what `scripts/build.lua` bundles into the single installable file (see
 `docs/adr/0009-bundle-bridge-plugin-for-install.md`) — nothing to filter by name:
 
@@ -75,6 +120,7 @@ lua bridge/tests/requestFraming.test.lua
 lua bridge/tests/timeoutDisplay.test.lua
 lua bridge/tests/sourceHelper.test.lua
 lua bridge/tests/sessionLogHelper.test.lua
+lua bridge/tests/familyHelper.test.lua
 lua bridge/tests/versionCompare.test.lua
 lua bridge/tests/build.test.lua
 ```
@@ -393,3 +439,40 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    matches the Bridge's own version (check the dialog title bar/`@Version` header for the
    exact string, or just send the same one back) and confirm the mismatch line disappears
    from the next status update.
+19. `fhBridge.getFamilyGroup`/`getAllDetails`/`getAncestors`/`searchByName` (familyHelper.lua):
+   with a real FH project open, select **Read-only** (not Read-write — the point of this
+   step is that these four work without the write gate), click Start:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   local p = fhNewItemPtr()
+   p:MoveToFirstRecord(\"INDI\")
+   return {
+     group = fhBridge.getFamilyGroup(p, \"all\"),
+     details = fhBridge.getAllDetails(p),
+     ancestors = fhBridge.getAncestors(p, 3),
+     byName = fhBridge.searchByName(fhGetItemText(p, \"~.NAME:GIVEN_ALL\"), nil),
+   }
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(65536).decode())
+   s.close()
+   "
+   ```
+   Expected output: a JSON object with `group` (an array of `{relationship, individual,
+   family}` entries for the first Individual's parents/siblings/spouses — cross-check
+   names/relationships against FH's own Family view for that person), `details` (a nested
+   tree with the record's own `tag`/`id`/`qualifiedId` and a `children` array covering
+   every field FH's own Property Box shows for that person), `ancestors` (an array of
+   `{generation, line, individual, family}` entries no deeper than generation 3), and
+   `byName` (an array of `{id, qualifiedId, name, sex}` entries — every Individual whose
+   given name(s) contain the first Individual's own given name(s); confirm the first
+   Individual itself is in the list, and cross-check the count against FH's own Find
+   dialog searching that same forename). Confirm nothing in the project changed (these are
+   read-only). Then repeat with Read-write selected instead and confirm the same script
+   still succeeds with the same shape of result — unlike
+   `fhBridge.createSourceFromTemplate`/`citeSource`/`logActivity`, these four are not
+   gated to Read-write.

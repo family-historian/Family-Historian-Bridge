@@ -196,10 +196,11 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
   const results = searchGedcomKnowledge(corpus, "run_lua guidance");
   const combinedText = results.map((r) => r.text).join("\n");
 
-  it('finds all five "run_lua guidance" entries with a single query, via title match', () => {
+  it('finds all six "run_lua guidance" entries with a single query, via title match', () => {
     expect(results.map((r) => r.id).sort()).toEqual([
       "run-lua-guidance-call-shape-gotchas",
       "run-lua-guidance-cite-every-fact",
+      "run-lua-guidance-family-query-helpers",
       "run-lua-guidance-fhu-is-a-global",
       "run-lua-guidance-log-activity",
       "run-lua-guidance-write-session-rolled-back",
@@ -275,6 +276,22 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText.toLowerCase()).toMatch(/research notes\)|browse to research notes/);
     expect(combinedText).toMatch(/fhu\.records\("_RNOT"\)/);
     expect(combinedText.toLowerCase()).toMatch(/#todo/);
+  });
+
+  it("documents fhBridge's read-only family/detail query helpers (getFamilyGroup/getAncestors/getAllDetails), that they're available under Read-only too, and that they accept a qualified id string as well as a pointer (issue #62)", () => {
+    expect(combinedText).toMatch(/fhBridge\.getFamilyGroup\(indiPtr, type\)/);
+    expect(combinedText).toMatch(/fhBridge\.getAncestors\(indiPtr, maxGenerations\)/);
+    expect(combinedText).toMatch(/fhBridge\.getAllDetails\(ptr\)/);
+    expect(combinedText.toLowerCase()).toMatch(/both read-only and read-write/);
+    expect(combinedText).toMatch(/qualified id string/);
+    expect(combinedText).toMatch(/pedigree collapse/);
+  });
+
+  it("documents fhBridge.searchByName's contains-not-exact name matching, that either argument is optional, and which Data Reference qualifiers it matches against (issue #62)", () => {
+    expect(combinedText).toMatch(/fhBridge\.searchByName\(forename, surname\)/);
+    expect(combinedText.toLowerCase()).toMatch(/not exact\/whole-word/);
+    expect(combinedText).toMatch(/GIVEN_ALL\/SURNAME/);
+    expect(combinedText).toMatch(/searchByName\("Robert", "Taubman"\)/);
   });
 
   it("documents that Date has no GetDatePoint() method, naming the correct GetDatePt1()/GetDatePt2() (issue #51)", () => {

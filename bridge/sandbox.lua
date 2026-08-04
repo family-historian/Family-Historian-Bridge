@@ -13,9 +13,13 @@
 -- through from the bridge dialog's toggle. "read-write" additionally wires through FH's
 -- full write API (issue #14, 2026-07-30 grilling session decision) — all of it at once,
 -- with no further staging within read-write. See CONTEXT.md "Access mode". Read-write also
--- wires env.fhBridge, this project's own sourceHelper.lua module (issue #18) — not part of
--- FH's write API itself, but calls it directly, so it's gated the same way. env.fhBridge
--- also carries sessionLogHelper.lua's logActivity (issue #36), same reasoning.
+-- adds further env.fhBridge members from this project's own sourceHelper.lua module
+-- (issue #18) and sessionLogHelper.lua's logActivity (issue #36) — neither is part of FH's
+-- write API itself, but both call real fh* write globals directly, so both are gated the
+-- same way. env.fhBridge itself is NOT read-write-only, though: its family/detail-query
+-- members (familyHelper.lua) call only read primitives, already granted below regardless
+-- of accessMode, so they're built into env.fhBridge unconditionally, before the
+-- read-write block below that only ever adds further members to that same table.
 
 local M = {}
 
@@ -339,6 +343,23 @@ function M.build(accessMode)
     env.fhu = fhuProxy
   end
 
+  -- familyHelper.lua's getFamilyGroup/getAllDetails/getAncestors/searchByName call
+  -- nothing but read primitives already granted above (fhNewItemPtr, item-pointer
+  -- MoveToFirstRecord/MoveTo/MoveNext/MoveToFirstChildItem/IsNotNull/IsNull,
+  -- fhGetValueAsLink, fhGetTag, fhGetItemText, fhGetRecordId, fhGetQualifiedRecordId,
+  -- fhGetDisplayText, fhGetValueType, fhGetValueAsRichText, fhHasChildItem,
+  -- fhIndGetName) -- unlike sourceHelper.lua/sessionLogHelper.lua below, so
+  -- env.fhBridge is built here, unconditionally, rather than inside the read-write
+  -- block. The read-write block only ever adds further (write) members to this same
+  -- table, never replaces it.
+  local realFamilyHelper = require('familyHelper')
+  env.fhBridge = {
+    getFamilyGroup = realFamilyHelper.getFamilyGroup,
+    getAllDetails = realFamilyHelper.getAllDetails,
+    getAncestors = realFamilyHelper.getAncestors,
+    searchByName = realFamilyHelper.searchByName,
+  }
+
   if accessMode == "read-write" then
     -- FH's full write API (issue #14, 2026-07-30 grilling session): granted all at once,
     -- wrapped to flip the write tracker above — no further staging within read-write. See
@@ -355,11 +376,9 @@ function M.build(accessMode)
     -- gated the same read-write-only way, since it also calls the real fh* globals
     -- directly.
     local realSessionLogHelper = require('sessionLogHelper')
-    env.fhBridge = {
-      createSourceFromTemplate = trackedWrite(realFhBridge.createSourceFromTemplate),
-      citeSource = trackedWrite(realFhBridge.citeSource),
-      logActivity = trackedLog(realSessionLogHelper.logActivity),
-    }
+    env.fhBridge.createSourceFromTemplate = trackedWrite(realFhBridge.createSourceFromTemplate)
+    env.fhBridge.citeSource = trackedWrite(realFhBridge.citeSource)
+    env.fhBridge.logActivity = trackedLog(realSessionLogHelper.logActivity)
   end
 
   return env, tracker

@@ -207,6 +207,18 @@ local fakeSessionLogHelper = {
 }
 package.loaded.sessionLogHelper = fakeSessionLogHelper
 
+-- familyHelper.lua (family/detail query helpers) is stubbed the same way, for the same
+-- reason: this test stays a pure allowlist check, independent of familyHelper.lua's own
+-- behavior (covered by familyHelper.test.lua). Every stub returns an identifiable value
+-- for the same forwarding-proof reason as fakeSourceHelper.citeSource above.
+local fakeFamilyHelper = {
+  getFamilyGroup = function(ptr, type) return 'familygroup:' .. tostring(type) end,
+  getAllDetails = function(ptr) return 'alldetails' end,
+  getAncestors = function(ptr, maxGenerations) return 'ancestors:' .. tostring(maxGenerations) end,
+  searchByName = function(forename, surname) return 'searchbyname:' .. tostring(forename) .. ':' .. tostring(surname) end,
+}
+package.loaded.familyHelper = fakeFamilyHelper
+
 local env, tracker = sandbox.build()
 
 -- Allowed basics are present and are the real thing (not stand-ins).
@@ -317,9 +329,18 @@ check(type(env.fhu.createUpdateFact) == 'function' and env.fhu.createUpdateFact 
 check(env.fhu.createUpdateItem == nil, 'fhu.createUpdateItem absent under read-only')
 check(env.fhu.createTextFromSource == nil, 'fhu.createTextFromSource absent under read-only (undocumented in the help corpus, found by reading fhUtils.lua itself — issue #22)')
 
--- fhBridge (require('sourceHelper'), issue #18) is read-write only — same gating as
--- fhCreateItem/fhSetValueAsLink below, since it calls those globals directly.
-check(env.fhBridge == nil, 'fhBridge absent under read-only (calls real fh* globals directly — must not be reachable without the write gate)')
+-- fhBridge is present under read-only too, but only with its read-only members
+-- (familyHelper.lua) — sourceHelper.lua's/sessionLogHelper.lua's members call real fh*
+-- write globals directly, so those stay gated to read-write, same as fhCreateItem/
+-- fhSetValueAsLink below.
+check(type(env.fhBridge) == 'table', 'fhBridge present under read-only (family/detail query helpers call only read primitives)')
+check(env.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.getFamilyGroup present under read-only, by reference (not tracked-write, unlike sourceHelper/sessionLogHelper\'s members)')
+check(env.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails present under read-only, by reference')
+check(env.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors present under read-only, by reference')
+check(env.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName present under read-only, by reference')
+check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTemplate absent under read-only (calls real fh* write globals directly — must not be reachable without the write gate)')
+check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
+check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
 
 -- Write tracker (issue #15): present on every build(), starts false, independent of
 -- accessMode (a read-only script can never flip it, since it has no write functions).
@@ -476,6 +497,14 @@ local envReadWrite3, trackerReadWrite3 = sandbox.build("read-write")
 check(type(envReadWrite3.fhBridge) == 'table', 'read-write build includes fhBridge (require("sourceHelper"))')
 check(envReadWrite3.fhBridge.citeSource('ptr', 'my-source') == 'cited:my-source', 'wrapped fhBridge.citeSource forwards through to the real sourceHelper.citeSource')
 check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips the tracker too')
+
+-- fhBridge's read-only members (familyHelper.lua) are still present under read-write too,
+-- by reference (not tracked-write) — env.fhBridge gains members going into read-write, it
+-- never gets rebuilt from scratch.
+check(envReadWrite3.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.getFamilyGroup still present under read-write, by reference')
+check(envReadWrite3.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails still present under read-write, by reference')
+check(envReadWrite3.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors still present under read-write, by reference')
+check(envReadWrite3.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName still present under read-write, by reference')
 
 -- fhBridge.logActivity (require('sessionLogHelper'), issue #36): present, wrapped, forwards
 -- through and flips the tracker the same way createSourceFromTemplate/citeSource do above.

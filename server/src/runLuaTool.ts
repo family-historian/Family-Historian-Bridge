@@ -25,7 +25,7 @@ Resolve ambiguity in the user's question before calling this tool — an unspeci
 
 Search first, not optional — call search_fh_help/search_gedcom_knowledge for any FH function, item-pointer method, or fhUtils call not yet confirmed this conversation, for reads and writes alike. Before hand-rolling MoveToFirstRecord/MoveNext or fhCreateItem/fhSetValueAsLink/fhDeleteItem, check whether fhu (already a global here — never require('fhUtils')) has a purpose-built helper: fhu.records/fhu.allItems for iteration, fhu.createIndi/createFact/addFamilyAsChild/addFamilyAsSpouse for mutation.
 
-This description may be truncated by your MCP client around 2KB. On your first run_lua call this conversation, call search_gedcom_knowledge("run_lua guidance") once regardless — it returns the gotchas, citeSource, writeSessionRolledBack, fhu-global, and logActivity/session-log guidance living past this point.
+This description may be truncated by your MCP client around 2KB. On your first run_lua call this conversation, call search_gedcom_knowledge("run_lua guidance") once regardless — it returns the gotchas, citeSource, writeSessionRolledBack, fhu-global, logActivity/session-log, and family-query-helper guidance living past this point.
 
 In a read-write Session, call \`fhBridge.logActivity(ptrRecord, action)\` after every record-touching action, not just once at the end — an unlogged write gets rolled back (see the corpus entry above for call shape, the Research Note it creates, and the media/#ToDo option).
 

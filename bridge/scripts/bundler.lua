@@ -21,8 +21,8 @@ local M = {}
 -- requires sourceHelper.lua and sessionLogHelper.lua from inside a function body, not at
 -- module load time). Order here is arbitrary — see the note above.
 M.MODULE_NAMES = {
-  "jsonEncode", "requestFraming", "runScript", "sandbox", "sessionLogHelper", "sourceHelper",
-  "timeoutDisplay", "versionCompare", "watchdog",
+  "familyHelper", "jsonEncode", "requestFraming", "runScript", "sandbox", "sessionLogHelper",
+  "sourceHelper", "timeoutDisplay", "versionCompare", "watchdog",
 }
 
 -- Must match bridge/Claude MCP Bridge.fh_lua's Install comment byte-for-byte — if that

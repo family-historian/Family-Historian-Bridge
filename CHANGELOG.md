@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+### `fhBridge.searchByName` (issue #62)
+- New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
+  `getAncestors`: `fhBridge.searchByName(forename, surname)` finds every Individual whose
+  given name(s) contain `forename` and whose surname contains `surname`, matched
+  case-insensitively as substrings, not exact/whole-word — `searchByName("Robert",
+  "Taubman")` also matches "Robert Henry TAUBMAN". Either argument may be omitted/`""`
+  to skip filtering on that part of the name; passing neither raises an error rather
+  than silently scanning every Individual in the project.
+- Matches against the NAME field's `GIVEN_ALL`/`SURNAME` Data Reference qualifiers, not
+  the raw stored NAME text or `fhIndGetName`'s display string, so it matches consistently
+  regardless of how a given record orders/prefixes its name parts.
+- Returns an array of the same `{id, qualifiedId, name, sex}` descriptor shape as
+  `getFamilyGroup`/`getAncestors`'s own `.individual` field, in FH's own record order.
+  Unlike the other three helpers it takes no pointer/qualified-id argument — it scans
+  every Individual record in the project itself.
+- Wired into `env.fhBridge` unconditionally (both access modes), same as the other three
+  read-only query helpers.
+
+### `fhBridge.getFamilyGroup`/`getAllDetails`/`getAncestors` (issue #62)
+- New `bridge/familyHelper.lua` module, three read-only tree-walking helpers so a
+  `run_lua` script doesn't have to hand-roll the FAMS/FAMC/HUSB/WIFE/CHIL "SAME_TAG"
+  MoveTo/MoveNext dance every time: `fhBridge.getFamilyGroup(indiPtr, type)` (`type`:
+  `all`/`parents`/`siblings`/`spouses`, default `all`) returns every relative reachable
+  through any of the Individual's FAMC/FAMS records as `{relationship, individual,
+  family}`; `fhBridge.getAncestors(indiPtr, maxGenerations)` walks the same FAMC chain
+  breadth-first as `{generation, line, individual, family}`, deduped by record id
+  (pedigree collapse) so a malformed cyclic project can't loop it forever;
+  `fhBridge.getAllDetails(ptr)` recursively describes any item pointer — a whole
+  record or a single field/Fact — as one plain tree of tag/value/link/children.
+- Unlike `sourceHelper.lua`/`sessionLogHelper.lua`, every fh* function this module
+  calls is a read primitive already granted in the sandbox's Read-only half, so
+  `sandbox.lua` now builds `env.fhBridge` unconditionally (both access modes) with
+  these three, and only *adds* the write-gated `createSourceFromTemplate`/
+  `citeSource`/`logActivity` members on top under Read-write — `env.fhBridge` is no
+  longer Read-write-only itself.
+- Every function returns plain JSON-safe descriptor tables (id/qualifiedId/name/etc.),
+  never a raw Item Pointer — jsonEncode.lua can't encode one, so a helper that handed
+  one back would break the first time a script returned it.
+- All three also accept a qualified id string (e.g. `"I219"`, exactly the form every
+  `.qualifiedId` field they return already uses) anywhere they take a pointer, resolved
+  via `MoveToRecordById` — so a script can call `fhBridge.getAllDetails(entry.individual.qualifiedId)`
+  straight off a `getFamilyGroup`/`getAncestors` result entry, without re-resolving it to
+  a live pointer by hand first. `getFamilyGroup`/`getAncestors` raise a clear error if the
+  id resolves to a non-Individual record.
+- Verified live against a real ~4000-Individual project (multiple FAMS records, custom
+  facts, shared facts, richtext notes with private-text markers): all three walk real
+  multi-marriage/multi-sibling families correctly and every error path (bad `type`, null
+  pointer, malformed/unresolvable qualified id, wrong record type) returns a clean,
+  catchable error rather than crashing the Session.
+- New `run-lua-guidance-family-query-helpers` entry in `gedcom-knowledge-corpus.jsonl`
+  (the same `search_gedcom_knowledge("run_lua guidance")`-bundled family as the
+  call-shape-gotchas/citeSource/writeSessionRolledBack/fhu-global/logActivity entries)
+  documents all three functions' call shapes, the qualified-id-string shortcut, and that
+  they're available under Read-only too — so a session using this MCP actually discovers
+  them instead of hand-rolling the FAMS/FAMC walk itself. `RUN_LUA_DESCRIPTION`'s and
+  `SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION`'s own enumeration sentences updated to name it,
+  both still within their respective truncation-safe-zone byte budgets.
+
 ### logActivity guidance moved to the corpus, tool description shrunk
 - `fhBridge.logActivity`'s call shape, media/`#ToDo` detail, and the `fhGetDisplayText`
   action-composition tip — previously inline in `RUN_LUA_DESCRIPTION`, past the ~2KB point
