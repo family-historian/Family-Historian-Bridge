@@ -23,6 +23,13 @@
   would otherwise silently get wrong. See
   docs/adr/0014-describe-project-flag-census-and-data-quality-namespace.md. (#51)
 
+### GEDCOM knowledge corpus Date/DatePoint guidance
+- Added two entries to `run-lua-guidance-call-shape-gotchas`: `Date`/`DatePoint` objects
+  have no `GetDatePoint()` method (`dt:GetDatePt1()`/`dt:GetDatePt2()` are the correct
+  names), and a Data Reference qualifier (e.g. `fhGetItemText(ptr, "~.BIRT.DATE:YEAR")`)
+  is the simpler default for extracting a date component, with the Date/DatePoint object
+  chain reserved for `dt:Compare()`/`dp:Compare()` needs. (#51)
+
 ## 0.5.0
 
 ### Server version reporting

@@ -262,6 +262,25 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(lower).toMatch(/session has ended|session ends|click start again/);
     expect(combinedText).toMatch(/writeSessionRolledBack/);
   });
+
+  it("documents that Date has no GetDatePoint() method, naming the correct GetDatePt1()/GetDatePt2() (issue #51)", () => {
+    // Before this, a session guessed dt:GetDatePoint() based on plausible naming (the
+    // DatePoint object's own name) — it doesn't exist and throws a Lua error. The correct
+    // methods are dt:GetDatePt1()/dt:GetDatePt2().
+    expect(combinedText).toMatch(/GetDatePoint/);
+    expect(combinedText).toMatch(/GetDatePt1/);
+    expect(combinedText).toMatch(/GetDatePt2/);
+    expect(combinedText.toLowerCase()).toMatch(/doesn't exist|does not exist/);
+  });
+
+  it("recommends Data Reference qualifiers over the Date/DatePoint object chain for simple date extraction (issue #51)", () => {
+    // fhGetItemText(ptr, "~.BIRT.DATE:YEAR") and similar qualifiers return structured date
+    // values directly with no Date/DatePoint object chain and no IsNull() checks needed —
+    // simpler than the object-based approach, and not what fh-help search for "get birth
+    // year from date field" surfaces first.
+    expect(combinedText).toMatch(/:YEAR/);
+    expect(combinedText.toLowerCase()).toMatch(/dt:compare\(\)|dp:compare\(\)/);
+  });
 });
 
 describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION topic list (issue #49)", () => {
