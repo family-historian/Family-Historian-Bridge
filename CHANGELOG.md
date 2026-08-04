@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### logActivity guidance moved to the corpus, tool description shrunk
+- `fhBridge.logActivity`'s call shape, media/`#ToDo` detail, and the `fhGetDisplayText`
+  action-composition tip — previously inline in `RUN_LUA_DESCRIPTION`, past the ~2KB point
+  MCP clients truncate at — now live in a new `gedcom-knowledge-corpus.jsonl` entry
+  alongside `logActivity`'s own missing piece: that it produces an ordinary `_RNOT` record,
+  visible in FH's Research Notes and readable back via `fhu.records("_RNOT")`. A session
+  that called `logActivity` correctly had no documented way to confirm what it did or where
+  the result went. (#55)
+- `RUN_LUA_DESCRIPTION` shrunk from 3697 to under 1900 bytes overall (previously ended its
+  safe zone at byte 1936, only 112 bytes under the ~2048 truncation point); every paragraph
+  now sits safely inside the cutoff instead of just the truncation notice itself.
+
 ## 0.6.0
 
 ### Force UTF-8 string encoding, in the Bridge plugin and in generated plugins

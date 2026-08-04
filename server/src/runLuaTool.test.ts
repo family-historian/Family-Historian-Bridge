@@ -186,12 +186,14 @@ describe("handleRunLua version check (issue #45)", () => {
 });
 
 describe("RUN_LUA_DESCRIPTION", () => {
-  // citeSource guidance, the writeSessionRolledBack/auto-undo explanation, and the eight
-  // excluded-fhu-methods list used to be asserted here directly. They now live in
-  // server/data/gedcom-knowledge-corpus.jsonl instead (see gedcomKnowledge.test.ts's "run_lua
-  // guidance corpus entries" block) — moved out of this description's own literal text because
-  // MCP clients that load tool descriptions via deferred/lazy schema-loading truncate long
-  // descriptions around ~2KB (docs/adr/0011-run-lua-description-truncation-workaround.md).
+  // citeSource guidance, the writeSessionRolledBack/auto-undo explanation, the eight
+  // excluded-fhu-methods list, and the logActivity call-shape/media/#ToDo detail used to be
+  // asserted here directly. They now live in server/data/gedcom-knowledge-corpus.jsonl instead
+  // (see gedcomKnowledge.test.ts's "run_lua guidance corpus entries" block) — moved out of this
+  // description's own literal text because MCP clients that load tool descriptions via
+  // deferred/lazy schema-loading truncate long descriptions around ~2KB
+  // (docs/adr/0011-run-lua-description-truncation-workaround.md; the logActivity detail was
+  // migrated 2026-08-04, issue #55, after the rest had already moved on 2026-08-01).
   // RUN_LUA_DESCRIPTION's own job now is just to point Claude at that corpus entry from within
   // the safe (pre-truncation) zone — see the "safe zone" tests below.
 
@@ -233,25 +235,22 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(noticeEnd).toBeLessThan(2000);
   });
 
-  it("steers Claude to call fhBridge.logActivity after every record-touching action in a Read-write Session", () => {
-    expect(RUN_LUA_DESCRIPTION).toMatch(/fhBridge\.logActivity/);
-    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
+  it("steers Claude to call fhBridge.logActivity after every record-touching action in a Read-write Session, within the safe zone", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    expect(RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET)).toMatch(/fhBridge\.logActivity/);
+    const lower = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET).toLowerCase();
     expect(lower).toMatch(/every record-touching action|after (every|each) (record-touching )?action/);
-    expect(lower).toMatch(/research note/);
+    expect(lower).toMatch(/rolled back/);
   });
 
-  it("documents the logActivity media detail for outstanding physical/digital items never attached", () => {
-    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
-    expect(lower).toMatch(/never (actually )?attached as media|never attached/);
-    expect(lower).toMatch(/to-do|#todo/);
-    expect(lower).toMatch(/photo|physical\/digital|digital item/);
+  it("points Claude at the corpus, not inline text, for logActivity's media/#ToDo detail and the fhGetDisplayText action-composition tip (issue #55)", () => {
+    // The detail itself is asserted against the corpus entry in gedcomKnowledge.test.ts —
+    // this just guards against it creeping back inline and reopening the byte budget.
+    expect(RUN_LUA_DESCRIPTION).not.toMatch(/fhGetDisplayText/);
+    expect(RUN_LUA_DESCRIPTION.toLowerCase()).not.toMatch(/never attached/);
   });
 
-  it("steers Claude to compose a fact-related logActivity action from fhGetDisplayText rather than a hand-typed label", () => {
-    expect(RUN_LUA_DESCRIPTION).toMatch(/fhGetDisplayText/);
-    const lower = RUN_LUA_DESCRIPTION.toLowerCase();
-    expect(lower).toMatch(/fact/);
-    expect(lower).toMatch(/hand-typed|hand typed/);
+  it("keeps the whole description well under the ~2KB truncation point, not just up to the notice", () => {
+    expect(Buffer.byteLength(RUN_LUA_DESCRIPTION, "utf8")).toBeLessThan(1950);
   });
-
 });

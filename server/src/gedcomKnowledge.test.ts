@@ -196,11 +196,12 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
   const results = searchGedcomKnowledge(corpus, "run_lua guidance");
   const combinedText = results.map((r) => r.text).join("\n");
 
-  it('finds all four "run_lua guidance" entries with a single query, via title match', () => {
+  it('finds all five "run_lua guidance" entries with a single query, via title match', () => {
     expect(results.map((r) => r.id).sort()).toEqual([
       "run-lua-guidance-call-shape-gotchas",
       "run-lua-guidance-cite-every-fact",
       "run-lua-guidance-fhu-is-a-global",
+      "run-lua-guidance-log-activity",
       "run-lua-guidance-write-session-rolled-back",
     ]);
   });
@@ -261,6 +262,19 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(lower).toMatch(/plugin error/);
     expect(lower).toMatch(/session has ended|session ends|click start again/);
     expect(combinedText).toMatch(/writeSessionRolledBack/);
+  });
+
+  it("documents fhBridge.logActivity's call shape, the per-Session Research Note it creates, and where to find it (issue #55)", () => {
+    // The call shape and media/#ToDo detail used to live inline in RUN_LUA_DESCRIPTION;
+    // moved here 2026-08-04 alongside the missing piece that actually caused issue #55 — a
+    // session that called logActivity correctly had no documented way to confirm what it
+    // did or where the result went.
+    expect(combinedText).toMatch(/fhBridge\.logActivity\(ptrRecord, action, media\)/);
+    expect(combinedText).toMatch(/fhGetDisplayText/);
+    expect(combinedText).toMatch(/_RNOT/);
+    expect(combinedText.toLowerCase()).toMatch(/research notes\)|browse to research notes/);
+    expect(combinedText).toMatch(/fhu\.records\("_RNOT"\)/);
+    expect(combinedText.toLowerCase()).toMatch(/#todo/);
   });
 
   it("documents that Date has no GetDatePoint() method, naming the correct GetDatePt1()/GetDatePt2() (issue #51)", () => {
