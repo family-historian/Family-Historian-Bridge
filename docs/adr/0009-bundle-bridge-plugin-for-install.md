@@ -59,6 +59,14 @@ still works mechanically (nothing prevents it) but is no longer documented as a 
 route, to avoid two install paths silently drifting apart the way the header's own
 file-list once drifted from `bridge/README.md`'s.
 
+`build.lua` also prepends a UTF-8 BOM (`EF BB BF`) to the artifact — added after testing
+live turned up that a build without one loads into FH as ANSI, even with the entry file's
+own `fhSetStringEncoding("UTF-8")` call (added the same round): that call only sets the
+*runtime* string encoding once the script is already running, and does nothing for how
+FH's Plugin Editor/loader detects the file's on-disk encoding beforehand. Same BOM byte
+sequence and rationale as `install_fh_plugin`'s (docs/adr/0008 decision 5) — Lua's own
+loader skips a leading BOM transparently, so this has no effect on parsing.
+
 ## Out of scope
 
 This ADR makes the artifact *structurally* compatible with `install_fh_plugin` — one file

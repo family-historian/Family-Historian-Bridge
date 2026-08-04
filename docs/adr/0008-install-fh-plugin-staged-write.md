@@ -40,6 +40,17 @@ filename and the plugin's own `@Title` header (not just the filename), so FH's o
 Plugins list disambiguates repeated installs of the same plugin as well as the files on
 disk do.
 
+5. **Always written as UTF-8 with a BOM.** Confirmed live (via `describe_project`'s
+   `contextInfo.CI_STRING_ENCODING`) that a plugin file with no encoding marker loads into
+   FH as ANSI, even though FH's own Plugin Editor defaults new plugins to UTF-8 from
+   version 6 onwards (FH help: "String Encoding and Unicode"). ANSI silently mangles any
+   accented/non-ASCII text a script reads from or writes to the tree — a genealogy tool's
+   data is exactly the kind of text this bites hardest. `handleInstallFhPlugin` prepends
+   the UTF-8 BOM (`U+FEFF`) to every file it writes, which FH's own file-encoding
+   detection looks for (confirmed via fhug.org.uk's `TestEncoding()` snippet checking for
+   the `EF BB BF` byte sequence). `author_fh_plugin`'s own footer, for the manual-save path
+   this tool doesn't cover, tells the user to save as UTF-8 themselves.
+
 Out of scope for this tool: triggering FH's own plugin-registration step (double-click /
 Tools -> Plugins -> Import) after writing the file. That would mean the server executing a
 file it just wrote via the OS shell — a meaningfully bigger capability than writing one —

@@ -91,6 +91,16 @@ const TITLE_LINE_PATTERN = /^@Title:[ \t]*(.*)$/m;
 // plugin's real logic.
 const GENERATED_FOOTER_SEPARATOR = "\n\n---\nSave this as a .fh_lua file yourself";
 
+// A plain-text plugin file with no encoding marker loads into FH as ANSI, not UTF-8 —
+// confirmed live via describe_project's contextInfo reporting CI_STRING_ENCODING "ANSI"
+// on a plugin installed without one, even though FH's own Plugin Editor defaults new
+// plugins to UTF-8 (FH help: "String Encoding and Unicode"). ANSI silently mangles any
+// accented/non-ASCII text a script reads from or writes to the tree — a real risk for a
+// genealogy tool. Prepending the UTF-8 BOM (U+FEFF — Node's default "utf8" write encodes
+// it as the 3-byte EF BB BF sequence FH's own file-encoding detection looks for, per
+// fhug.org.uk's TestEncoding()) makes every plugin this tool writes load as UTF-8.
+const UTF8_BOM = "\uFEFF";
+
 function stripGeneratedFooter(pluginSource: string): string {
   const separatorIndex = pluginSource.indexOf(GENERATED_FOOTER_SEPARATOR);
   return separatorIndex === -1 ? pluginSource : pluginSource.slice(0, separatorIndex);
@@ -162,7 +172,7 @@ export async function handleInstallFhPlugin(
   const versionedSource = appendVersionToTitle(source, version, originalTitle);
 
   try {
-    await deps.writeFile(fullPath, versionedSource);
+    await deps.writeFile(fullPath, UTF8_BOM + versionedSource);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return textResult(`Could not write the plugin file to ${fullPath}: ${message}`, true);
@@ -198,6 +208,8 @@ Only call this when the user explicitly asks you to install (or "save", "add", "
 Pass pluginSource exactly as author_fh_plugin returned it (its trailing "---" install-instructions footer, if you include it, is stripped automatically — no need to trim it yourself).
 
 Never overwrites an existing file. Each install gets the next unused "V<N>" suffix on both the filename and the plugin's own @Title header, based on how many versions of that title are already in the Plugins folder — so asking to install after tweaking the same plugin's logic again produces "<Title> V2", then "V3", etc., rather than clobbering the previous save.
+
+Always writes the file as UTF-8 with a BOM, so FH loads it as Unicode rather than defaulting to ANSI (which silently mangles accented/non-ASCII text). No action needed on your part — this is automatic.
 
 Requires an active Bridge Session (same as run_lua) to look up FH's Plugins folder location live. If no Session is running, tell the user to click Start and retry, or ask them to confirm their Plugins folder path themselves (see docs/user-guide.md's "Where FH's Plugins folder is" — the location differs by FH version and is easy to get wrong) and pass it as the path parameter.
 

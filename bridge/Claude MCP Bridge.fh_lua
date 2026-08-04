@@ -50,6 +50,18 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 -- restriction, just what fhInitialise itself requires as its other two arguments.
 fhInitialise(7, 0, 0, "save_required")
 
+-- Force UTF-8 regardless of this file's own saved file encoding (confirmed live via
+-- describe_project's contextInfo: CI_STRING_ENCODING reported "ANSI" on an unmodified
+-- install). Without this, accented/non-ASCII names, places, etc. round-trip through the
+-- FH API as ANSI and silently lose or mangle characters ANSI can't represent (FH help:
+-- "String Encoding and Unicode") — a real risk for a genealogy tool. Must be called here,
+-- in the main plugin script, before any require() below: FH's docs say
+-- fhSetStringEncoding "should never be used by modules" (scripts loaded via require()),
+-- and the current string encoding it sets is what every required module inherits for the
+-- rest of the Session, per FH's "Special Handling for Modules" — module require() order
+-- below doesn't matter as long as this precedes all of them, which it does.
+fhSetStringEncoding("UTF-8")
+
 socket = require("socket")
 require("iuplua")
 iup.SetGlobal("CUSTOMQUITMESSAGE", "YES") -- avoids known FH/IUP interaction issue on quit

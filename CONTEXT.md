@@ -131,7 +131,9 @@ to a user-confirmed `path` parameter when no Session is running), and never over
 each install gets the next unused `V<N>` suffix on both the filename and the plugin's own
 `@Title` header. Writes via the MCP server's own filesystem access, not through the Bridge
 or `run_lua`'s sandbox; `fhSaveTextFile` and the rest of `run_lua`'s excluded-function list
-are unaffected by this tool's existence.
+are unaffected by this tool's existence. Always writes as UTF-8 with a leading BOM (`U+FEFF`)
+so FH loads the file as Unicode rather than defaulting to ANSI — see docs/adr/0008's
+decision 5.
 _Avoid_: Publish, upload (this project's own name for the operation is "install", matching
 FH's own Tools -> Plugins terminology)
 
