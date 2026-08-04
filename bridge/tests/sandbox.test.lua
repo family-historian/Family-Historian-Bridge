@@ -216,6 +216,7 @@ local fakeFamilyHelper = {
   getAllDetails = function(ptr) return 'alldetails' end,
   getAncestors = function(ptr, maxGenerations) return 'ancestors:' .. tostring(maxGenerations) end,
   searchByName = function(forename, surname) return 'searchbyname:' .. tostring(forename) .. ':' .. tostring(surname) end,
+  getFactsByTag = function(ptr, tags) return 'factsbytag:' .. tostring(tags) end,
 }
 package.loaded.familyHelper = fakeFamilyHelper
 
@@ -338,6 +339,7 @@ check(env.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.
 check(env.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails present under read-only, by reference')
 check(env.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors present under read-only, by reference')
 check(env.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName present under read-only, by reference')
+check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag present under read-only, by reference')
 check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTemplate absent under read-only (calls real fh* write globals directly — must not be reachable without the write gate)')
 check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
@@ -505,6 +507,7 @@ check(envReadWrite3.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 
 check(envReadWrite3.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors still present under read-write, by reference')
 check(envReadWrite3.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName still present under read-write, by reference')
+check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag still present under read-write, by reference')
 
 -- fhBridge.logActivity (require('sessionLogHelper'), issue #36): present, wrapped, forwards
 -- through and flips the tracker the same way createSourceFromTemplate/citeSource do above.

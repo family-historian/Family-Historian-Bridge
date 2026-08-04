@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### `fhBridge.getFactsByTag` (issue #62)
+- New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
+  `getAncestors`/`searchByName`: `fhBridge.getFactsByTag(ptr, tags)` filters a record's
+  own direct ("1st level") children down to the ones matching `tags` — an exact,
+  case-sensitive FH tag string (e.g. `"CENS"`) or an array of them (e.g. `{"BIRT",
+  "DEAT"}`) — and returns an array with one full `getAllDetails`-shape tree per match.
+- Returns every match, not deduped/collapsed — a repeated tag (multiple `CENS` entries
+  across census years, a Rejected + Preferred `BIRT`) is exactly what this exists to
+  surface, so e.g. `getFactsByTag(indi, "CENS")` returns every census fact recorded on
+  that Individual with its own `DATE`/`PLAC`/sources intact.
+- Works on any record type, not just Individuals (`MARR`/`DIV` live on `FAM` records),
+  and accepts a qualified id string the same way `getAllDetails` does.
+- Returns an empty array — not an error — when nothing matches (same philosophy as
+  `searchByName`'s no-results case); errors only on a null pointer or a malformed
+  `tags` argument (nil, `""`, an empty array, or a non-string entry in the array).
+- Wired into `env.fhBridge` unconditionally (both access modes), same as the other four
+  read-only query helpers.
+
 ### `fhBridge.searchByName` (issue #62)
 - New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
   `getAncestors`: `fhBridge.searchByName(forename, surname)` finds every Individual whose

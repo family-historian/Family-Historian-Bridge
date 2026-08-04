@@ -343,21 +343,22 @@ function M.build(accessMode)
     env.fhu = fhuProxy
   end
 
-  -- familyHelper.lua's getFamilyGroup/getAllDetails/getAncestors/searchByName call
-  -- nothing but read primitives already granted above (fhNewItemPtr, item-pointer
-  -- MoveToFirstRecord/MoveTo/MoveNext/MoveToFirstChildItem/IsNotNull/IsNull,
-  -- fhGetValueAsLink, fhGetTag, fhGetItemText, fhGetRecordId, fhGetQualifiedRecordId,
-  -- fhGetDisplayText, fhGetValueType, fhGetValueAsRichText, fhHasChildItem,
-  -- fhIndGetName) -- unlike sourceHelper.lua/sessionLogHelper.lua below, so
-  -- env.fhBridge is built here, unconditionally, rather than inside the read-write
-  -- block. The read-write block only ever adds further (write) members to this same
-  -- table, never replaces it.
+  -- familyHelper.lua's getFamilyGroup/getAllDetails/getAncestors/searchByName/
+  -- getFactsByTag call nothing but read primitives already granted above
+  -- (fhNewItemPtr, item-pointer MoveToFirstRecord/MoveTo/MoveNext/
+  -- MoveToFirstChildItem/IsNotNull/IsNull, fhGetValueAsLink, fhGetTag,
+  -- fhGetItemText, fhGetRecordId, fhGetQualifiedRecordId, fhGetDisplayText,
+  -- fhGetValueType, fhGetValueAsRichText, fhHasChildItem, fhIndGetName) -- unlike
+  -- sourceHelper.lua/sessionLogHelper.lua below, so env.fhBridge is built here,
+  -- unconditionally, rather than inside the read-write block. The read-write block
+  -- only ever adds further (write) members to this same table, never replaces it.
   local realFamilyHelper = require('familyHelper')
   env.fhBridge = {
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
     getAncestors = realFamilyHelper.getAncestors,
     searchByName = realFamilyHelper.searchByName,
+    getFactsByTag = realFamilyHelper.getFactsByTag,
   }
 
   if accessMode == "read-write" then
