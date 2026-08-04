@@ -1,13 +1,9 @@
 # FH MCP Bridge — Windows Installer Guide
 
 This guide is for installing FH MCP Bridge using the **Windows installer**
-(`FH-MCP-Bridge-Setup-X.Y.Z.exe`) — no command line, no Node.js, nothing to build. If
-you were handed a link to a `.exe` file rather than a copy of the project's source code,
-this is the guide you want.
+(`FH-MCP-Bridge-Setup-X.Y.Z.exe`)
 
-*(If instead you have the full project folder and were planning to build it yourself,
-use [docs/user-guide.md](user-guide.md) instead — its "Install (clean machine)" section
-covers that path.)*
+To use on Mac or Linux with Cross over please see [docs/user-guide.md](user-guide.md)
 
 ## What this is
 
@@ -28,15 +24,12 @@ You need, already installed and working:
 2. **Family Historian** itself.
 3. **[Claude Desktop](https://claude.ai/download)**.
 
-That's everything. Unlike building from source, you do **not** need Node.js or any
-other developer tools — the installer brings its own self-contained copy of what the
-server needs to run.
+That's everything.
 
 ## Step 1 — Get the installer
 
-Get the `FH-MCP-Bridge-Setup-X.Y.Z.exe` file (the `X.Y.Z` is a version number, e.g.
-`0.6.0`) from wherever it was shared with you, and save it somewhere you can find it
-again, like your Downloads folder.
+Download the `FH-MCP-Bridge-Setup-X.Y.Z.exe` file (the `X.Y.Z` is a version number, e.g.
+`0.6.0`).
 
 ## Step 2 — Run it
 
@@ -102,8 +95,7 @@ it normally — nothing extra to do.
    not a fault.
 3. Switch to Claude Desktop and ask your question in plain English — no fixed list of
    commands to learn.
-4. Click **Stop** in the dialog when you're done, to get FH back. If you forget, it stops
-   itself automatically after 5 minutes of no activity.
+4. Click **Stop** in the dialog when you're done, to get FH back.
 
 For what Claude can and can't do in each mode, how to get it to write you a standalone
 plugin instead, and general day-to-day troubleshooting (not specific to this installer),
