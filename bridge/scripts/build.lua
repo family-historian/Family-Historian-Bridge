@@ -40,11 +40,22 @@ else
   os.execute('mkdir -p "' .. distDir .. '"')
 end
 
+-- Written with a leading UTF-8 BOM so FH's own file-encoding detection recognizes this
+-- as UTF-8 rather than defaulting to ANSI (same reasoning, and the same EF BB BF marker,
+-- as install_fh_plugin's UTF8_BOM in server/src/installFhPluginTool.ts — see
+-- docs/adr/0008 decision 5). Confirmed necessary by testing live: an unmodified checkout
+-- built without this BOM still loaded into FH as ANSI even after the entry file's own
+-- fhSetStringEncoding("UTF-8") call was added, because that call only sets the *runtime*
+-- string encoding — it does nothing for how FH's Plugin Editor/loader detects the file's
+-- on-disk encoding before any of the script's own code has run.
+local UTF8_BOM = string.char(0xEF, 0xBB, 0xBF)
+
 local outPath = distDir .. "/Claude MCP Bridge.fh_lua"
 local outFile, err = io.open(outPath, "wb")
 if not outFile then
   error("could not write " .. outPath .. ": " .. tostring(err))
 end
+outFile:write(UTF8_BOM)
 outFile:write(bundled)
 outFile:close()
 

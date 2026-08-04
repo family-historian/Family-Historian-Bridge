@@ -115,6 +115,13 @@ describe("handleAuthorFhPlugin", () => {
     expect(text).toMatch(/install_fh_plugin/);
   });
 
+  it("tells the user to save manually as UTF-8, not ANSI, since this tool can't control that path itself", async () => {
+    const text = await textOf(handleAuthorFhPlugin({ pluginType: "report", logic: "local x = 1" }));
+
+    expect(text).toMatch(/UTF-8/);
+    expect(text).toMatch(/ANSI/);
+  });
+
   it("fills the standard header fields from the caller-supplied metadata, for both plugin types", async () => {
     const text = await textOf(
       handleAuthorFhPlugin({

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Force UTF-8 string encoding, in the Bridge plugin and in generated plugins
+- The Bridge plugin now calls `fhSetStringEncoding("UTF-8")` at startup, right after
+  `fhInitialise` and before any `require()`. Confirmed live (via `describe_project`'s new
+  `contextInfo`) that an unmodified install otherwise runs in ANSI, which silently mangles
+  accented/non-ASCII names, places, etc. as they cross the FH API — a real risk for a
+  genealogy tool.
+- `bridge/scripts/build.lua` now also prepends a UTF-8 BOM (`EF BB BF`) to the
+  `bridge/dist/Claude MCP Bridge.fh_lua` artifact it writes. Needed in addition to the
+  `fhSetStringEncoding` call above — confirmed live that a build without the BOM still
+  loaded into FH as ANSI, since `fhSetStringEncoding` only sets the encoding at runtime,
+  after the file's already been loaded, and doesn't affect how FH detects the file's
+  on-disk encoding in the first place.
+- `install_fh_plugin` now writes every plugin file as UTF-8 with the same leading BOM,
+  which FH's own file-encoding detection looks for — a plain file with no marker loads as
+  ANSI even though FH's Plugin Editor defaults new plugins to UTF-8. `author_fh_plugin`'s
+  install-instructions footer now also tells the user to save as UTF-8 themselves, for the
+  manual-save path this tool doesn't cover.
+
 ### `fhGetFlagTag`/`fhGetFactTag` read-only lookup
 - `run_lua`'s Read-only sandbox no longer excludes `fhGetFlagTag`/`fhGetFactTag`
   entirely — their pure `bCreateIfNone=false` lookup branch now works read-only

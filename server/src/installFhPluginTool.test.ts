@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
 import type { InstallFhPluginDeps } from "./installFhPluginTool.js";
-import { GET_PLUGINS_APP_DATA_FOLDER_SCRIPT, handleInstallFhPlugin } from "./installFhPluginTool.js";
+import {
+  GET_PLUGINS_APP_DATA_FOLDER_SCRIPT,
+  handleInstallFhPlugin,
+  INSTALL_FH_PLUGIN_DESCRIPTION,
+} from "./installFhPluginTool.js";
 import { SERVER_VERSION } from "./serverVersion.js";
 
 const PLUGIN_SOURCE = `--[[
@@ -224,6 +228,23 @@ describe("handleInstallFhPlugin — versioning and write behaviour", () => {
     expect(writtenContent).toMatch(/^@Title: plugin V1$/m);
   });
 
+  it("prepends a UTF-8 BOM so FH loads the installed file as Unicode rather than defaulting to ANSI", async () => {
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE },
+      makeDeps({
+        writeFile: async (_filePath, content) => {
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenContent?.charCodeAt(0)).toBe(0xfeff);
+    // The BOM must be the very first character — everything else (e.g. the @Title
+    // header check elsewhere) still needs to see the file's real content right after it.
+    expect(writtenContent?.slice(1)).toMatch(/^--\[\[/);
+  });
+
   it("strips author_fh_plugin's trailing '---' install-instructions footer before writing", async () => {
     const withFooter = `${PLUGIN_SOURCE}\n\n---\nSave this as a .fh_lua file yourself and install it under FH's own permission model.`;
     let writtenContent: string | undefined;
@@ -357,5 +378,12 @@ describe("handleInstallFhPlugin version check (issue #45)", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/click start/i);
     expect(text).toMatch(/path/i);
+  });
+});
+
+describe("INSTALL_FH_PLUGIN_DESCRIPTION", () => {
+  it("documents that the written file is always UTF-8", () => {
+    expect(INSTALL_FH_PLUGIN_DESCRIPTION).toMatch(/UTF-8/);
+    expect(INSTALL_FH_PLUGIN_DESCRIPTION.toLowerCase()).toMatch(/bom/);
   });
 });
