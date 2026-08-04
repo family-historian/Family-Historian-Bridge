@@ -85,7 +85,7 @@ local txtIdleTimeout = iup.text{
     spin="YES", spinmin=timeoutDisplay.MIN_MINUTES, spinmax=timeoutDisplay.MAX_MINUTES,
     value=tostring(DEFAULT_IDLE_TIMEOUT_MINUTES), visiblecolumns=4
 }
-local lblTimeLeft = iup.label{title="", padding="10x10"}
+local lblTimeLeft = iup.label{title="", padding="0x4"}
 local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
 
@@ -98,21 +98,41 @@ lblTimeLeft.expand = "HORIZONTAL"
 
 local dlg = iup.dialog{
     iup.vbox{
-        lblStatus, radAccessMode,
-        iup.hbox{iup.label{title="Idle timeout (min):"}, txtIdleTimeout, gap="8"},
-        lblTimeLeft,
-        iup.fill{expand="YES"},
-        iup.hbox{btnStart, btnStop, gap="8"},
+        lblStatus,
+        -- normalizesize="HORIZONTAL" makes both frames the same width (the wider of the
+        -- two, i.e. Mode's), so the row reads as one balanced settings panel rather than
+        -- two mismatched boxes.
+        iup.hbox{
+            iup.frame{radAccessMode, title="Mode", padding="8x8"},
+            iup.frame{
+                iup.hbox{iup.label{title="Minutes:"}, txtIdleTimeout, gap="8"},
+                title="Idle timeout", padding="8x8"
+            },
+            gap="10", normalizesize="HORIZONTAL"
+        },
+        -- lblTimeLeft rides alongside the buttons rather than owning its own row -- it's
+        -- blank whenever the Session isn't running (i.e. most of the time this dialog is
+        -- on screen), and a dedicated row for it was costing a full row height plus two
+        -- gaps even while empty. expand="HORIZONTAL" (still set where lblTimeLeft is
+        -- created, above) is still needed for the same reason as before -- an
+        -- empty-titled label maps at near-zero width and won't regrow to fit the "Time
+        -- left: M:SS" text set into it later -- it just now expands within this row
+        -- instead of its own.
+        iup.hbox{btnStart, btnStop, lblTimeLeft, gap="10"},
         margin="10x10", gap="10"
     },
     title="Claude MCP Bridge",
-    resize="YES", maxbox="NO", minbox="NO",
-    topmost="YES", size="320x"
+    resize="YES", maxbox="NO", minbox="NO"
 }
--- Map first so RASTERSIZE is populated (width from the SIZE above, height from the
--- children's natural layout), then use that as the floor for MINSIZE -- otherwise a
--- user could resize the dialog small enough to push the Start/Stop buttons
--- off-screen, the same failure this fix is for.
+-- Parent to FH's own window (per FH's help: "Ensuring your Window stays on top") rather
+-- than a system-wide topmost -- this keeps the dialog above Family Historian specifically,
+-- not above every other application on screen.
+iup.SetAttribute(dlg, "NATIVEPARENT", fhGetContextInfo("CI_PARENT_HWND"))
+-- Map first so RASTERSIZE is populated (both dimensions now come from the children's own
+-- natural layout -- no explicit SIZE is set on the dialog any more, since the horizontal
+-- frame row's width depends on Mode's own natural width), then use that as the floor for
+-- MINSIZE -- otherwise a user could resize the dialog small enough to push the Start/Stop
+-- buttons off-screen, the same failure this fix is for.
 dlg:map()
 dlg.minsize = dlg.rastersize
 
