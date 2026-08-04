@@ -96,4 +96,12 @@ Copy-Item (Join-Path $repoRoot 'bridge\dist\Claude MCP Bridge.fh_lua') (Join-Pat
 Write-Host "== Staging config-merge script =="
 Copy-Item (Join-Path $installerDir 'config-merge.ps1') (Join-Path $stagingDir 'config-merge.ps1')
 
+Write-Host "== Writing installer version include (from server/package.json) =="
+$packageJson = Get-Content (Join-Path $repoRoot 'server\package.json') -Raw | ConvertFrom-Json
+$appVersion = $packageJson.version
+if (-not $appVersion) { throw "Could not read a version field from server/package.json" }
+$versionIssPath = Join-Path $stagingDir 'version.iss'
+Set-Content -Path $versionIssPath -Value "#define AppVersion `"$appVersion`""
+Write-Host "AppVersion = $appVersion ($versionIssPath)"
+
 Write-Host "`nStaging complete: $stagingDir"

@@ -34,6 +34,11 @@ they drift:
 - `server/package-lock.json` — **two** occurrences: the top-level `"version"` field and
   the nested `"packages"[""]["version"]` field.
 
+(`installer/fh-mcp-bridge.iss`'s `AppVersion` is *not* a fourth copy to bump here: it's
+generated at build time by `installer/stage.ps1` from `server/package.json`, into a
+gitignored `installer/staging/version.iss` that the `.iss` file includes. This closed a
+real, previously-undocumented drift — see the Risks section below.)
+
 (Commit message convention so far: `Bump version to X.Y.Z`.)
 
 ## 5. Public-release check: strip FH8-specific wording
@@ -153,7 +158,12 @@ curl -sS -X POST "$API/releases/<release-id>/assets?name=fh-mcp-bridge-X.Y.Z.zip
   `sourceHelper.lua`), caught and partially fixed in the 0.2.0 changelog entry, then
   recurred and was fixed again 2026-08-01. Any hand-maintained list/value copied in more
   than one place is a standing risk — the version bump is the same shape of problem,
-  just currently small enough (3 files) to get away with doing by hand.
+  just currently small enough (3 files) to get away with doing by hand. It actually bit a
+  *fourth*, undocumented copy the same way: `installer/fh-mcp-bridge.iss`'s `AppVersion`
+  sat at `0.5.0` while the three tracked copies had already moved to `0.6.0`, because it
+  wasn't in this checklist for anyone to remember. That copy is now generated at build
+  time (see step 4) instead of hand-maintained, which is probably the right fix for the
+  three remaining copies too, once the release cadence justifies the scripting effort.
 - **The FH8-suppression step (5) has never been written down before this doc.** It's been
   done correctly for all three releases so far, but only because whoever cut the release
   remembered to do it — nothing would have caught a miss.
