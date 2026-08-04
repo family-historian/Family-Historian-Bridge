@@ -1,5 +1,5 @@
 -- Read-only query helpers -- fhBridge.getFamilyGroup, fhBridge.getAllDetails,
--- fhBridge.getAncestors, fhBridge.searchByName. Unlike sourceHelper.lua/
+-- fhBridge.getAncestors, fhBridge.searchByName, fhBridge.getFactsByTag. Unlike sourceHelper.lua/
 -- sessionLogHelper.lua, every fh* function this module calls (fhNewItemPtr, the
 -- item-pointer MoveToFirstRecord/MoveTo/MoveNext/MoveToFirstChildItem/IsNotNull/
 -- IsNull methods, fhGetValueAsLink, fhGetTag, fhGetItemText, fhGetRecordId,
@@ -83,6 +83,35 @@ local function containsCI(haystack, needle)
     return true
   end
   return (haystack or ""):lower():find(needle:lower(), 1, true) ~= nil
+end
+
+-- Builds a lookup set from getFactsByTag's `tags` argument, which may be a single tag
+-- string (e.g. "CENS") or an array of tag strings (e.g. {"BIRT", "DEAT"}) -- accepting
+-- either shape means a caller after just one fact type never has to wrap it in a
+-- table. Errors loudly on nil, "", an empty table, or a table containing a
+-- non-string/empty entry -- a filter that silently matched nothing (or crashed later
+-- on a bad comparison) would be a worse failure mode than a clear error up front.
+local function tagSet(tags, callerName)
+  local list = tags
+  if type(tags) == "string" then
+    list = { tags }
+  end
+  if type(list) ~= "table" then
+    error(callerName .. ": tags must be a tag string (e.g. 'CENS') or an array of tag strings")
+  end
+  local set = {}
+  local count = 0
+  for _, tag in ipairs(list) do
+    if type(tag) ~= "string" or tag == "" then
+      error(callerName .. ": every tag must be a non-empty string (got " .. tostring(tag) .. ")")
+    end
+    set[tag] = true
+    count = count + 1
+  end
+  if count == 0 then
+    error(callerName .. ": tags must include at least one tag")
+  end
+  return set
 end
 
 -- Family record summary -- identifies which FAMS/FAMC record connects a relative back
@@ -358,6 +387,47 @@ function M.getAllDetails(ptr)
     error("getAllDetails: pointer must not be null")
   end
   return describeItem(ptr)
+end
+
+-- familyHelper.getFactsByTag(ptr, tags)
+-- ptr may be a live Item Pointer or a qualified id string (e.g. "I219") -- see
+-- resolvePointer above. Works on any record type, not just Individuals -- CENS/BIRT
+-- are Individual concepts, but MARR/DIV live on FAM records, and this doesn't care
+-- which kind of record ptr actually is.
+--
+-- tags is either one tag string (e.g. "CENS") or an array of tag strings (e.g.
+-- {"BIRT", "DEAT"}) -- FH's own resolved tag, exact and case-sensitive, the same
+-- string describeItem's own .tag field already returns (custom facts resolve to their
+-- own real tag, e.g. "_ATTR-REGIMENT", not a generic FACT/EVEN + TYPE pair -- see
+-- run-lua-guidance-call-shape-gotchas).
+--
+-- Only looks at ptr's own DIRECT children -- the "1st level" a Fact tag actually
+-- lives at on a record -- not recursively into subfields, so filtering for "DATE"
+-- would not reach down into every fact's own DATE subfield.
+--
+-- Returns an array, one full getAllDetails-shape tree per matching child, in record
+-- order -- not deduped or sorted, since a repeated tag (multiple CENS entries, a
+-- Rejected + Preferred BIRT) is exactly what this exists to surface, not collapse.
+-- An empty array (not an error) means no matching facts were found -- same philosophy
+-- as searchByName: a legitimate answer, not a failure.
+function M.getFactsByTag(ptr, tags)
+  ptr = resolvePointer(ptr)
+  if not ptr or ptr:IsNull() then
+    error("getFactsByTag: pointer must not be null")
+  end
+  local wanted = tagSet(tags, "getFactsByTag")
+
+  local results = {}
+  local child = fhNewItemPtr()
+  child:MoveToFirstChildItem(ptr)
+  while child:IsNotNull() do
+    if wanted[fhGetTag(child)] then
+      table.insert(results, describeItem(child))
+    end
+    child:MoveNext()
+  end
+
+  return results
 end
 
 -- familyHelper.searchByName(forename, surname)

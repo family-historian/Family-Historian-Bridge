@@ -294,6 +294,13 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText).toMatch(/searchByName\("Robert", "Taubman"\)/);
   });
 
+  it("documents fhBridge.getFactsByTag's 1st-level-only tag filtering, that it accepts a single tag or an array, and that it works on any record type (issue #62)", () => {
+    expect(combinedText).toMatch(/fhBridge\.getFactsByTag\(ptr, tags\)/);
+    expect(combinedText).toMatch(/DIRECT children/);
+    expect(combinedText).toMatch(/\{"BIRT", "DEAT"\}/);
+    expect(combinedText.toLowerCase()).toMatch(/not just individuals/);
+  });
+
   it("documents that Date has no GetDatePoint() method, naming the correct GetDatePt1()/GetDatePt2() (issue #51)", () => {
     // Before this, a session guessed dt:GetDatePoint() based on plausible naming (the
     // DatePoint object's own name) — it doesn't exist and throws a Lua error. The correct

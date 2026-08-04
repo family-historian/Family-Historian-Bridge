@@ -565,7 +565,75 @@ do
 end
 
 ------------------------------------------------------------------
--- Qualified id string ("I<n>") accepted anywhere a pointer is, across all three
+-- getFactsByTag: filters ptr's direct children to a matching tag (or set of tags),
+-- returning a full getAllDetails-shape tree for each match
+------------------------------------------------------------------
+
+do
+  local indi = newIndi("Census Plugin", "Male")
+
+  local birt = { tag = "BIRT", children = {}, valueType = "" }
+  table.insert(indi.children, birt)
+  addTextChild(birt, "DATE", "1 JAN 1880")
+
+  local cens1901 = { tag = "CENS", children = {}, valueType = "" }
+  table.insert(indi.children, cens1901)
+  addTextChild(cens1901, "DATE", "1901")
+  addTextChild(cens1901, "PLAC", "Somewhere")
+
+  local cens1911 = { tag = "CENS", children = {}, valueType = "" }
+  table.insert(indi.children, cens1911)
+  addTextChild(cens1911, "DATE", "1911")
+  addTextChild(cens1911, "PLAC", "Somewhere Else")
+
+  local censusResults = familyHelper.getFactsByTag(ptrFor(indi), "CENS")
+  check(#censusResults == 2, 'getFactsByTag(ptr, "CENS") returns both CENS facts, not just the first')
+  check(censusResults[1].tag == "CENS" and censusResults[2].tag == "CENS", 'every result has the requested tag')
+
+  local function findChild(node, tag)
+    for _, child in ipairs(node.children) do
+      if child.tag == tag then return child end
+    end
+    return nil
+  end
+  check(findChild(censusResults[1], "DATE").value == "1901", 'first CENS result carries its own full detail tree (DATE)')
+  check(findChild(censusResults[2], "PLAC").value == "Somewhere Else", 'second CENS result carries its own full detail tree (PLAC)')
+
+  local multiTag = familyHelper.getFactsByTag(ptrFor(indi), { "BIRT", "CENS" })
+  check(#multiTag == 3, 'getFactsByTag accepts an array of tags and returns every match across all of them (1 BIRT + 2 CENS)')
+
+  local noMatch = familyHelper.getFactsByTag(ptrFor(indi), "DEAT")
+  check(type(noMatch) == 'table' and #noMatch == 0, 'getFactsByTag returns an empty array, not an error, when nothing matches')
+end
+
+------------------------------------------------------------------
+-- getFactsByTag: errors
+------------------------------------------------------------------
+
+do
+  local indi = newIndi("Errors Plugin", "Male")
+
+  local okNullPtr, errNullPtr = pcall(familyHelper.getFactsByTag, newPtr(), "CENS")
+  check(not okNullPtr, 'getFactsByTag on a null pointer raises an error')
+  check(contains(errNullPtr, "getFactsByTag"), 'the error names the function')
+
+  local okNilTags, errNilTags = pcall(familyHelper.getFactsByTag, ptrFor(indi), nil)
+  check(not okNilTags, 'getFactsByTag with nil tags raises an error')
+  check(contains(errNilTags, "getFactsByTag"), 'the error names the function')
+
+  local okEmptyTable, errEmptyTable = pcall(familyHelper.getFactsByTag, ptrFor(indi), {})
+  check(not okEmptyTable, 'getFactsByTag with an empty tags array raises an error')
+  check(contains(errEmptyTable, "getFactsByTag"), 'the error names the function')
+
+  local okBadEntry, errBadEntry = pcall(familyHelper.getFactsByTag, ptrFor(indi), { "CENS", 123 })
+  check(not okBadEntry, 'getFactsByTag with a non-string entry in the tags array raises an error')
+
+  local okBadType, errBadType = pcall(familyHelper.getFactsByTag, ptrFor(indi), 123)
+  check(not okBadType, 'getFactsByTag with a non-string, non-table tags argument raises an error')
+end
+
+------------------------------------------------------------------
+-- Qualified id string ("I<n>") accepted anywhere a pointer is, across all four
 -- functions -- resolved via MoveToRecordById, same as a live pointer would resolve.
 ------------------------------------------------------------------
 
@@ -583,6 +651,9 @@ do
 
   local detailsById = familyHelper.getAllDetails(qualifiedId)
   check(detailsById.tag == "INDI" and detailsById.id == self_.id, 'getAllDetails accepts a qualified id string and resolves the right record')
+
+  local factsById = familyHelper.getFactsByTag(qualifiedId, "FAMS")
+  check(#factsById == 1 and factsById[1].tag == "FAMS", 'getFactsByTag accepts a qualified id string in place of a pointer')
 end
 
 ------------------------------------------------------------------
@@ -607,6 +678,9 @@ do
   local famQualifiedId = "F" .. recordsByTag["FAM"][1].id
   local famDetails = familyHelper.getAllDetails(famQualifiedId)
   check(famDetails.tag == "FAM", 'getAllDetails resolves a non-Individual qualified id fine (any record type)')
+
+  local famFacts = familyHelper.getFactsByTag(famQualifiedId, "HUSB")
+  check(#famFacts == 1 and famFacts[1].tag == "HUSB", 'getFactsByTag resolves a non-Individual qualified id fine too (any record type)')
 
   local okWrongType, errWrongType = pcall(familyHelper.getFamilyGroup, famQualifiedId, "parents")
   check(not okWrongType, 'getFamilyGroup rejects a qualified id that resolves to a non-Individual record')

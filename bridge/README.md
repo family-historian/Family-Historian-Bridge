@@ -58,7 +58,7 @@ implements.
   (plain FTF text, not an interactive checkbox) under that entry, with the location in
   parentheses when one was mentioned. This never touches the media file's bytes or the
   filesystem; the user drags the file into FH themselves after the Session ends.
-- `familyHelper.lua` — four read-only query helpers, unlike the two above: every fh*
+- `familyHelper.lua` — five read-only query helpers, unlike the two above: every fh*
   function this module calls is a read primitive already granted in the Read-only half of
   the sandbox, so `sandbox.lua` wires `env.fhBridge` up with these for BOTH access modes,
   and only *adds* the read-write-only members above on top of that same table.
@@ -99,9 +99,18 @@ implements.
   (not the raw stored NAME text), so it matches consistently regardless of how a given
   record orders/prefixes its name parts. Returns an array of the same descriptor shape as
   `getFamilyGroup`/`getAncestors`' own `.individual` field, in FH's own record order (not
-  sorted). Unlike the other three, it doesn't take a pointer/qualified-id argument — it
+  sorted). Unlike the other four, it doesn't take a pointer/qualified-id argument — it
   scans every Individual record in the project itself (`MoveToFirstRecord("INDI")` +
-  `MoveNext()`).
+  `MoveNext()`). `fhBridge.getFactsByTag(ptr, tags)` filters `ptr`'s own direct children
+  (a record's "1st level" — the level a Fact tag actually lives at) to just the ones
+  matching `tags`, an exact/case-sensitive FH tag string (e.g. `"CENS"`) or an array of
+  them (e.g. `{"BIRT", "DEAT"}`), and returns an array with one full `getAllDetails`-shape
+  tree per match, in record order — not deduped, so a repeated tag (multiple `CENS` entries
+  across census years, a Rejected + Preferred `BIRT`) is fully surfaced rather than
+  collapsed. Works on any record type (`MARR`/`DIV` live on `FAM` records), accepts a
+  qualified id string the same as `getAllDetails`, and returns an empty array — not an
+  error — when nothing matches; it errors only on a null pointer or a missing/malformed
+  `tags` argument (nil, `""`, an empty array, or a non-string entry in the array).
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
 `timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, `familyHelper.lua`, and
@@ -439,9 +448,9 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    matches the Bridge's own version (check the dialog title bar/`@Version` header for the
    exact string, or just send the same one back) and confirm the mismatch line disappears
    from the next status update.
-19. `fhBridge.getFamilyGroup`/`getAllDetails`/`getAncestors`/`searchByName` (familyHelper.lua):
-   with a real FH project open, select **Read-only** (not Read-write — the point of this
-   step is that these four work without the write gate), click Start:
+19. `fhBridge.getFamilyGroup`/`getAllDetails`/`getAncestors`/`searchByName`/`getFactsByTag`
+   (familyHelper.lua): with a real FH project open, select **Read-only** (not Read-write —
+   the point of this step is that these five work without the write gate), click Start:
    ```bash
    python3 -c "
    import socket
@@ -453,6 +462,7 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
      details = fhBridge.getAllDetails(p),
      ancestors = fhBridge.getAncestors(p, 3),
      byName = fhBridge.searchByName(fhGetItemText(p, \"~.NAME:GIVEN_ALL\"), nil),
+     byTag = fhBridge.getFactsByTag(p, {\"BIRT\", \"CENS\"}),
    }
    '''
    s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
@@ -467,12 +477,16 @@ proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
    names/relationships against FH's own Family view for that person), `details` (a nested
    tree with the record's own `tag`/`id`/`qualifiedId` and a `children` array covering
    every field FH's own Property Box shows for that person), `ancestors` (an array of
-   `{generation, line, individual, family}` entries no deeper than generation 3), and
-   `byName` (an array of `{id, qualifiedId, name, sex}` entries — every Individual whose
-   given name(s) contain the first Individual's own given name(s); confirm the first
-   Individual itself is in the list, and cross-check the count against FH's own Find
-   dialog searching that same forename). Confirm nothing in the project changed (these are
+   `{generation, line, individual, family}` entries no deeper than generation 3), `byName`
+   (an array of `{id, qualifiedId, name, sex}` entries — every Individual whose given
+   name(s) contain the first Individual's own given name(s); confirm the first Individual
+   itself is in the list, and cross-check the count against FH's own Find dialog searching
+   that same forename), and `byTag` (an array of full detail trees, one per `BIRT`/`CENS`
+   fact recorded directly on that first Individual — cross-check the count and each entry's
+   `DATE`/`PLAC` children against FH's own Facts tab for that person; an Individual with no
+   census facts recorded should still get a valid, non-error result covering just their
+   `BIRT`, or `[]` if they have neither). Confirm nothing in the project changed (these are
    read-only). Then repeat with Read-write selected instead and confirm the same script
    still succeeds with the same shape of result — unlike
-   `fhBridge.createSourceFromTemplate`/`citeSource`/`logActivity`, these four are not
+   `fhBridge.createSourceFromTemplate`/`citeSource`/`logActivity`, these five are not
    gated to Read-write.
