@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0
+
 ### Force UTF-8 string encoding, in the Bridge plugin and in generated plugins
 - The Bridge plugin now calls `fhSetStringEncoding("UTF-8")` at startup, right after
   `fhInitialise` and before any `require()`. Confirmed live (via `describe_project`'s new
