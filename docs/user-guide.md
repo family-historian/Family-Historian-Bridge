@@ -10,6 +10,11 @@ tree, but not change anything. Pick **Read-write** at Start instead to additiona
 Claude create, edit, and delete records while answering your question (see
 [What it can do right now](#what-it-can-do-right-now)).
 
+*(On Windows, installing from a `FH-MCP-Bridge-Setup-X.Y.Z.exe` file instead of this
+project's source? Use [docs/windows-installer-guide.md](windows-installer-guide.md) for
+install steps — it needs no Node.js and no command line — then come back here from its
+[Step 5](windows-installer-guide.md#step-5--use-it) onward for day-to-day use.)*
+
 ## How it works, in short
 
 Two pieces talk to each other over your own machine only (nothing goes over the internet

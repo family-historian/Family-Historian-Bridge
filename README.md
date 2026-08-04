@@ -49,7 +49,12 @@ moment they click Stop (or after 5 minutes idle).
 
 Full walkthrough, troubleshooting, and day-to-day usage: **[docs/user-guide.md](docs/user-guide.md)**.
 
-Short version:
+**Windows end user, installer in hand?** If you were given a `FH-MCP-Bridge-Setup-X.Y.Z.exe`
+file rather than this project's source, skip the build steps below — use
+**[docs/windows-installer-guide.md](docs/windows-installer-guide.md)** instead. It needs
+no Node.js and no command line.
+
+Short version (building from source):
 
 1. **Get the project files** — copy or clone this whole folder onto the machine running FH.
 2. **Build the MCP server**:
