@@ -58,7 +58,7 @@ implements.
   (plain FTF text, not an interactive checkbox) under that entry, with the location in
   parentheses when one was mentioned. This never touches the media file's bytes or the
   filesystem; the user drags the file into FH themselves after the Session ends.
-- `familyHelper.lua` — five read-only query helpers, unlike the two above: every fh*
+- `familyHelper.lua` — six read-only query helpers, unlike the two above: every fh*
   function this module calls is a read primitive already granted in the Read-only half of
   the sandbox, so `sandbox.lua` wires `env.fhBridge` up with these for BOTH access modes,
   and only *adds* the read-write-only members above on top of that same table.
@@ -76,19 +76,31 @@ implements.
   presentation choice, not this helper's job. Both dedupe by record id (pedigree collapse)
   and never hand back a raw Item Pointer — `individual`/`family` are plain descriptor
   tables (`id`, `qualifiedId`, plus `name`/`sex` for an individual), since jsonEncode.lua
-  cannot encode a pointer at all. `fhBridge.getAllDetails(ptr)` works on any item pointer
+  cannot encode a pointer at all. `fhBridge.getDescendants(indiPtr, maxGenerations,
+  dnaLine)` (issue #64) is the mirror image of `getAncestors`: breadth-first walk down
+  every FAMS/CHIL record instead of up FAMC/HUSB/WIFE, same optional generation cap and
+  pedigree-collapse dedupe. `line` entries are `"son"`/`"daughter"` (read off each
+  step's own SEX, `"child"` if unrecorded) rather than `getAncestors`' `"father"`/
+  `"mother"` role labels — a CHIL item carries no equivalent role of its own. Optional
+  third argument `dnaLine` (`"y-chrom"`/`"mtdna"`) filters the result to descendants
+  sharing that DNA line with `indiPtr`, via FH's own built-in `DnaShareYChrom`/
+  `DnaShareMtDna` functions (`fhCallBuiltInFunction`) rather than this module
+  reimplementing Y-DNA/mitochondrial inheritance rules itself — see
+  `docs/adr/0016-getdescendants-defers-dna-line-logic-to-fh-builtin.md`.
+  `fhBridge.getAllDetails(ptr)` works on any item pointer
   (a whole record or a single field/Fact) and recursively describes it and every child
   item beneath it as one plain tree (`tag`, `id`/`qualifiedId` for record items, `value`
   for items that store one, `link` for link-classed items — a descriptor of the linked
   record, not the record's own fields, to avoid walking back out of the record passed in —
   and `children`) — richtext fields go through `GetPlainText()` rather than raw FTF markup,
   same reasoning as `run-lua-get-plain-text-from-richtext` in the gedcom-knowledge-corpus.
-  Every one of the three also accepts a qualified id string (e.g. `"I219"`, exactly the
+  Every one of the four also accepts a qualified id string (e.g. `"I219"`, exactly the
   form each `.qualifiedId` field above already uses) anywhere it takes a pointer, resolved
   via `MoveToRecordById` — so a script can call e.g. `fhBridge.getAllDetails(entry.individual.qualifiedId)`
-  directly on a `getFamilyGroup`/`getAncestors` result entry, without first re-resolving it
-  to a live pointer by hand. `getFamilyGroup`/`getAncestors` (Individual-only) raise a clear
-  error if the qualified id resolves to a non-`INDI` record (e.g. passing a family's `"F13"`
+  directly on a `getFamilyGroup`/`getAncestors`/`getDescendants` result entry, without
+  first re-resolving it to a live pointer by hand. `getFamilyGroup`/`getAncestors`/
+  `getDescendants` (Individual-only) raise a clear error if the qualified id resolves to
+  a non-`INDI` record (e.g. passing a family's `"F13"`
   by mistake); `getAllDetails` accepts any record type's qualified id, matching its own
   "any record pointer" contract. `fhBridge.searchByName(forename, surname)` finds every
   Individual whose given name(s) contain `forename` and whose surname contains `surname`,
@@ -99,7 +111,7 @@ implements.
   (not the raw stored NAME text), so it matches consistently regardless of how a given
   record orders/prefixes its name parts. Returns an array of the same descriptor shape as
   `getFamilyGroup`/`getAncestors`' own `.individual` field, in FH's own record order (not
-  sorted). Unlike the other four, it doesn't take a pointer/qualified-id argument — it
+  sorted). Unlike the other five, it doesn't take a pointer/qualified-id argument — it
   scans every Individual record in the project itself (`MoveToFirstRecord("INDI")` +
   `MoveNext()`). `fhBridge.getFactsByTag(ptr, tags)` filters `ptr`'s own direct children
   (a record's "1st level" — the level a Fact tag actually lives at) to just the ones
