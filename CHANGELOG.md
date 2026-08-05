@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Prototype: `.mcpb` (Claude Desktop Extension) bundle for the server (issue #59)
+- `node installer/build-dxt.mjs` builds `installer/output/fh-mcp-bridge-<version>.mcpb` —
+  a Claude Desktop Extension installable via Settings → Extensions (or double-click/
+  drag-and-drop), for the newer unified/MSIX Claude Desktop build that no longer honors
+  `claude_desktop_config.json` (issue #56). Not yet wired into either release script —
+  see docs/adr/0015-mcpb-bundle-manifest-is-generated-not-hand-copied.md.
+- `installer/verify-dxt.mjs` (or `--verify`) extracts a built bundle and confirms its
+  server actually starts under its own manifest command/args and registers the expected
+  tools, headlessly — the Claude Desktop install UI itself still needs a hands-on check.
+
 ### Bridge dialog: colour by Session state
 - The Bridge plugin dialog's background now colours itself by state instead of relying
   solely on the status label's text: grey while stopped, green while listening

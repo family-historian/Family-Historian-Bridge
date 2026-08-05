@@ -26,3 +26,16 @@ right OS and refuses otherwise:
 
 Neither script commits anything or touches the other platform's release -- run them
 independently, in either order, whenever you want a fresh release artifact.
+
+## Prototype: `.mcpb` (Claude Desktop Extension) bundle
+
+`node installer/build-dxt.mjs [--verify]` builds a `.mcpb` bundle for the server --
+`installer/output/fh-mcp-bridge-<version>.mcpb` -- installable via Claude Desktop's
+Settings -> Extensions (or double-click/drag-and-drop) instead of the two scripts above.
+This is issue #59's prototype, not yet wired into either release script: see
+`docs/adr/0015-mcpb-bundle-manifest-is-generated-not-hand-copied.md` for why it needs no
+bundled Node runtime (unlike the Windows installer) and how its manifest is generated
+rather than hand-copied. `--verify` (or a separate `node installer/verify-dxt.mjs
+<path>.mcpb`) extracts the built bundle and confirms its server actually starts and
+registers the expected tools -- headlessly; it does not drive Claude Desktop's own install
+UI, which still needs a hands-on check.
