@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Bridge dialog: colour by Session state
+- The Bridge plugin dialog's background now colours itself by state instead of relying
+  solely on the status label's text: grey while stopped, green while listening
+  read-only, amber while listening read-write (the one state where a script can mutate
+  the project), red on a failed port bind.
+- Set via `dlg.bgcolor`, not the status label — IUP native labels don't reliably honour
+  `BGCOLOR`, confirmed not working live.
+
 ### `fhBridge.getFactsByTag` (issue #62)
 - New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
   `getAncestors`/`searchByName`: `fhBridge.getFactsByTag(ptr, tags)` filters a record's
