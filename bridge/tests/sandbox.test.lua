@@ -215,6 +215,7 @@ local fakeFamilyHelper = {
   getFamilyGroup = function(ptr, type) return 'familygroup:' .. tostring(type) end,
   getAllDetails = function(ptr) return 'alldetails' end,
   getAncestors = function(ptr, maxGenerations) return 'ancestors:' .. tostring(maxGenerations) end,
+  getDescendants = function(ptr, maxGenerations, dnaLine) return 'descendants:' .. tostring(maxGenerations) .. ':' .. tostring(dnaLine) end,
   searchByName = function(forename, surname) return 'searchbyname:' .. tostring(forename) .. ':' .. tostring(surname) end,
   getFactsByTag = function(ptr, tags) return 'factsbytag:' .. tostring(tags) end,
 }
@@ -338,6 +339,7 @@ check(type(env.fhBridge) == 'table', 'fhBridge present under read-only (family/d
 check(env.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.getFamilyGroup present under read-only, by reference (not tracked-write, unlike sourceHelper/sessionLogHelper\'s members)')
 check(env.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails present under read-only, by reference')
 check(env.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors present under read-only, by reference')
+check(env.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants present under read-only, by reference')
 check(env.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName present under read-only, by reference')
 check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag present under read-only, by reference')
 check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTemplate absent under read-only (calls real fh* write globals directly — must not be reachable without the write gate)')
@@ -506,6 +508,7 @@ check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips 
 check(envReadWrite3.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.getFamilyGroup still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors still present under read-write, by reference')
+check(envReadWrite3.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants still present under read-write, by reference')
 check(envReadWrite3.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag still present under read-write, by reference')
 

@@ -1,10 +1,12 @@
 -- Read-only query helpers -- fhBridge.getFamilyGroup, fhBridge.getAllDetails,
--- fhBridge.getAncestors, fhBridge.searchByName, fhBridge.getFactsByTag. Unlike sourceHelper.lua/
+-- fhBridge.getAncestors, fhBridge.getDescendants, fhBridge.searchByName,
+-- fhBridge.getFactsByTag. Unlike sourceHelper.lua/
 -- sessionLogHelper.lua, every fh* function this module calls (fhNewItemPtr, the
 -- item-pointer MoveToFirstRecord/MoveTo/MoveNext/MoveToFirstChildItem/IsNotNull/
 -- IsNull methods, fhGetValueAsLink, fhGetTag, fhGetItemText, fhGetRecordId,
 -- fhGetQualifiedRecordId, fhGetDisplayText, fhGetValueType, fhGetValueAsRichText,
--- fhHasChildItem, fhIndGetName) is a read primitive already granted in sandbox.lua's
+-- fhHasChildItem, fhIndGetName, fhCallBuiltInFunction) is a read primitive already
+-- granted in sandbox.lua's
 -- Read-only half -- so sandbox.lua wires this module's functions through for BOTH
 -- access modes, not read-write only.
 --
@@ -293,6 +295,107 @@ function M.getAncestors(indiPtr, maxGenerations)
       eachFamilyLink(entry.ptr, "FAMC", function(fam)
         eachFamilyMember(fam, "HUSB", function(p) visit("father", p, fam, entry.line) end)
         eachFamilyMember(fam, "WIFE", function(p) visit("mother", p, fam, entry.line) end)
+      end)
+    end
+
+    frontier = nextFrontier
+  end
+
+  return results
+end
+
+-- Maps getDescendants' dnaLine argument to the exact built-in-function name
+-- fhCallBuiltInFunction expects -- see fhCallBuiltInFunction.htm ("You can call any
+-- built-in function from within Lua...") and FH's own DnaShareYChrom/DnaShareMtDna
+-- help pages for what each actually computes.
+local DNA_LINE_BUILTIN = { ["y-chrom"] = "DnaShareYChrom", mtdna = "DnaShareMtDna" }
+
+-- familyHelper.getDescendants(indiPtr, maxGenerations, dnaLine)
+-- indiPtr may be a live Item Pointer or a qualified id string (e.g. "I219") -- see
+-- resolvePointer above.
+--
+-- Breadth-first walk down every FAMS record from indiPtr: generation 1 is indiPtr's
+-- own children, generation 2 their children, and so on -- the mirror image of
+-- getAncestors' walk up FAMC, with the same maxGenerations/pedigree-collapse/cycle
+-- -safety behaviour: optional cap (nil/omit for no limit), each descendant visited
+-- once at the shallowest generation it's reachable from (a descendant reachable via
+-- more than one path -- e.g. cousins who married -- is only reported once).
+--
+-- Returns an array of { generation, line, individual, family }: line is an array of
+-- "son"/"daughter" steps from indiPtr down to this descendant (e.g. {"son",
+-- "daughter"} is a son's daughter), read off each step's own SEX rather than mirroring
+-- getAncestors' HUSB/WIFE-role "father"/"mother" labels, since a CHIL item carries no
+-- equivalent role of its own -- SEX is what dnaLine (below) actually needs anyway.
+-- "child" is used for an Individual with no recorded SEX, rather than raising an
+-- error over it -- a descendant list shouldn't fail outright just because one person's
+-- sex was never entered.
+--
+-- dnaLine (optional, nil/"y-chrom"/"mtdna") filters the returned array down to
+-- descendants who share a specific DNA line with indiPtr, using FH's own built-in
+-- DnaShareYChrom/DnaShareMtDna functions (via fhCallBuiltInFunction) as the actual
+-- test -- deliberately not reimplemented as a son/daughter-only tree-prune here, so
+-- this defers to FH's own authoritative definition (including whatever edge cases
+-- its own implementation accounts for) rather than this module's own understanding
+-- of Y-DNA/mtDNA inheritance rules. The full descendant tree is still walked
+-- regardless of dnaLine (nextFrontier is never pruned by the filter) -- simpler to
+-- reason about than pruning during the walk, at the cost of some wasted work
+-- descending through a branch that can no longer match (e.g. every descendant of a
+-- daughter, for "y-chrom") on a very large tree. Per FH's own docs, DnaShareYChrom is
+-- always false if either party is female (only males carry a Y chromosome) and
+-- DnaShareMtDna's propagation from indiPtr only continues through daughters (though a
+-- son one generation down still shares it, from indiPtr's own mother) -- so
+-- dnaLine="y-chrom" against a female indiPtr, or dnaLine="mtdna" against a male
+-- indiPtr's grandchildren-and-beyond, legitimately returns an empty (not erroring)
+-- result, matching what DnaShareYChrom/DnaShareMtDna themselves would say for every
+-- pair.
+function M.getDescendants(indiPtr, maxGenerations, dnaLine)
+  indiPtr = resolvePointer(indiPtr)
+  if not indiPtr or indiPtr:IsNull() then
+    error("getDescendants: indiPtr must point to an Individual record")
+  end
+  if fhGetTag(indiPtr) ~= "INDI" then
+    error("getDescendants: indiPtr must point to an Individual record (got a '" .. tostring(fhGetTag(indiPtr)) .. "' record)")
+  end
+  local dnaBuiltin = nil
+  if dnaLine ~= nil then
+    dnaBuiltin = DNA_LINE_BUILTIN[dnaLine]
+    if not dnaBuiltin then
+      error("getDescendants: dnaLine must be nil, 'y-chrom', or 'mtdna' (got '" .. tostring(dnaLine) .. "')")
+    end
+  end
+
+  local results = {}
+  local visited = { [fhGetRecordId(indiPtr)] = true }
+  local frontier = { { ptr = indiPtr, line = {} } }
+  local generation = 0
+
+  while #frontier > 0 and (not maxGenerations or generation < maxGenerations) do
+    generation = generation + 1
+    local nextFrontier = {}
+
+    local function visit(p, fam, parentLine)
+      local id = fhGetRecordId(p)
+      if visited[id] then return end
+      visited[id] = true
+      local sex = fhGetItemText(p, "~.SEX")
+      local role = sex == "Male" and "son" or (sex == "Female" and "daughter" or "child")
+      local line = {}
+      for i, step in ipairs(parentLine) do line[i] = step end
+      line[#line + 1] = role
+      if not dnaBuiltin or fhCallBuiltInFunction(dnaBuiltin, indiPtr, p) then
+        table.insert(results, {
+          generation = generation,
+          line = line,
+          individual = indiDescriptor(p),
+          family = famDescriptor(fam),
+        })
+      end
+      table.insert(nextFrontier, { ptr = p, line = line })
+    end
+
+    for _, entry in ipairs(frontier) do
+      eachFamilyLink(entry.ptr, "FAMS", function(fam)
+        eachFamilyMember(fam, "CHIL", function(p) visit(p, fam, entry.line) end)
       end)
     end
 

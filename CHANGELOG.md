@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### `fhBridge.getDescendants` (issue #64)
+- New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
+  `getAncestors`/`searchByName`/`getFactsByTag`: `fhBridge.getDescendants(ptr,
+  maxGenerations, dnaLine)` walks down every `FAMS`/`CHIL` record from `ptr` — the
+  mirror image of `getAncestors`' walk up `FAMC` — with the same optional generation
+  cap and pedigree-collapse dedupe. `line` entries are `"son"`/`"daughter"` (read off
+  each step's own `SEX`), not `getAncestors`' `"father"`/`"mother"` role labels.
+- Optional third argument `dnaLine` (`"y-chrom"` or `"mtdna"`) filters the result to
+  descendants sharing that DNA line with `ptr`, via FH's own built-in
+  `DnaShareYChrom`/`DnaShareMtDna` functions (`fhCallBuiltInFunction`) rather than
+  this module reimplementing Y-DNA/mitochondrial inheritance rules itself — see
+  `docs/adr/0016-getdescendants-defers-dna-line-logic-to-fh-builtin.md`.
+- Wired into `env.fhBridge` unconditionally (both access modes), same as the other
+  read-only query helpers.
+
 ### Prototype: `.mcpb` (Claude Desktop Extension) bundle for the server (issue #59)
 - `node installer/build-dxt.mjs` builds `installer/output/fh-mcp-bridge-<version>.mcpb` —
   a Claude Desktop Extension installable via Settings → Extensions (or double-click/

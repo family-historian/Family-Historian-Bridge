@@ -217,6 +217,18 @@ fhGetValueAsRichText = function(ptr)
   }
 end
 
+-- getDescendants' dnaLine filter calls fhCallBuiltInFunction(dnaBuiltin, indiPtr, p) --
+-- deliberately NOT re-implemented as a real Y-chrom/mtDNA propagation rule here (that's
+-- FH's own job, not this fake's); this double just logs every call it receives (so tests
+-- can assert the right builtin name and the right two pointers were passed) and returns
+-- a fixed, simple "matches" rule (Dad Plugin and Self Plugin only) that's just enough to
+-- prove getDescendants actually filters its results by the call's return value.
+dnaCallLog = {}
+fhCallBuiltInFunction = function(strFunctionName, ptrA, ptrB)
+  table.insert(dnaCallLog, { fn = strFunctionName, a = ptrA.node, b = ptrB.node })
+  return ptrB.node.name == "Dad Plugin" or ptrB.node.name == "Self Plugin"
+end
+
 local familyHelper = require('familyHelper')
 
 ------------------------------------------------------------------
@@ -425,6 +437,93 @@ do
   local ok, err = pcall(familyHelper.getAncestors, newPtr())
   check(not ok, 'getAncestors on a null pointer raises an error')
   check(contains(err, "getAncestors"), 'the error names the function')
+end
+
+------------------------------------------------------------------
+-- getDescendants: unbounded, with lines and generations (mirror image of getAncestors)
+------------------------------------------------------------------
+
+do
+  local grandpaPtr = ptrFor(grandpa)
+  local descendants = familyHelper.getDescendants(grandpaPtr)
+  check(#descendants == 4, 'getDescendants(grandpa) returns 2 children + 2 grandchildren (Aunt has no recorded FAMS)')
+
+  local byName = {}
+  for _, entry in ipairs(descendants) do byName[entry.individual.name] = entry end
+
+  check(byName["Dad Plugin"] ~= nil and byName["Dad Plugin"].generation == 1, 'Dad is generation 1')
+  check(byName["Aunt Plugin"] ~= nil and byName["Aunt Plugin"].generation == 1, 'Aunt is generation 1')
+  check(byName["Self Plugin"] ~= nil and byName["Self Plugin"].generation == 2, 'Self is generation 2')
+  check(byName["Sibling Plugin"] ~= nil and byName["Sibling Plugin"].generation == 2, 'Sibling is generation 2')
+
+  check(#byName["Dad Plugin"].line == 1 and byName["Dad Plugin"].line[1] == "son", 'Dad\'s line is {"son"}')
+  check(#byName["Aunt Plugin"].line == 1 and byName["Aunt Plugin"].line[1] == "daughter", 'Aunt\'s line is {"daughter"}')
+  check(#byName["Self Plugin"].line == 2 and byName["Self Plugin"].line[1] == "son" and byName["Self Plugin"].line[2] == "son",
+    'Self\'s line is {"son", "son"} (son\'s son)')
+  check(#byName["Sibling Plugin"].line == 2 and byName["Sibling Plugin"].line[1] == "son" and byName["Sibling Plugin"].line[2] == "daughter",
+    'Sibling\'s line is {"son", "daughter"} (son\'s daughter)')
+end
+
+------------------------------------------------------------------
+-- getDescendants: maxGenerations caps the walk
+------------------------------------------------------------------
+
+do
+  local grandpaPtr = ptrFor(grandpa)
+  local oneGen = familyHelper.getDescendants(grandpaPtr, 1)
+  check(#oneGen == 2, 'getDescendants(grandpa, 1) stops after generation 1 (just children)')
+  for _, entry in ipairs(oneGen) do
+    check(entry.generation == 1, 'every entry with maxGenerations=1 is generation 1')
+  end
+end
+
+------------------------------------------------------------------
+-- getDescendants: an individual with no recorded FAMS returns an empty table
+------------------------------------------------------------------
+
+do
+  local childless = newIndi("Childless Plugin", "Female")
+  local descendants = familyHelper.getDescendants(ptrFor(childless))
+  check(type(descendants) == 'table' and #descendants == 0, 'getDescendants on someone with no FAMS returns an empty array')
+end
+
+------------------------------------------------------------------
+-- getDescendants: errors on a null pointer, or a non-Individual pointer
+------------------------------------------------------------------
+
+do
+  local ok, err = pcall(familyHelper.getDescendants, newPtr())
+  check(not ok, 'getDescendants on a null pointer raises an error')
+  check(contains(err, "getDescendants"), 'the error names the function')
+end
+
+------------------------------------------------------------------
+-- getDescendants: dnaLine filters results via fhCallBuiltInFunction, doesn't
+-- reimplement Y-chrom/mtDNA propagation itself
+------------------------------------------------------------------
+
+do
+  dnaCallLog = {}
+  local grandpaPtr = ptrFor(grandpa)
+  local yLine = familyHelper.getDescendants(grandpaPtr, nil, "y-chrom")
+  check(#yLine == 2, 'dnaLine="y-chrom" filters down to whatever fhCallBuiltInFunction says matches (the fake\'s fixed rule: Dad + Self)')
+  local yByName = {}
+  for _, entry in ipairs(yLine) do yByName[entry.individual.name] = true end
+  check(yByName["Dad Plugin"] and yByName["Self Plugin"], 'the two matches are Dad and Self, per the fake\'s rule')
+
+  check(#dnaCallLog == 4, 'fhCallBuiltInFunction was called once per visited descendant (all 4), not just the matches')
+  for _, call in ipairs(dnaCallLog) do
+    check(call.fn == "DnaShareYChrom", 'dnaLine="y-chrom" calls the DnaShareYChrom built-in')
+    check(call.a == grandpa, 'the built-in\'s first argument is always the origin (grandpa)')
+  end
+
+  dnaCallLog = {}
+  local mtLine = familyHelper.getDescendants(grandpaPtr, nil, "mtdna")
+  check(#dnaCallLog == 4 and dnaCallLog[1].fn == "DnaShareMtDna", 'dnaLine="mtdna" calls the DnaShareMtDna built-in instead')
+
+  local okBad, errBad = pcall(familyHelper.getDescendants, grandpaPtr, nil, "x-chrom")
+  check(not okBad, 'an invalid dnaLine raises an error')
+  check(contains(errBad, "x-chrom"), 'the error names the invalid dnaLine given')
 end
 
 ------------------------------------------------------------------
@@ -649,6 +748,10 @@ do
   local ancestorsById = familyHelper.getAncestors(qualifiedId, 1)
   check(#ancestorsById == 2, 'getAncestors accepts a qualified id string in place of a pointer')
 
+  local grandpaQualifiedId = "I" .. grandpa.id
+  local descendantsById = familyHelper.getDescendants(grandpaQualifiedId, 1)
+  check(#descendantsById == 2, 'getDescendants accepts a qualified id string in place of a pointer')
+
   local detailsById = familyHelper.getAllDetails(qualifiedId)
   check(detailsById.tag == "INDI" and detailsById.id == self_.id, 'getAllDetails accepts a qualified id string and resolves the right record')
 
@@ -688,6 +791,9 @@ do
 
   local okWrongType2 = pcall(familyHelper.getAncestors, famQualifiedId)
   check(not okWrongType2, 'getAncestors rejects a qualified id that resolves to a non-Individual record')
+
+  local okWrongType3 = pcall(familyHelper.getDescendants, famQualifiedId)
+  check(not okWrongType3, 'getDescendants rejects a qualified id that resolves to a non-Individual record')
 end
 
 if failures > 0 then
