@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0
+
 ### `fhBridge.findSources`, clearer bad-id errors, and rollback-scoping guidance (issue #65)
 - New helper `fhBridge.findSources(templateNameOrId, fieldFilters)` in
   `bridge/sourceHelper.lua`: finds every `SOUR` record linked to a given template whose
