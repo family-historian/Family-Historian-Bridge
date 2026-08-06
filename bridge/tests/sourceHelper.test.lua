@@ -338,6 +338,40 @@ local function addFieldDef(tpl, code, type_, prom, citation)
   end
 end
 
+-- Shared by the findSources and getTemplateFieldCensus fixture blocks below (both build a
+-- templated SOUR record plus citations on it, sourced from raw ~PREFIX-CODE shortcuts
+-- rather than sourceHelper.lua's own createSourceFromTemplate/citeSource, so a
+-- citation-level field can be populated the way createSourceFromTemplate/citeSource never
+-- do) -- hoisted here rather than declared once per block so the two don't drift.
+local function setField(parentPtr, prefix, code, value)
+  fhSetValueAsText(fhCreateItem("~" .. prefix .. "-" .. code, parentPtr), value)
+end
+
+-- type_/dateObj are optional (nil skips that field entirely) so a fixture can leave a
+-- record-level field deliberately unpopulated, e.g. getTemplateFieldCensus's own
+-- "only tally what's actually populated" tests below.
+local function makeSource(templatePtr, type_, dateObj)
+  local sour = fhCreateItem("SOUR")
+  local link = fhCreateItem("_SRCT", sour)
+  fhSetValueAsLink(link, templatePtr)
+  if type_ then
+    setField(sour, "EN", "Type", type_)
+  end
+  if dateObj then
+    fhSetValueAsDate(fhCreateItem("~DT-RegDate", sour), dateObj)
+  end
+  return sour
+end
+
+local function citeWithFields(targetPtr, sourcePtr, fields)
+  local citation = fhCreateItem("SOUR", targetPtr)
+  fhSetValueAsLink(citation, sourcePtr)
+  for code, value in pairs(fields) do
+    setField(citation, "TX", code, value)
+  end
+  return citation
+end
+
 local function findChild(node, tag)
   for _, child in ipairs(node.children) do
     if child.tag == tag then
@@ -620,19 +654,6 @@ do
   local otherTemplate = buildTemplate("Some Other Template")
   addFieldDef(otherTemplate, "Type", "Enum", "X | Y")
 
-  local function setField(parentPtr, prefix, code, value)
-    fhSetValueAsText(fhCreateItem("~" .. prefix .. "-" .. code, parentPtr), value)
-  end
-
-  local function makeSource(templatePtr, type_, dateObj)
-    local sour = fhCreateItem("SOUR")
-    local link = fhCreateItem("_SRCT", sour)
-    fhSetValueAsLink(link, templatePtr)
-    setField(sour, "EN", "Type", type_)
-    fhSetValueAsDate(fhCreateItem("~DT-RegDate", sour), dateObj)
-    return sour
-  end
-
   local sourceA = makeSource(regIndex, "Birth", fhNewDate(1895, 3, 12))
   local sourceAId = fhGetRecordId(sourceA)
   local sourceB = makeSource(regIndex, "Marriage", fhNewDate(1900, 1, 1))
@@ -641,15 +662,6 @@ do
   -- A source linked to a different template entirely -- must never appear in
   -- findSources("Test Registration Index", ...) results, however loose the filters.
   local offTemplateSource = makeSource(otherTemplate, "X", fhNewDate(2000, 1, 1))
-
-  local function citeWithFields(targetPtr, sourcePtr, fields)
-    local citation = fhCreateItem("SOUR", targetPtr)
-    fhSetValueAsLink(citation, sourcePtr)
-    for code, value in pairs(fields) do
-      setField(citation, "TX", code, value)
-    end
-    return citation
-  end
 
   local alice = fhCreateItem("INDI")
   local aliceQualifiedId = fhGetQualifiedRecordId(alice)
@@ -780,6 +792,64 @@ do
   local okNullPtr, errNullPtr = pcall(sourceHelper.getPopulatedTemplateFields, fhNewItemPtr())
   check(not okNullPtr, 'getPopulatedTemplateFields raises on a null pointer, rather than silently reading as "not templated"')
   check(contains(errNullPtr, "getPopulatedTemplateFields"), 'the error names the function, same as getAllDetails\' own null-pointer error')
+end
+
+------------------------------------------------------------------
+-- getTemplateFieldCensus (issue #74, ADR 0017): occurrence counts for both record-level
+-- and citation-level fields of one template -- the occurrence-counting half of what
+-- describe_project's old sourceTemplateFields used to do (now structural-only there, see
+-- server/src/describeProjectTool.ts), moved here as an opt-in helper. Reuses the same
+-- record/citation resolution machinery findSources above already exercises.
+------------------------------------------------------------------
+
+do
+  resetTree()
+
+  local regIndex = buildTemplate("Test Registration Index")
+  addFieldDef(regIndex, "Type", "Enum", "Birth | Marriage")
+  addFieldDef(regIndex, "RegDate", "Date")
+  addFieldDef(regIndex, "District", "Text", nil, true)  -- citation-level (CITN)
+  addFieldDef(regIndex, "Ref", "Text", nil, true)        -- citation-level (CITN)
+
+  local noCitationTemplate = buildTemplate("No Citation Fields Template")
+  addFieldDef(noCitationTemplate, "Solo", "Text")
+
+  local sourceA = makeSource(regIndex, "Birth", fhNewDate(1895, 3, 12))
+  local sourceB = makeSource(regIndex, "Marriage", nil)  -- RegDate left unpopulated
+
+  -- A source linked to a different template entirely -- must never contribute to
+  -- getTemplateFieldCensus("Test Registration Index") counts, however its own fields
+  -- happen to be named/populated.
+  local offTemplateSource = makeSource(noCitationTemplate, nil, nil)
+  setField(offTemplateSource, "TX", "Solo", "should not count")
+
+  local alice = fhCreateItem("INDI")
+  local aliceBirt = fhCreateItem("BIRT", alice)
+  citeWithFields(aliceBirt, sourceA, { District = "Barnstaple", Ref = "123" })
+
+  local bob = fhCreateItem("INDI")
+  citeWithFields(bob, sourceA, { District = "Exeter" })  -- Ref left unpopulated on this one
+
+  local fam1 = fhCreateItem("FAM")
+  citeWithFields(fam1, sourceB, { District = "London", Ref = "789" })  -- sourceB is also linked to regIndex
+
+  local census = sourceHelper.getTemplateFieldCensus("Test Registration Index")
+
+  check(census.recordFields.Type == 2, 'recordFields tallies both sources with Type populated')
+  check(census.recordFields.RegDate == 1, 'recordFields tallies only the one source with RegDate actually populated (sourceB left it unset)')
+  check(census.citationFields.District == 3, 'citationFields tallies every citation with District populated, across every source linked to the template (sourceA\'s two citations + sourceB\'s one)')
+  check(census.citationFields.Ref == 2, 'citationFields tallies only citations with Ref actually populated (Bob\'s citation left it unset)')
+
+  local censusById = sourceHelper.getTemplateFieldCensus(fhGetRecordId(regIndex))
+  check(censusById.recordFields.Type == 2, 'getTemplateFieldCensus resolves by numeric template id too')
+
+  local noCitationCensus = sourceHelper.getTemplateFieldCensus("No Citation Fields Template")
+  check(noCitationCensus.recordFields.Solo == 1, 'a template with no citation-level fields still tallies its record-level fields')
+  check(type(noCitationCensus.citationFields) == 'table' and next(noCitationCensus.citationFields) == nil,
+    'citationFields is an empty table (not nil, not an error) for a template with no citation-level fields')
+
+  local okBadTemplate = pcall(sourceHelper.getTemplateFieldCensus, "No Such Template")
+  check(not okBadTemplate, 'an unresolvable template name raises an error, same as findSources/createSourceFromTemplate')
 end
 
 if failures > 0 then

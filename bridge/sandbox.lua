@@ -357,11 +357,12 @@ function M.build(accessMode)
   -- block only ever adds further (write) members to this same table, never replaces it.
   --
   -- sourceHelper.lua itself is also required unconditionally here (issue #65): unlike
-  -- createSourceFromTemplate/citeSource, its findSources and getPopulatedTemplateFields
-  -- (issue #73) are pure reads (they walk records/citations via familyHelper.getAllDetails
-  -- and fhGetItemText Data References, no fh* write primitive), so both are wired into
-  -- env.fhBridge here too, by reference like every other read-only member -- gating tracks
-  -- whether a function writes, not which file it's defined in.
+  -- createSourceFromTemplate/citeSource, its findSources, getPopulatedTemplateFields
+  -- (issue #73), and getTemplateFieldCensus (issue #74) are pure reads (they walk
+  -- records/citations via familyHelper.getAllDetails and fhGetItemText Data References, no
+  -- fh* write primitive), so all three are wired into env.fhBridge here too, by reference
+  -- like every other read-only member -- gating tracks whether a function writes, not
+  -- which file it's defined in.
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
   env.fhBridge = {
@@ -373,6 +374,7 @@ function M.build(accessMode)
     getFactsByTag = realFamilyHelper.getFactsByTag,
     findSources = realSourceHelper.findSources,
     getPopulatedTemplateFields = realSourceHelper.getPopulatedTemplateFields,
+    getTemplateFieldCensus = realSourceHelper.getTemplateFieldCensus,
   }
 
   if accessMode == "read-write" then

@@ -510,4 +510,75 @@ function M.findSources(templateNameOrId, fieldFilters)
   return results
 end
 
+-- fhBridge.getTemplateFieldCensus(templateNameOrId)
+-- Read-only (wired into both Session modes, same as findSources/getPopulatedTemplateFields
+-- -- gating tracks whether a function writes, not which file it lives in). issue #74 (ADR
+-- 0017): describe_project's own sourceTemplateFields census used to give this occurrence
+-- data (record-level fields only, issue #67/#73) but was found to make every describe_project
+-- call pay for a per-SOUR-record field-resolution walk regardless of whether the
+-- conversation ever needed it, and even then never covered citation-level (CITN) fields at
+-- all -- extending it to do so would mean walking every citation across every INDI/FAM
+-- record (allCitationsBySourceId below) on every describe_project call, which recomputes on
+-- every call with no caching (ADR 0002). So describe_project's own census is now structural
+-- only (field definitions, no counts); this helper gives the actual occurrence counts,
+-- opt-in, single-template scoped like findSources/getPopulatedTemplateFields.
+--
+-- Returns { recordFields = {code = countOfSourRecordsPopulated}, citationFields = {code =
+-- countOfCitationsPopulated} } for every field this template defines -- every code
+-- present, even ones populated on zero record/citation (0, not omitted), so a caller can
+-- tell "never populated" apart from "not a field on this template" (which errors instead,
+-- same as findSources/createSourceFromTemplate's own unknown-field-code handling elsewhere
+-- in this file). recordFields counts SOUR records (one per source, whether-or-not
+-- populated more than once isn't a real state); citationFields counts individual citations
+-- (matching how issue #74's own evidence was framed -- "1,108 of 1,196 citations", not
+-- "N sources with at least one such citation").
+--
+-- The whole-project citation walk (allCitationsBySourceId, the same one findSources uses)
+-- only runs at all when this template actually defines at least one citation-level field --
+-- a template with none never pays for it.
+function M.getTemplateFieldCensus(templateNameOrId)
+  local template = resolveTemplate(templateNameOrId)
+  local templateId = fhGetRecordId(template)
+  local defs = fieldDefs(template)
+
+  local recordFields, citationFields = {}, {}
+  local hasCitationFields = false
+  for code, def in pairs(defs) do
+    if def.citation then
+      citationFields[code] = 0
+      hasCitationFields = true
+    else
+      recordFields[code] = 0
+    end
+  end
+
+  local citationsBySourceId = hasCitationFields and allCitationsBySourceId() or nil
+
+  local sourPtr = fhNewItemPtr()
+  sourPtr:MoveToFirstRecord("SOUR")
+  while sourPtr:IsNotNull() do
+    local candidateTemplate = linkedTemplate(sourPtr)
+    if candidateTemplate and not candidateTemplate:IsNull() and fhGetRecordId(candidateTemplate) == templateId then
+      for code in pairs(recordFields) do
+        if resolvedFieldValue(sourPtr, defs[code]) then
+          recordFields[code] = recordFields[code] + 1
+        end
+      end
+      if citationsBySourceId then
+        local entries = citationsBySourceId[fhGetRecordId(sourPtr)] or {}
+        for _, entry in ipairs(entries) do
+          for code in pairs(citationFields) do
+            if resolvedFieldValue(entry.ptr, defs[code]) then
+              citationFields[code] = citationFields[code] + 1
+            end
+          end
+        end
+      end
+    end
+    sourPtr:MoveNext()
+  end
+
+  return { recordFields = recordFields, citationFields = citationFields }
+end
+
 return M

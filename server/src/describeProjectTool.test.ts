@@ -31,7 +31,7 @@ describe("handleDescribeProject", () => {
   it("returns the script's result as text on success", async () => {
     const result = await handleDescribeProject({
       runLuaOnBridge: async () =>
-        '{"recordCounts":{"INDI":42},"tagCensus":{"individualAndFamily":{"BIRT":10},"source":{},"sourceTemplateFields":{}}}',
+        '{"recordCounts":{"INDI":42},"tagCensus":{"individualAndFamily":{"BIRT":10},"source":{},"sourceTemplateFieldDefinitions":{}}}',
       queryBridgeVersion: matchingVersion,
     });
 
@@ -39,7 +39,7 @@ describe("handleDescribeProject", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: '{"recordCounts":{"INDI":42},"tagCensus":{"individualAndFamily":{"BIRT":10},"source":{},"sourceTemplateFields":{}}}',
+        text: '{"recordCounts":{"INDI":42},"tagCensus":{"individualAndFamily":{"BIRT":10},"source":{},"sourceTemplateFieldDefinitions":{}}}',
       },
     ]);
   });
@@ -237,37 +237,45 @@ describe("DESCRIBE_PROJECT_SCRIPT flagCensus/dataQuality logic (issue #51)", () 
   });
 });
 
-describe("DESCRIBE_PROJECT_SCRIPT sourceTemplateFields logic (issue #67, extracted issue #73)", () => {
+describe("DESCRIBE_PROJECT_SCRIPT sourceTemplateFieldDefinitions logic (issue #74, ADR 0017, supersedes issue #67/#73's sourceTemplateFields)", () => {
   // Same "regression guard on the script text" spirit as the flagCensus/dataQuality block
-  // above — real traversal correctness was verified manually against a live Bridge Session
-  // (issue #67): the original script always returned {} because it read a _SRCT template
-  // record's own children looking for a "_FIELD" tag, which templates never have (field
-  // *definitions* are FDEF children of the template; field *values* are _FIELD children of
-  // the SOUR records that use it). issue #67's own fix (resolve each field by its own
-  // ~PREFIX-CODE shortcut Data Reference, rejecting a positional match against a SOUR's
-  // _FIELD children as unreliable) was extracted into fhBridge.getPopulatedTemplateFields
-  // (issue #73, bridge/sourceHelper.lua — its own tests cover the resolution logic itself)
-  // so this fixed script and bridge/sourceHelper.lua's findSources share one implementation
-  // instead of two. This script's own job now is just: call the helper once per SOUR record
-  // and tally the codes it returns.
-  it("calls fhBridge.getPopulatedTemplateFields once per SOUR record, not a hand-rolled FDEF/_FIELD walk", () => {
-    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/for sour in fhu\.records\("SOUR"\)/);
-    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/fhBridge\.getPopulatedTemplateFields\(sour\)/);
-    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/fhGetTag\(\w+\) == "FDEF"/);
-    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/fhGetTag\(\w+\) == "_FIELD"/);
+  // above. issue #67/#73's sourceTemplateFields walked every SOUR record and tallied real
+  // occurrence counts via fhBridge.getPopulatedTemplateFields — but that helper only ever
+  // resolves record-level fields, so a Citation-specific field (CITN) silently tallied
+  // zero forever, however often it was actually populated (issue #74). Rather than extend
+  // that walk to also scan every citation on every INDI/FAM record (expensive, and paid on
+  // every describe_project call whether or not the conversation ever touches sources), the
+  // census now reports template field *definitions* only — a cheap walk bounded by how many
+  // _SRCT templates the project actually has (FH only copies used templates into the
+  // project) rather than by record/citation count. Actual occurrence counts, for both
+  // record-level and citation-level fields, move to the new opt-in
+  // fhBridge.getTemplateFieldCensus helper (bridge/sourceHelper.lua) instead — see ADR
+  // 0017.
+  it("walks _SRCT template records and their FDEF children directly, not fhBridge.getPopulatedTemplateFields over every SOUR", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/template:MoveToFirstRecord\("_SRCT"\)/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/childTag == "FDEF"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/fhBridge\.getPopulatedTemplateFields/);
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/for sour in fhu\.records\("SOUR"\)/);
   });
 
-  it("tallies every code the helper returns for a source, once per source", () => {
-    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(
-      /for code in pairs\(fhBridge\.getPopulatedTemplateFields\(sour\)\) do/,
-    );
-    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(
-      /sourceTemplateFields\[code\] = \(sourceTemplateFields\[code\] or 0\) \+ 1/,
-    );
+  it("reads each FDEF's own CODE/TYPE/CITN children, keying the definitions map by CODE", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/subTag == "CODE"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/subTag == "TYPE"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/subTag == "CITN"/);
   });
 
-  it("returns sourceTemplateFields alongside the existing tagCensus keys", () => {
-    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/sourceTemplateFields = sourceTemplateFields,/);
+  it("nests field definitions per template name, not flattened across every template", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/sourceTemplateFieldDefinitions\[templateName\] = fields/);
+  });
+
+  it("marks a field's citation flag from its own CITN child (\"Yes\"), same convention as sourceHelper.lua's fieldDefs", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/citation = .*== "Yes"/);
+  });
+
+  it("returns sourceTemplateFieldDefinitions alongside the existing tagCensus keys", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(
+      /sourceTemplateFieldDefinitions = sourceTemplateFieldDefinitions,/,
+    );
   });
 });
 

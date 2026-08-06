@@ -46,7 +46,11 @@ Returns JSON shaped as:
   "tagCensus": {
     "individualAndFamily": { "<tag, e.g. BIRT, _ATTR-REGIMENT>": <occurrence count>, ... },
     "source": { "<tag>": <occurrence count>, ... },
-    "sourceTemplateFields": { "<field's own CODE from its _SRCT template's FDEF definition, e.g. Page_no, Reference>": <count of SOUR records with that field populated>, ... }
+    "sourceTemplateFieldDefinitions": {
+      "<_SRCT template's own NAME>": {
+        "<field's own CODE, e.g. Page_no, Specific_Item>": { "citation": <true if this field is Citation-specific (its FDEF's own CITN child), false if it's record-level>, "type": "<field's own TYPE, e.g. Text, Date, Enum>" }, ...
+      }, ...
+    }
   },
   "flagCensus": {
     "<flag tag, e.g. __LIVING/__PRIVATE or a project-specific custom flag>": {
@@ -91,29 +95,38 @@ are omitted — see the script's own comment for why.`;
 // MoveToFirstRecord+MoveNext record-walk are both documented, standard patterns (FH8 API
 // help). INDI/FAM/SOUR are GEDCOM 5.5.1 standard tags.
 //
-// sourceTemplateFields (issue #67, fixing a bug from the original issue #51 implementation;
-// issue #73 extracted the fix into fhBridge.getPopulatedTemplateFields, shared with
-// bridge/sourceHelper.lua's findSources rather than duplicated here): a template's field
-// *definitions* (NAME/CODE/TYPE/PROM/CITN) live as FDEF children of the _SRCT template
-// record itself — the original script walked the template looking for a "_FIELD" child,
-// which the template record never has, so it always tallied zero. The *populated* field
-// values issue #67 actually meant live as "_FIELD" children of the SOUR records that use a
-// template, carrying a value but no child of their own to read a field code off, and
-// matching them positionally against the template's FDEF order (issue #67's own suggested
-// fix) breaks the moment one field partway through is left unpopulated — live-verified
-// against this project's own data (see fhBridge.getPopulatedTemplateFields's own comment in
-// bridge/sourceHelper.lua for the full story). fhBridge.getPopulatedTemplateFields(sourPtr)
-// resolves each field directly by its own ~PREFIX-CODE shortcut Data Reference instead —
-// FH's own resolution mechanism, not a positional guess — and is wired into this sandbox
-// unconditionally (sandbox.lua), same as fhu, so this fixed script can call it without a
-// require().
+// sourceTemplateFieldDefinitions (issue #74, ADR 0017 — supersedes issue #67/#73's
+// sourceTemplateFields): issue #67 originally made this section tally *occurrence* counts
+// — how many SOUR records have each field actually populated, resolved via
+// fhBridge.getPopulatedTemplateFields (issue #73's extracted helper, still used by
+// bridge/sourceHelper.lua's findSources). That approach only ever resolved record-level
+// fields, though: a field flagged Citation-specific in its template (FDEF's own CITN child)
+// is populated per-citation, not on the SOUR record itself (see gedcom-knowledge-corpus
+// source-template-fields), so it silently tallied zero forever — issue #74 found a project
+// where a heavily-used citation-level field (Specific_Item, populated on 1,108 of 1,196
+// citations) was therefore invisible in this census.
 //
-// Scope: record-level fields only. A field flagged Citation-specific in its template
-// (FDEF's own CITN child) is populated per-citation, not on the SOUR record itself (see
-// gedcom-knowledge-corpus source-template-fields) — getPopulatedTemplateFields doesn't see
-// those. A fuller citation-level census would need to walk every citation across every
-// INDI/FAM record (the same shape of work as findSources/allCitationsBySourceId), well
-// beyond this fixed census's per-record-type scope.
+// Extending the walk to also scan every citation across every INDI/FAM record (the same
+// shape of work as findSources/allCitationsBySourceId) would fix that, but describe_project
+// recomputes on every call with no caching (ADR 0002) specifically because it's meant to be
+// a cheap, look-once-at-the-start survey — paying for a full citation walk on every call,
+// whether or not the conversation ever touches sources, isn't that.
+//
+// So this section is now structural only: walk the project's _SRCT template records and
+// their FDEF children directly, reporting each field's own CODE/TYPE/CITN, nested per
+// template name (two different templates can reuse the same field CODE with different
+// meanings, so flattening across templates the way the old occurrence-count version did
+// would be misleading here). This is cheap and bounded by template count, not record/
+// citation count — FH only copies templates that have actually been used into the project,
+// so recordCounts._SRCT stays small regardless of how large the rest of the project is.
+// This alone closes issue #74's visibility gap: a citation-scoped field now shows up,
+// correctly labeled, at no extra traversal cost.
+//
+// Actual occurrence counts — for record-level fields (what the old sourceTemplateFields
+// gave) and citation-level fields (what issue #74 actually asked for) — move to the new
+// opt-in fhBridge.getTemplateFieldCensus(templateNameOrId) helper (bridge/sourceHelper.lua),
+// single-template scoped like findSources/getPopulatedTemplateFields, called only when a
+// caller actually wants field-usage data for one template.
 //
 // flagCensus/dataQuality (issue #51): a single combined walk over every INDI's own direct
 // children, run separately from tallyChildTagsOf above (which tallies INDI+FAM together
@@ -175,10 +188,44 @@ tallyChildTagsOf("FAM", individualAndFamily)
 local source = {}
 tallyChildTagsOf("SOUR", source)
 
-local sourceTemplateFields = {}
-for sour in fhu.records("SOUR") do
-  for code in pairs(fhBridge.getPopulatedTemplateFields(sour)) do
-    sourceTemplateFields[code] = (sourceTemplateFields[code] or 0) + 1
+local sourceTemplateFieldDefinitions = {}
+do
+  local template = fhNewItemPtr()
+  local child = fhNewItemPtr()
+  local sub = fhNewItemPtr()
+  template:MoveToFirstRecord("_SRCT")
+  while template:IsNotNull() do
+    local templateName = nil
+    local fields = {}
+    child:MoveToFirstChildItem(template)
+    while child:IsNotNull() do
+      local childTag = fhGetTag(child)
+      if childTag == "NAME" then
+        templateName = fhGetItemText(child, "~")
+      elseif childTag == "FDEF" then
+        local code, fieldType, citation = nil, nil, false
+        sub:MoveToFirstChildItem(child)
+        while sub:IsNotNull() do
+          local subTag = fhGetTag(sub)
+          if subTag == "CODE" then
+            code = fhGetItemText(sub, "~")
+          elseif subTag == "TYPE" then
+            fieldType = fhGetItemText(sub, "~")
+          elseif subTag == "CITN" then
+            citation = fhGetItemText(sub, "~") == "Yes"
+          end
+          sub:MoveNext()
+        end
+        if code then
+          fields[code] = { citation = citation, type = fieldType }
+        end
+      end
+      child:MoveNext()
+    end
+    if templateName then
+      sourceTemplateFieldDefinitions[templateName] = fields
+    end
+    template:MoveNext()
   end
 end
 
@@ -269,7 +316,7 @@ return {
   tagCensus = {
     individualAndFamily = individualAndFamily,
     source = source,
-    sourceTemplateFields = sourceTemplateFields,
+    sourceTemplateFieldDefinitions = sourceTemplateFieldDefinitions,
   },
   flagCensus = flagCensus,
   dataQuality = {

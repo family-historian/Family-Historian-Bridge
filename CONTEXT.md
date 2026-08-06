@@ -74,9 +74,20 @@ script)
 
 **describe_project**:
 The MCP tool (issue #10) that runs a fixed, built-in Lua script — not a Claude-authored
-one — returning record counts per record type plus a distinct-tag census (INDI and FAM
-child items, SOUR record child items, and Source template definitions), each tag paired
-with its occurrence count. Also returns `flagCensus` (issue #51) — a per-tag breakdown of
+one — returning record counts per record type plus a distinct-tag census: INDI and FAM
+child items and SOUR record child items, each tag paired with its occurrence count, plus
+`sourceTemplateFieldDefinitions` — every Source Template's own field CODEs (with `TYPE` and
+whether each is Citation-specific), not an occurrence count. That last one used to be
+`sourceTemplateFields`, an occurrence count of populated record-level fields (issue #67/
+#73) — issue #74 (ADR 0017) found it silently gave zero for every Citation-specific field
+(`CITN`) instead, since those populate on a citation, not the SOUR record itself, and a
+real fix would mean walking every citation across every INDI/FAM record on every
+`describe_project` call, which recomputes on every call with no caching (see below). So
+this section became structural-only instead — cheap and bounded by how many templates the
+project actually has (FH only copies templates it's actually used into the project) rather
+than by record/citation count — and actual occurrence counts, for both record-level and
+citation-level fields, moved to the new **getTemplateFieldCensus** helper (below). Also
+returns `flagCensus` (issue #51) — a per-tag breakdown of
 Individual record flags (`__LIVING`/`__PRIVATE` plus any project-specific custom ones),
 each with its occurrence count and a human-readable label resolved via
 `fhGetTypeInfo(ptr, "label")` — and `dataQuality` (issue #51), a namespace for data-gap
@@ -257,6 +268,23 @@ match, across the whole project), so "find a comparable existing source and see 
 normally cited" is one call, not a hand-rolled scan over every `SOUR` record.
 _Avoid_: searchSources, findSource (this project's own name for the operation is
 `findSources`, plural, matching that it can return more than one)
+
+**getTemplateFieldCensus**:
+The `fhBridge` helper (`sourceHelper.lua`, issue #74, ADR 0017) that returns occurrence
+counts for one Source template's fields: `{ recordFields = {code = countOfSourRecords
+Populated}, citationFields = {code = countOfCitationsPopulated} }` — every field the
+template defines, whether populated or not (0, not omitted), so "never populated" reads
+differently from "not a field on this template" (the latter still errors, same as
+`findSources`/`createSourceFromTemplate`). `citationFields` counts individual citations, not
+distinct sources — matching how issue #74's own evidence was framed ("1,108 of 1,196
+citations"). Read-only, wired into `run_lua`'s sandbox for both access modes, same as
+`findSources`/`getPopulatedTemplateFields`. Exists because `describe_project`'s own census
+(see above) dropped occurrence counting entirely rather than pay for it on every call
+regardless of need — this helper is where that cost lives instead, opt-in, single-template
+scoped. Only pays for the whole-project citation walk (the same one `findSources` uses)
+when the template actually has a Citation-specific field to count.
+_Avoid_: templateFieldStats, censusTemplate (this project's own name for the operation is
+`getTemplateFieldCensus`)
 
 **Citation-specific field**:
 A Source Template field whose `FDEF` (field definition) is marked "Citation-specific" in
