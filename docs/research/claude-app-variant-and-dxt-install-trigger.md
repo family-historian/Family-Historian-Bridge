@@ -493,6 +493,77 @@ that hands-on validation pass.
 
 ---
 
+## 5. Real-world update (2026-08-05): confirmed `.mcpb` install failure on a live MSIX machine
+
+Issue #59 (the prototype ticket this research feeds) built and headlessly verified a real
+`fh-mcp-bridge-0.6.0.mcpb` bundle, then tried installing it by hand on two machines. This
+section records what actually happened — the first hands-on data point this document had
+for §4's open items.
+
+**Mac: installed successfully**, no issues reported.
+
+**Windows, confirmed MSIX build: install failed on all three documented methods.**
+`Get-AppxPackage -Name '*Claude*'` on the test machine returned `Version: 1.25927.0.0`,
+`PackageFamilyName: Claude_pzs8sxrjxfjjc`, `InstallLocation:
+C:\Program Files\WindowsApps\Claude_1.25927.0.0_x64__pzs8sxrjxfjjc` — confirming §4 item 1
+(the `.Version` property, in the predicted `Major.Minor.Build.Revision` shape) and item 2
+(`-Name '*Claude*'` does reliably match) against a real machine. `Test-Path
+"$env:LOCALAPPDATA\AnthropicClaude\Claude.exe"` returned `False`, consistent with §1.5's
+detection logic correctly identifying this as the MSIX build, not Squirrel.
+
+On this machine:
+- **Double-click** the `.mcpb` file: no file association, nothing opened.
+- **Drag-and-drop** onto the Claude Desktop window: silently did nothing.
+- **Settings → Extensions → Advanced settings → Install Extension…** (the one method that
+  doesn't depend on OS file-association or a drop-target handler): produced a visible
+  error dialog — "**Failed to install extension. The extension could not be installed due
+  to the following error: Private dir leaf redirects (junction/substitute-name plant):
+  C:\Users\<user>\AppData\Roaming\Claude\Claude Extensions**".
+
+A full-chain check (`C:\Users` → `...\AppData` → `...\Roaming` → `...\Claude`, each level
+via `Get-Item -Force`'s `LinkType`/`Target` and independently via `fsutil reparsepoint
+query`) found **zero actual NTFS junctions or reparse points anywhere in the path** — every
+component is a plain, ordinary directory. The `Claude Extensions` leaf itself doesn't exist
+yet (the install fails before creating it), so it can't be the reparse point either.
+
+**Reading, medium confidence (this is inference from the symptom shape, not a primary
+source explicitly explaining Claude's own error string):** since the real, unvirtualized
+filesystem is confirmed clean, but Claude's own installer reports a junction/substitute-
+name redirect on that exact path, this looks like a manifestation of **MSIX's filesystem
+virtualization layer** rather than a real filesystem hazard — the same phenomenon §2.3
+already flagged from a different bug report:
+
+> "Log shows: `[MSIX] Filesystem virtualization active`... Bug is reproducible 100% with
+> 1.12. It works in 1.11." — [#68688](https://github.com/anthropics/claude-code/issues/68688)
+
+MSIX packaging can transparently redirect an unpackaged-style path like
+`%APPDATA%\Roaming\Claude\...` through a virtualized view for compatibility, which a
+process running *inside* that virtualization (Claude's own installer) may see differently
+than an ordinary process (a plain PowerShell session, as used for the checks above) reading
+the same path outside it. That would explain the exact split observed: real disk = clean,
+Claude's own path-safety check = sees a redirect.
+
+**This is a materially different failure mode than the two failure modes §2.3 already
+cited** — those were both silent no-ops (no dialog, no log, nothing happened); this one
+produces a specific, named, addressable-looking error, on the Settings-picker path
+specifically (not tested by either cited report). Whether it's the *same underlying*
+MSIX-virtualization root cause as #68688, or a distinct issue, is not confirmed here — only
+that both are consistent with "MSIX filesystem virtualization interferes with local `.mcpb`
+install" as a real, recurring category of problem on this Claude Desktop packaging, not a
+one-off on this particular machine.
+
+**Consequence for Ticket C and the wayfinder map (#56):** this is a load-bearing risk, not
+just a data point for this one ticket. Issue #56's whole plan is a `.mcpb` handoff
+specifically for the newer MSIX/unified build — if local `.mcpb` installs are unreliable
+on MSIX Claude Desktop generally (not just this one machine), that plan may currently be
+blocked upstream, independent of anything this repo's own installer code does. Worth
+re-testing on a second MSIX machine/Claude Desktop version before treating this as
+resolved either way, and worth watching whether Anthropic ships a fix (the #68688 pattern
+of "broken in 1.12, worked in 1.11" suggests this class of bug has come and gone across
+releases before).
+
+---
+
 ## Sources
 
 - This repo: `installer\fh-mcp-bridge.iss`, `installer\config-merge.ps1`,
