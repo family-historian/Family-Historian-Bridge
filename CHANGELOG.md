@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### `describe_project`: fix `sourceTemplateFields` always returning `{}` (issue #67)
+- `describe_project`'s `tagCensus.sourceTemplateFields` census was always empty: the
+  original script looked for a `_FIELD` child on each `_SRCT` template record, but a
+  template's field *definitions* are `FDEF` children of the template — `_FIELD` is the tag
+  used for a field's *populated value* on the `SOUR` records that use that template. A
+  positional fix (matching a source's Nth `_FIELD` child to the template's Nth `FDEF`) was
+  tried and rejected after live testing showed it mismatches as soon as a field partway
+  through a source's field list is left unpopulated, shifting every later field's answer.
+  The shipped fix resolves each field directly off the `SOUR` record by its own
+  `~PREFIX-CODE` shortcut Data Reference (FH's own field-addressing mechanism), which
+  correctly skips an unpopulated field without disturbing any other field's answer.
+  `sourceTemplateFields` is now keyed by each field's own `CODE` (e.g. `Reference`,
+  `Page_no`), not the placeholder `TX-PAGE`-style example the tool's own description used
+  to show; the description's example has been corrected to match.
+
 ### `describe_project`: report Family Historian's own app version (issue #69)
 - `describe_project` now returns `fhAppVersion` — Family Historian's own application
   version (e.g. `"8.0.0"`), read via `fhGetAppVersion()` (already wired into the

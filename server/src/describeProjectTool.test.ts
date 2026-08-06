@@ -237,6 +237,63 @@ describe("DESCRIBE_PROJECT_SCRIPT flagCensus/dataQuality logic (issue #51)", () 
   });
 });
 
+describe("DESCRIBE_PROJECT_SCRIPT sourceTemplateFields logic (issue #67)", () => {
+  // Same "regression guard on the script text" spirit as the flagCensus/dataQuality block
+  // above — real traversal correctness was verified manually against a live Bridge Session
+  // (issue #67): the original script always returned {} because it read a _SRCT template
+  // record's own children looking for a "_FIELD" tag, which templates never have (field
+  // *definitions* are FDEF children of the template; field *values* are _FIELD children of
+  // the SOUR records that use it). A positional fix (match a SOUR's Nth _FIELD child to the
+  // template's Nth FDEF) was tried and rejected: live-verified to mismatch as soon as a
+  // field partway through a source's field list is left unpopulated, shifting every later
+  // field's answer. The shipped fix resolves each field by its own ~PREFIX-CODE shortcut
+  // Data Reference instead, which live-verified correctly skips an unpopulated field
+  // without disturbing any other field's answer.
+  it("reads field definitions from _SRCT's own FDEF children, not a _FIELD child (the original bug)", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/for template in fhu\.records\("_SRCT"\)/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/fhGetTag\(fdef\) == "FDEF"/);
+  });
+
+  it("maps every FH source-template field type to its 3-letter shortcut prefix", () => {
+    for (const [type, prefix] of [
+      ["Text", "TX"],
+      ["Name", "NM"],
+      ["Place", "PL"],
+      ["Address", "AD"],
+      ["Enum", "EN"],
+      ["Date", "DT"],
+      ["Repository", "RP"],
+      ["URL", "UL"],
+    ]) {
+      expect(DESCRIBE_PROJECT_SCRIPT).toMatch(new RegExp(`${type} = "${prefix}"`));
+    }
+  });
+
+  it("finds each SOUR record's linked template via its own _SRCT child link, not by walking _SRCT records", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/for sour in fhu\.records\("SOUR"\)/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/fhGetTag\(link\) == "_SRCT"/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/templatePtr = fhGetValueAsLink\(link\)/);
+  });
+
+  it("resolves each field by its own shortcut Data Reference, not by positional order among a source's _FIELD children", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(
+      /fhGetItemText\(sour, "~\.~" \.\. f\.prefix \.\. "-" \.\. f\.code\)/,
+    );
+    expect(DESCRIBE_PROJECT_SCRIPT).not.toMatch(/fhGetTag\(field\) == "_FIELD"/);
+  });
+
+  it("only tallies a field once its shortcut resolves to a non-empty value", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/if value ~= "" then/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(
+      /sourceTemplateFields\[f\.code\] = \(sourceTemplateFields\[f\.code\] or 0\) \+ 1/,
+    );
+  });
+
+  it("returns sourceTemplateFields alongside the existing tagCensus keys", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/sourceTemplateFields = sourceTemplateFields,/);
+  });
+});
+
 describe("handleDescribeProject version check (issue #45)", () => {
   it("never runs the script and returns an error when the Bridge's major version differs from the server's", async () => {
     let scriptRan = false;

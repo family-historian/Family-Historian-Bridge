@@ -46,7 +46,7 @@ Returns JSON shaped as:
   "tagCensus": {
     "individualAndFamily": { "<tag, e.g. BIRT, _ATTR-REGIMENT>": <occurrence count>, ... },
     "source": { "<tag>": <occurrence count>, ... },
-    "sourceTemplateFields": { "<field code, e.g. TX-PAGE>": <occurrence count>, ... }
+    "sourceTemplateFields": { "<field's own CODE from its _SRCT template's FDEF definition, e.g. Page_no, Reference>": <count of SOUR records with that field populated>, ... }
   },
   "flagCensus": {
     "<flag tag, e.g. __LIVING/__PRIVATE or a project-specific custom flag>": {
@@ -89,13 +89,36 @@ are omitted — see the script's own comment for why.`;
 //
 // Record-type enumeration (fhGetRecordTypeCount/fhGetRecordTypeTag) and the
 // MoveToFirstRecord+MoveNext record-walk are both documented, standard patterns (FH8 API
-// help). INDI/FAM/SOUR are GEDCOM 5.5.1 standard tags. The source-template-field walk
-// targets FH's own GEDCOM extension tags _SRCT (Source Template record, confirmed via
-// CONTEXT.md's GEDCOM corpus entry and family-historian.co.uk/gedcom-extension-tags) and
-// its _FIELD metafield children, whose own item value (fhGetItemText(ptr, "~")) carries
-// the field's code (e.g. "TX-PAGE") — the tag itself is always "_FIELD", so tallying by
-// tag alone (as done for INDI/FAM/SOUR) wouldn't distinguish one declared field from
-// another.
+// help). INDI/FAM/SOUR are GEDCOM 5.5.1 standard tags.
+//
+// sourceTemplateFields (issue #67, fixing a bug from the original issue #51 implementation):
+// a template's field *definitions* (NAME/CODE/TYPE/PROM/CITN) live as FDEF children of the
+// _SRCT template record itself — the original script walked the template looking for a
+// "_FIELD" child, which the template record never has, so it always tallied zero. The
+// *populated* field values issue #67 actually meant live as "_FIELD" children of the SOUR
+// records that use a template — confirmed live (issue #67) those _FIELD items carry a
+// value but no child of their own to read a field code off, and matching them positionally
+// against the template's FDEF order (issue #67's own suggested fix) breaks the moment one
+// field partway through is left unpopulated: live-verified against this project's own data
+// (a "Civil Registration Certificate" source whose FDEF order is Type, Region, Principal,
+// Principal_2, Date, Location, Address, Reference, Repository, Collection, URL, but whose
+// Reference field was left unpopulated — its 8th _FIELD value holds Repository's answer,
+// not Reference's, once the gap shifts every later field's position). Instead, each
+// template field is resolved directly off the SOUR record by its own ~PREFIX-CODE shortcut
+// Data Reference (FH help: "Source Template metafields... addressed... by a shortcut built
+// from the field's 3-letter type prefix + its CODE" — gedcom-knowledge-corpus
+// data-references-syntax) — FH's own resolution mechanism, not a positional guess, so an
+// unpopulated field just resolves to "" without shifting any other field's answer.
+// Live-verified (issue #67) against the same source record above: "~.~TX-Reference"
+// correctly resolves to "" while "~.~RP-Repository" correctly resolves to the populated
+// value, matching each field to its own code regardless of what's skipped around it.
+//
+// Scope: record-level fields only. A field flagged Citation-specific in its template
+// (FDEF's own CITN child) is populated per-citation, not on the SOUR record itself (see
+// gedcom-knowledge-corpus source-template-fields) — this walk doesn't see those. A fuller
+// citation-level census would need to walk every citation across every INDI/FAM record
+// (the same shape of work as bridge/sourceHelper.lua's findSources/allCitationsBySourceId),
+// well beyond this fixed census's per-record-type scope.
 //
 // flagCensus/dataQuality (issue #51): a single combined walk over every INDI's own direct
 // children, run separately from tallyChildTagsOf above (which tallies INDI+FAM together
@@ -159,19 +182,70 @@ tallyChildTagsOf("SOUR", source)
 
 local sourceTemplateFields = {}
 do
-  local template = fhNewItemPtr()
-  local field = fhNewItemPtr()
-  template:MoveToFirstRecord("_SRCT")
-  while template:IsNotNull() do
-    field:MoveToFirstChildItem(template)
-    while field:IsNotNull() do
-      if fhGetTag(field) == "_FIELD" then
-        local code = fhGetItemText(field, "~")
-        sourceTemplateFields[code] = (sourceTemplateFields[code] or 0) + 1
+  -- Mirrors bridge/sourceHelper.lua's own FIELD_TYPE_PREFIX map, duplicated rather than
+  -- shared because this fixed script runs standalone through the same sandbox as run_lua
+  -- and can't require() a bridge module here (require('...') returns nil in this sandbox
+  -- — see the gedcom-knowledge-corpus's "fhu is already a global" entry for the general
+  -- rule this follows).
+  local FIELD_TYPE_PREFIX = {
+    Text = "TX", Name = "NM", Place = "PL", Address = "AD",
+    Enum = "EN", Date = "DT", Repository = "RP", URL = "UL",
+  }
+
+  local function readChildText(parentPtr, wantedTag)
+    local child = fhNewItemPtr()
+    child:MoveToFirstChildItem(parentPtr)
+    while child:IsNotNull() do
+      if fhGetTag(child) == wantedTag then
+        return fhGetItemText(child, "~")
       end
-      field:MoveNext()
+      child:MoveNext()
     end
-    template:MoveNext()
+    return nil
+  end
+
+  -- Template record id -> ordered array of {code, prefix}, built once per template
+  -- rather than once per source using it.
+  local templateFields = {}
+  for template in fhu.records("_SRCT") do
+    local fields = {}
+    local fdef = fhNewItemPtr()
+    fdef:MoveToFirstChildItem(template)
+    while fdef:IsNotNull() do
+      if fhGetTag(fdef) == "FDEF" then
+        local code = readChildText(fdef, "CODE")
+        local prefix = FIELD_TYPE_PREFIX[readChildText(fdef, "TYPE")]
+        if code and prefix then
+          table.insert(fields, { code = code, prefix = prefix })
+        end
+      end
+      fdef:MoveNext()
+    end
+    templateFields[fhGetRecordId(template)] = fields
+  end
+
+  for sour in fhu.records("SOUR") do
+    local templatePtr = nil
+    local link = fhNewItemPtr()
+    link:MoveToFirstChildItem(sour)
+    while link:IsNotNull() do
+      if fhGetTag(link) == "_SRCT" then
+        templatePtr = fhGetValueAsLink(link)
+        break
+      end
+      link:MoveNext()
+    end
+    if templatePtr and not templatePtr:IsNull() then
+      local fields = templateFields[fhGetRecordId(templatePtr)]
+      if fields then
+        for _, f in ipairs(fields) do
+          local value = fhGetItemText(sour, "~.~" .. f.prefix .. "-" .. f.code)
+          if value ~= "" then
+            sourceTemplateFields[f.code] = (sourceTemplateFields[f.code] or 0) + 1
+          end
+        end
+      end
+    end
   end
 end
 
