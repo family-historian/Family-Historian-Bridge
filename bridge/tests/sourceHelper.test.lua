@@ -69,6 +69,23 @@ function PtrMethods:MoveToFirstRecord(tag)
   self.index = 1
 end
 
+-- Needed for familyHelper.resolvePointer (via getPopulatedTemplateFields accepting a
+-- qualified id string, issue #73) -- mirrors familyHelper.test.lua's own fake, scanning
+-- recordsByTag[tag] for a node with a matching id. Linear scan is fine for fixture-sized
+-- fake trees.
+function PtrMethods:MoveToRecordById(tag, id)
+  local list = recordsByTag[tag] or {}
+  for i, node in ipairs(list) do
+    if node.id == id then
+      self.list = list
+      self.index = i
+      return
+    end
+  end
+  self.list = list
+  self.index = #list + 1
+end
+
 function PtrMethods:MoveToFirstChildItem(parentPtr)
   local node = currentNode(parentPtr)
   self.list = node and node.children or {}
@@ -101,6 +118,22 @@ fhGetTag = function(ptr)
   return node and node.tag
 end
 
+-- Renders a node's own value as text the way real FH's fhGetItemText/fhGetDisplayText do
+-- regardless of underlying type -- a plain string as-is, a fake Date object (see
+-- fhNewDate below) formatted as YYYY-MM-DD from the fake's own side table. Shared by
+-- fhGetItemText (both its "~" and shortcut-Data-Reference branches below) and
+-- fhGetDisplayText, so a Date-typed field renders identically through either path --
+-- matching real FH, live-confirmed (issue #67/#73): fhGetItemText(sourPtr, "~.~DT-Date")
+-- returns a formatted date string ("11 September 1901"), not a raw Date-object value.
+local function renderValue(node)
+  if type(node.value) == 'string' then return node.value end
+  local df = dateObjFields and dateObjFields[node.value]
+  if df then
+    return string.format("%04d-%02d-%02d", df.year or 0, df.month or 0, df.day or 0)
+  end
+  return ""
+end
+
 -- "~" is the self-reference Data Reference token (see the '~.NAME'/'~:SURNAME' qualifier
 -- examples in the gedcom-knowledge-corpus and bridge/README.md's own manual write-test
 -- script) — sourceHelper.lua only ever reads a pointer's own scalar value, never a
@@ -109,7 +142,24 @@ fhGetItemText = function(ptr, dataRef)
   local node = currentNode(ptr)
   if not node then return "" end
   if dataRef == "~" then
-    return node.value or ""
+    return renderValue(node)
+  end
+  -- "~.~PREFIX-CODE" resolves a source-template metafield's shortcut Data Reference
+  -- (sourceHelper.lua's resolvedFieldValue/getPopulatedTemplateFields, issue #73). This
+  -- fake's own fhCreateItem below already tags a created metafield by its shortcut string
+  -- (not FH's real raw tag "_FIELD" -- a known simplification, see fhCreateItem's own
+  -- comment), so resolving here means "find a child tagged exactly that shortcut" --
+  -- keeps the fake's read and write sides consistent with each other rather than
+  -- modeling FH's real tag-vs-Data-Reference indirection, which this fake was never
+  -- built to model (that indirection is exactly what issue #67/#73 live-verified against
+  -- the real Bridge instead).
+  local shortcut = dataRef:match("^~%.(~.+)$")
+  if shortcut then
+    for _, child in ipairs(node.children) do
+      if child.tag == shortcut then
+        return renderValue(child)
+      end
+    end
   end
   return ""
 end
@@ -139,19 +189,13 @@ end
 -- Scoped to how familyHelper.lua's describeItem actually calls it: fhGetDisplayText(ptr,
 -- "~", "min") for a leaf value, fhGetDisplayText(target) (bare) for a link's display
 -- text -- both mean "this node's own display text", so the extra arguments are ignored
--- here. A Date-valued node's fake object isn't a string (see fhNewDate below), so it's
--- rendered as YYYY-MM-DD from the fake's own side table -- just enough for findSources'
--- exact-match Date tests to have something comparable, not a claim this matches FH's own
--- date formatting.
+-- here. Shares renderValue's own YYYY-MM-DD Date rendering above -- just enough for
+-- findSources' exact-match Date tests to have something comparable, not a claim this
+-- matches FH's own date formatting.
 fhGetDisplayText = function(ptr)
   local node = currentNode(ptr)
   if not node then return "" end
-  if type(node.value) == 'string' then return node.value end
-  local df = dateObjFields and dateObjFields[node.value]
-  if df then
-    return string.format("%04d-%02d-%02d", df.year or 0, df.month or 0, df.day or 0)
-  end
-  return ""
+  return renderValue(node)
 end
 
 fhGetValueAsRichText = function(ptr)
@@ -178,6 +222,10 @@ fhHasChildItem = function(ptr)
   return node ~= nil and #node.children > 0
 end
 
+-- Tags a created metafield by its own shortcut string (e.g. "~TX-Reg_No") rather than
+-- FH's real raw tag "_FIELD" -- a known simplification (see fhGetItemText's own comment
+-- above, which reads it back the same way) that keeps this fake internally consistent
+-- without modeling the real tag-vs-Data-Reference indirection issue #67/#73 uncovered.
 fhCreateItem = function(tagOrShortcut, parentPtr)
   local node = { tag = tagOrShortcut, children = {} }
   local ptr = newPtr()
@@ -679,6 +727,33 @@ do
 
   local okBadTemplate = pcall(sourceHelper.findSources, "No Such Template", {})
   check(not okBadTemplate, 'an unresolvable template name raises an error, same as createSourceFromTemplate')
+
+  ----------------------------------------------------------------
+  -- getPopulatedTemplateFields (issue #73): the extracted resolution helper findSources'
+  -- own recordMatchesFilters already exercises indirectly above -- these tests call it
+  -- directly, reusing the same fixtures.
+  ----------------------------------------------------------------
+
+  local sourceAFields = sourceHelper.getPopulatedTemplateFields(sourceA)
+  check(sourceAFields.Type == "Birth", 'getPopulatedTemplateFields resolves a record-level Enum field')
+  check(sourceAFields.RegDate == "1895-03-12", 'getPopulatedTemplateFields resolves a record-level Date field as rendered text')
+  check(sourceAFields.District == nil and sourceAFields.Ref == nil,
+    'getPopulatedTemplateFields does not surface citation-level (CITN) fields, even though sourceA has citations with them populated')
+
+  local offTemplateFields = sourceHelper.getPopulatedTemplateFields(offTemplateSource)
+  check(offTemplateFields.Type == "X", 'getPopulatedTemplateFields resolves fields per the source\'s own linked template, not a fixed one')
+
+  local sourceAByQualifiedId = sourceHelper.getPopulatedTemplateFields(fhGetQualifiedRecordId(sourceA))
+  check(sourceAByQualifiedId.Type == "Birth", 'getPopulatedTemplateFields accepts a qualified id string, same as familyHelper\'s other functions')
+
+  local untemplatedSource = fhCreateItem("SOUR")
+  local untemplatedFields = sourceHelper.getPopulatedTemplateFields(untemplatedSource)
+  check(type(untemplatedFields) == 'table' and next(untemplatedFields) == nil,
+    'getPopulatedTemplateFields returns an empty table, not an error, for a non-templated source')
+
+  local okNullPtr, errNullPtr = pcall(sourceHelper.getPopulatedTemplateFields, fhNewItemPtr())
+  check(not okNullPtr, 'getPopulatedTemplateFields raises on a null pointer, rather than silently reading as "not templated"')
+  check(contains(errNullPtr, "getPopulatedTemplateFields"), 'the error names the function, same as getAllDetails\' own null-pointer error')
 end
 
 if failures > 0 then

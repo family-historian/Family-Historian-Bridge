@@ -196,6 +196,7 @@ local fakeSourceHelper = {
   createSourceFromTemplate = function() end,
   citeSource = function(ptrTarget, sourceNameOrId) return 'cited:' .. tostring(sourceNameOrId) end,
   findSources = function(templateNameOrId, fieldFilters) return 'foundsources:' .. tostring(templateNameOrId) end,
+  getPopulatedTemplateFields = function(sourPtr) return 'populatedfields:' .. tostring(sourPtr) end,
 }
 package.loaded.sourceHelper = fakeSourceHelper
 
@@ -345,6 +346,7 @@ check(env.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.
 check(env.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName present under read-only, by reference')
 check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag present under read-only, by reference')
 check(env.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources present under read-only, by reference (a pure read, unlike sourceHelper.lua\'s other two members)')
+check(env.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields present under read-only, by reference (issue #73 -- a pure read, same as findSources)')
 check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTemplate absent under read-only (calls real fh* write globals directly — must not be reachable without the write gate)')
 check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
@@ -515,6 +517,7 @@ check(envReadWrite3.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 
 check(envReadWrite3.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag still present under read-write, by reference')
 check(envReadWrite3.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources still present under read-write, by reference (still unwrapped -- it never writes)')
+check(envReadWrite3.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields still present under read-write, by reference (issue #73 -- still unwrapped, it never writes)')
 
 -- fhBridge.logActivity (require('sessionLogHelper'), issue #36): present, wrapped, forwards
 -- through and flips the tracker the same way createSourceFromTemplate/citeSource do above.

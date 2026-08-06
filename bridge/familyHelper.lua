@@ -81,6 +81,12 @@ local function resolvePointer(value)
   return value
 end
 
+-- Exported so sourceHelper.lua's getPopulatedTemplateFields can accept a qualified id
+-- string too, the same as every function in this module -- sourceHelper.lua already
+-- require()s this module (for getAllDetails), so this just reuses the one resolution
+-- rule instead of a second copy.
+M.resolvePointer = resolvePointer
+
 -- Individual record summary -- every getFamilyGroup/getAncestors entry carries one of
 -- these instead of a pointer, see the module comment above.
 local function indiDescriptor(ptr)

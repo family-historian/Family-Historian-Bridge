@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### New `fhBridge.getPopulatedTemplateFields`; `findSources` field-matching fix (issue #73)
+- Extracted issue #67's field-resolution fix out of `describe_project`'s own script into a
+  reusable, read-only `fhBridge.getPopulatedTemplateFields(sourPtr)` in
+  `bridge/sourceHelper.lua` (wired into both Session modes, same as `findSources`):
+  resolves a `SOUR` record's linked `_SRCT` template and returns `{code = value}` for every
+  record-level field populated on it. `describe_project` now just calls this once per
+  source instead of duplicating the `FDEF`/shortcut-prefix logic inline.
+- Found and fixed a related bug while extracting: `findSources`' own record-level field
+  matching checked a populated field's raw tag against its `~PREFIX-CODE` shortcut string,
+  but a populated field's real tag is always `_FIELD` (same root cause as issue #67) — so
+  `findSources` likely never correctly matched a `fieldFilters` entry against a real
+  (non-bridge-authored) source's fields. Record-level matching now uses the same
+  shortcut-Data-Reference resolution as the new helper. Citation-level field matching is
+  unchanged (left flagged, not fixed): no project data was found with an actual populated
+  citation-level template field to verify against, so it wasn't touched blind.
+- New `gedcom-knowledge-corpus` entry `source-template-field-resolution` documents why
+  matching by raw tag and by position both fail, and corrects `source-template-fields`'
+  now-outdated advice to walk a populated field's children by tag.
+
 ### `describe_project`: fix `sourceTemplateFields` always returning `{}` (issue #67)
 - `describe_project`'s `tagCensus.sourceTemplateFields` census was always empty: the
   original script looked for a `_FIELD` child on each `_SRCT` template record, but a
