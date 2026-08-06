@@ -34,6 +34,23 @@
   promise that family's own design relies on was silently broken (no caller-settable
   `limit` on this tool).
 
+### GEDCOM knowledge corpus guidance from issue #63 exploration
+- Three empirically-found gotchas added to `gedcom-knowledge-corpus.jsonl`:
+  `MoveToFirstChildItem`/`MoveNext` return `nil` on end-of-list, not a boolean — a
+  return-value `while` loop silently never runs, so check `IsNotNull()` instead; there's
+  no built-in duplicate-individual finder in the plugin API, so a name+birth-year
+  grouping heuristic is documented instead (same name+year is a strong signal, same
+  name+different generation usually isn't); and `getFactsByTag(ptr, "SOUR")` only sees
+  whole-record citations, not fact-level ones, so a naive "has any source" check
+  overcounts.
+- Corrected an earlier wrong finding: a raw `CHAN` data-reference probe returning nothing
+  had been reported as "no change-date tracking", but `fhCallBuiltInFunction("LastUpdated",
+  ptr)` on the same project returns real record change dates — user caught this live.
+- Two more patterns from the user's #63 follow-up: generation counts just need a chosen
+  start point (`getAncestors` + `getDescendants` + `getFamilyGroup` spouses, mirroring
+  FH's All Relatives report), and detecting a move between birth/death is cleaner via
+  `PLAC` lat/long distance than parsing county/country out of free text.
+
 ### `fhBridge.getDescendants` (issue #64)
 - New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
   `getAncestors`/`searchByName`/`getFactsByTag`: `fhBridge.getDescendants(ptr,
@@ -154,6 +171,19 @@
 - `RUN_LUA_DESCRIPTION` shrunk from 3697 to under 1900 bytes overall (previously ended its
   safe zone at byte 1936, only 112 bytes under the ~2048 truncation point); every paragraph
   now sits safely inside the cutoff instead of just the truncation notice itself.
+
+### Windows installer end-user guide
+- New `docs/windows-installer-guide.md`, targeting Windows 10/11 users installing via
+  `FH-MCP-Bridge-Setup-X.Y.Z.exe` rather than building from source: no Node.js, no
+  command line. Covers SmartScreen, the no-admin install, the automatic Claude Desktop
+  config merge, loading the plugin via FH's own install prompt, and installer-specific
+  troubleshooting (`config-merge.ps1` failures, antivirus flagging the bundled
+  `node.exe`, uninstall leaving the Claude Desktop config entry and plugin file behind).
+  `README.md` and `docs/user-guide.md` now point installer users at it.
+- The installer's `AppVersion` is now generated at build time by `installer/stage.ps1`
+  from `server/package.json` instead of hand-maintained — it had drifted to 0.5.0 while
+  the other three tracked version copies were already at 0.6.0. See docs/release.md's
+  "Three-way version drift" section.
 
 ## 0.6.0
 
