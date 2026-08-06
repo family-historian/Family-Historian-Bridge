@@ -347,6 +347,32 @@ local function findChild(node, tag)
   return nil
 end
 
+-- Simulates FH's real fhGetMetafieldShortcut (fh-help: "Takes a pointer to a metafield
+-- item and returns a shortcut for it... Can also be used with metafield definitions").
+-- sourceHelper.lua's own shortcutFor (issue #73) only ever calls this on a metafield
+-- *definition* here (an FDEF item, via def.fdefPtr) -- reads that item's own CODE/TYPE
+-- children and builds "~PREFIX-CODE". Deliberately keeps CODE's exact case as stored
+-- (e.g. "~TX-Reg_No"), NOT uppercased the way real FH's shortcut actually is
+-- (live-confirmed, issue #73: "~TX-REFERENCE") -- this fake's own fhCreateItem already
+-- tags a created field by the shortcut this fixture file's own setField/citeWithFields
+-- helpers build the same (also not uppercased, below), so keeping this fake's casing
+-- internally consistent matters more here than matching FH's real casing exactly, which
+-- the production code doesn't depend on anyway (Data Reference resolution is
+-- case-insensitive on the code portion, live-confirmed).
+local METAFIELD_SHORTCUT_PREFIX = {
+  Text = "TX", Name = "NM", Place = "PL", Address = "AD",
+  Enum = "EN", Date = "DT", Repository = "RP", URL = "UL",
+}
+fhGetMetafieldShortcut = function(fdefPtr)
+  local node = currentNode(fdefPtr)
+  if not node then return "" end
+  local codeChild = findChild(node, "CODE")
+  local typeChild = findChild(node, "TYPE")
+  local prefix = typeChild and METAFIELD_SHORTCUT_PREFIX[typeChild.value]
+  if not prefix or not codeChild then return "" end
+  return "~" .. prefix .. "-" .. codeChild.value
+end
+
 ------------------------------------------------------------------
 -- Fixtures
 ------------------------------------------------------------------

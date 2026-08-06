@@ -21,19 +21,6 @@ local M = {}
 -- a single Individual).
 local familyHelper = require('familyHelper')
 
--- ~PREFIX-CODE metafield shortcut prefixes, per FH's own "Metafields and Shortcuts" help
--- and the gedcom-knowledge-corpus "Creating a templated Source record" entry.
-local FIELD_TYPE_PREFIX = {
-  Text = "TX",
-  Name = "NM",
-  Place = "PL",
-  Address = "AD",
-  Enum = "EN",
-  Date = "DT",
-  Repository = "RP",
-  URL = "UL",
-}
-
 -- "~" is the self-reference Data Reference token (see the '~.NAME'/'~:SURNAME' qualifier
 -- examples in the gedcom-knowledge-corpus and the FH API's own fhGetItemText examples) —
 -- it means "the value at the pointer itself", with no further child/qualifier navigation.
@@ -80,14 +67,18 @@ local function parseOptions(prom)
   return options
 end
 
--- Builds a CODE -> {type, options, citation} map from a resolved template's FDEF
+-- Builds a CODE -> {type, options, citation, fdefPtr} map from a resolved template's FDEF
 -- children. citation (boolean) is FDEF's own CITN child ("Yes" when present, absent
 -- otherwise) -- FH's "Citation-specific" checkbox in the Source Template Field
 -- Definition Dialog, live-confirmed (issue #65) to be readable the same way as every
 -- other FDEF subfield: a citation-level field's value is populated on the *citation*
 -- item, not the Source record itself (see gedcom-knowledge-corpus source-template-fields
 -- for the general record-vs-citation distinction, e.g. QUAY/AUTH/TITL) -- findSources
--- below uses this to know which of fieldFilters to check where.
+-- below uses this to know which of fieldFilters to check where. fdefPtr (a live pointer
+-- to the FDEF item itself, Clone()'d so it survives past this walk) is for shortcutFor
+-- below (fhGetMetafieldShortcut also works directly on a metafield *definition* item, per
+-- its own FH help page) -- never returned to a caller outside this module, so it never
+-- needs to cross the JSON-encode boundary the rest of this map's fields do.
 local function fieldDefs(srctPtr)
   local defs = {}
   local child = fhNewItemPtr()
@@ -100,6 +91,7 @@ local function fieldDefs(srctPtr)
           type = readChildText(child, "TYPE"),
           options = parseOptions(readChildText(child, "PROM")),
           citation = readChildText(child, "CITN") == "Yes",
+          fdefPtr = child:Clone(),
         }
       end
     end
@@ -171,10 +163,18 @@ local function requireFieldDef(defs, code)
 end
 
 -- The ~PREFIX-CODE shortcut fhCreateItem expects for a metafield (setField below, to
--- populate one) or the exact child tag it lands as (findSources further down, to read
--- one back) -- shared so the two don't drift.
-local function shortcutFor(def, code)
-  return "~" .. FIELD_TYPE_PREFIX[def.type] .. "-" .. code
+-- populate one) or a Data Reference expects to resolve one back (resolvedFieldValue
+-- below, both for record-level and citation-level matching, and getPopulatedTemplateFields)
+-- -- shared so none of them drift. Delegates to FH's own fhGetMetafieldShortcut on the
+-- field definition's live pointer (def.fdefPtr, see fieldDefs above) rather than
+-- hand-building "~" .. prefix .. "-" .. code from a maintained TYPE->prefix table: FH's
+-- own function is guaranteed to match its real internal form (live-confirmed, issue #73:
+-- the real shortcut for a field coded "Reference" is "~TX-REFERENCE", uppercased, not
+-- "~TX-Reference" -- Data Reference resolution turned out to be case-insensitive on the
+-- code portion so the old hand-built form still worked, but there's no reason to rely on
+-- that once FH will just tell us the exact form directly).
+local function shortcutFor(def)
+  return fhGetMetafieldShortcut(def.fdefPtr)
 end
 
 local function validateFields(fields, defs)
@@ -205,7 +205,7 @@ local function toDate(value)
 end
 
 local function setField(sour, code, value, def)
-  local item = fhCreateItem(shortcutFor(def, code), sour)
+  local item = fhCreateItem(shortcutFor(def), sour)
   if def.type == "Date" then
     fhSetValueAsDate(item, toDate(value))
   elseif def.type == "Repository" then
@@ -270,28 +270,6 @@ end
 -- case-insensitive substring match is more useful than requiring an exact string.
 local EXACT_MATCH_TYPES = { Enum = true, Date = true, Repository = true }
 
--- CAUTION -- citation-level use only (see treeMatchesFilters below), and even there
--- unverified: matches by child.tag == shortcut (e.g. "~TX-Reference"), but live testing
--- for issue #67/#73 proved a RECORD-level populated field's real tag is "_FIELD", not its
--- shortcut string -- resolvedFieldValue below is the fix for that, used for record-level
--- matching and getPopulatedTemplateFields. Whether a citation-level field's real tag
--- follows the same "_FIELD" pattern couldn't be confirmed live (issue #73): no project
--- data was found with an actual populated citation-level template field to test against
--- (every populated citation inspected only had the ordinary GEDCOM PAGE subfield, not a
--- template metafield). Left as-is rather than guessed at -- if this turns out to have the
--- same bug, the fix is the same shape as resolvedFieldValue, just resolving relative to
--- a live citation item pointer instead of sourPtr (which findSources doesn't currently
--- retain -- collectCitations/allCitationsBySourceId discard pointers once a citation's
--- getAllDetails-shape tree is built).
-local function fieldValueFromTree(tree, shortcut)
-  for _, child in ipairs(tree.children or {}) do
-    if child.tag == shortcut then
-      return child.value
-    end
-  end
-  return nil
-end
-
 local function valueMatches(value, wantedValue, fieldType)
   if value == nil then
     return false
@@ -316,20 +294,22 @@ local function linkedTemplate(sourPtr)
   return nil
 end
 
--- Resolves one record-level field's value directly off ptr via its own ~PREFIX-CODE
--- shortcut Data Reference -- FH's own field-addressing mechanism (gedcom-knowledge-corpus
+-- Resolves one field's value directly off ptr via its own ~PREFIX-CODE shortcut Data
+-- Reference -- FH's own field-addressing mechanism (gedcom-knowledge-corpus
 -- data-references-syntax: "Source Template metafields... addressed... by a shortcut built
 -- from the field's 3-letter type prefix + its CODE"). Live-proven correct (issue #67/#73)
--- where the two obvious alternatives aren't: a populated field's real tag is "_FIELD", not
--- its shortcut string (so matching by child.tag == shortcut, per fieldValueFromTree above,
--- never matches a real, non-bridge-authored source's fields), and matching a source's Nth
--- _FIELD child positionally against the template's Nth FDEF breaks the moment a field
--- partway through is left unpopulated, shifting every later field's answer.
+-- where two more obvious alternatives aren't: a populated field's real raw tag is
+-- "_FIELD" always, never its shortcut string or its CODE, so matching by tag can't
+-- distinguish one field from another at all; and matching a source's Nth _FIELD child
+-- positionally against its template's Nth FDEF breaks the moment a field partway through
+-- is left unpopulated, shifting every later field's answer. ptr may be a SOUR record (a
+-- record-level field) or a citation item (a citation-level field, issue #73) -- the
+-- resolution is identical either way, since a Data Reference resolves relative to
+-- whatever ptr is.
 --
--- Returns nil (not "") for "not populated", matching fieldValueFromTree's own
--- nil-for-missing contract so both plug into valueMatches identically.
-local function resolvedFieldValue(ptr, def, code)
-  local value = fhGetItemText(ptr, "~." .. shortcutFor(def, code))
+-- Returns nil (not "") for "not populated", so it plugs directly into valueMatches below.
+local function resolvedFieldValue(ptr, def)
+  local value = fhGetItemText(ptr, "~." .. shortcutFor(def))
   if value == "" then
     return nil
   end
@@ -337,13 +317,16 @@ local function resolvedFieldValue(ptr, def, code)
 end
 
 -- True if every filters[code] matches ptr's own resolvedFieldValue for that code, per
--- valueMatches' substring-or-exact rule for that code's field type. Record-level
--- counterpart to treeMatchesFilters below (which stays citation-only) -- ptr is a live
--- Item Pointer here (the SOUR record itself), not a getAllDetails-shape tree, since
--- resolvedFieldValue needs a live pointer to resolve a Data Reference against.
-local function recordMatchesFilters(ptr, filters, defs)
+-- valueMatches' substring-or-exact rule for that code's field type. ptr is a live Item
+-- Pointer -- the SOUR record itself for a record-level check, or a citation item for a
+-- citation-level one (issue #73) -- not a getAllDetails-shape tree, since
+-- resolvedFieldValue needs a live pointer to resolve a Data Reference against. One
+-- function serves both cases identically; which fields end up in a given filters table
+-- (record-level vs citation-level) is already decided by findSources below, per each
+-- field's own CITN flag.
+local function matchesFilters(ptr, filters, defs)
   for code, wantedValue in pairs(filters) do
-    local value = resolvedFieldValue(ptr, defs[code], code)
+    local value = resolvedFieldValue(ptr, defs[code])
     if not valueMatches(value, wantedValue, defs[code].type) then
       return false
     end
@@ -369,8 +352,12 @@ end
 -- Scope: record-level fields only -- a Citation-specific field (FDEF's own CITN child) is
 -- populated per-citation, not on the SOUR record itself, so it never resolves here even
 -- when populated on some citation (see source-template-fields in the
--- gedcom-knowledge-corpus for the general record-vs-citation distinction; see
--- fieldValueFromTree above for the citation-level case's own, less certain, story).
+-- gedcom-knowledge-corpus for the general record-vs-citation distinction). findSources
+-- above resolves citation-level fields the same way (resolvedFieldValue, matchesFilters),
+-- just against a citation's own live pointer instead of sourPtr -- there's no equivalent
+-- exported helper for "every populated citation-level field on this specific citation"
+-- yet, since nothing has needed one so far; add one the same shape as this function if
+-- that changes.
 function M.getPopulatedTemplateFields(sourPtr)
   sourPtr = familyHelper.resolvePointer(sourPtr)
   if not sourPtr or sourPtr:IsNull() then
@@ -384,7 +371,7 @@ function M.getPopulatedTemplateFields(sourPtr)
 
   local result = {}
   for code, def in pairs(fieldDefs(template)) do
-    local value = resolvedFieldValue(sourPtr, def, code)
+    local value = resolvedFieldValue(sourPtr, def)
     if value then
       result[code] = value
     end
@@ -392,64 +379,60 @@ function M.getPopulatedTemplateFields(sourPtr)
   return result
 end
 
--- Recursively scans a getAllDetails-shape tree (already walked once by the caller) for
--- every SOUR-tagged citation at any depth, grouping them by the id of the source each
--- one links to. ownTag/ownQualifiedId identify the enclosing item the citation actually
--- sits on -- the top-level record itself for a Whole-record citation (ownTag starts as
--- the record's own tag, e.g. "INDI"/"FAM"), or the nearest enclosing Fact for a
--- Fact-level one (ownTag becomes that Fact's own tag, e.g. "BIRT", as the walk descends
--- into it) -- matching FH's own "Whole-record vs Fact-level citation" distinction (see
--- run-lua-guidance-cite-every-fact). Same reasoning as
--- checking-for-any-source-citation-is-recursive in the gedcom-knowledge-corpus: a
--- shallow direct-children-only scan would miss most real citations, which sit on a Fact
--- rather than the record itself.
-local function collectCitations(node, ownTag, ownQualifiedId, bySourceId)
-  for _, child in ipairs(node.children or {}) do
-    if child.tag == "SOUR" and child.link and child.link.id then
-      local list = bySourceId[child.link.id]
-      if not list then
-        list = {}
-        bySourceId[child.link.id] = list
+-- Recursively scans ptr's own live children for every SOUR-tagged citation at any depth,
+-- grouping them by the id of the source each one links to. ownTag/ownQualifiedId identify
+-- the enclosing item the citation actually sits on -- the top-level record itself for a
+-- Whole-record citation (ownTag starts as the record's own tag, e.g. "INDI"/"FAM"), or the
+-- nearest enclosing Fact for a Fact-level one (ownTag becomes that Fact's own tag, e.g.
+-- "BIRT", as the walk descends into it) -- matching FH's own "Whole-record vs Fact-level
+-- citation" distinction (see run-lua-guidance-cite-every-fact). Same reasoning as
+-- checking-for-any-source-citation-is-recursive in the gedcom-knowledge-corpus: a shallow
+-- direct-children-only scan would miss most real citations, which sit on a Fact rather
+-- than the record itself.
+--
+-- Walks the live tree directly (MoveToFirstChildItem/MoveNext) rather than a pre-built
+-- getAllDetails JSON tree the way this used to (issue #73): each citation's own live
+-- pointer is retained (Clone()'d) alongside its tag/qualifiedId, so matchesFilters can
+-- resolve a citation-level field by its shortcut Data Reference the same reliable way
+-- record-level fields already do -- a JSON tree can't carry a live pointer at all
+-- (jsonEncode.lua can't encode one), which is exactly why citation-level matching used to
+-- be stuck with a less reliable tag-based tree walk instead.
+local function collectCitations(ptr, ownTag, ownQualifiedId, bySourceId)
+  local child = fhNewItemPtr()
+  child:MoveToFirstChildItem(ptr)
+  while child:IsNotNull() do
+    local childTag = fhGetTag(child)
+    if childTag == "SOUR" then
+      local target = fhGetValueAsLink(child)
+      if target and not target:IsNull() then
+        local sourceId = fhGetRecordId(target)
+        local list = bySourceId[sourceId]
+        if not list then
+          list = {}
+          bySourceId[sourceId] = list
+        end
+        table.insert(list, { ptr = child:Clone(), tag = ownTag, qualifiedId = ownQualifiedId })
       end
-      table.insert(list, { node = child, tag = ownTag, qualifiedId = ownQualifiedId })
     end
-    collectCitations(child, child.tag, ownQualifiedId, bySourceId)
+    collectCitations(child, childTag, ownQualifiedId, bySourceId)
+    child:MoveNext()
   end
 end
 
--- One pass over every INDI/FAM record's full detail tree, grouping every SOUR citation
--- found anywhere in the project by the id of the source it links to. Cheaper than
--- re-scanning the whole project once per candidate source below.
+-- One pass over every INDI/FAM record, grouping every SOUR citation found anywhere in the
+-- project by the id of the source it links to. Cheaper than re-scanning the whole project
+-- once per candidate source below.
 local function allCitationsBySourceId()
   local bySourceId = {}
   for _, recTag in ipairs({ "INDI", "FAM" }) do
     local ptr = fhNewItemPtr()
     ptr:MoveToFirstRecord(recTag)
     while ptr:IsNotNull() do
-      local tree = familyHelper.getAllDetails(ptr)
-      collectCitations(tree, tree.tag, tree.qualifiedId, bySourceId)
+      collectCitations(ptr, fhGetTag(ptr), fhGetQualifiedRecordId(ptr), bySourceId)
       ptr:MoveNext()
     end
   end
   return bySourceId
-end
-
--- Citation-level counterpart to recordMatchesFilters above -- tree is a citation's own
--- getAllDetails-shape node (findSources never retains a live pointer per citation, see
--- fieldValueFromTree's own caution above), so this is still the tag-matching form, not
--- the live-Data-Reference form. True if every filters[code] matches tree's own child
--- tagged shortcutByCode[code], per valueMatches' substring-or-exact rule for that code's
--- field type. Module-level (not a closure over findSources' own locals) so its signature
--- states exactly what it needs, matching this file's other helpers (fieldValueFromTree,
--- valueMatches, linkedTemplate, collectCitations).
-local function treeMatchesFilters(tree, filters, defs, shortcutByCode)
-  for code, wantedValue in pairs(filters) do
-    local value = fieldValueFromTree(tree, shortcutByCode[code])
-    if not valueMatches(value, wantedValue, defs[code].type) then
-      return false
-    end
-  end
-  return true
 end
 
 -- sourceHelper.findSources(templateNameOrId, fieldFilters)
@@ -480,11 +463,6 @@ function M.findSources(templateNameOrId, fieldFilters)
   local templateId = fhGetRecordId(template)
   local defs = fieldDefs(template)
 
-  local shortcutByCode = {}
-  for code, def in pairs(defs) do
-    shortcutByCode[code] = shortcutFor(def, code)
-  end
-
   local recordFilters, citationFilters = {}, {}
   for code, wantedValue in pairs(fieldFilters) do
     local def = requireFieldDef(defs, code)
@@ -503,18 +481,21 @@ function M.findSources(templateNameOrId, fieldFilters)
   while sourPtr:IsNotNull() do
     local candidateTemplate = linkedTemplate(sourPtr)
     if candidateTemplate and not candidateTemplate:IsNull() and fhGetRecordId(candidateTemplate) == templateId then
-      -- Record-level filters are checked directly off the live pointer (recordMatchesFilters,
-      -- the proven-correct resolution) before paying for a full getAllDetails walk -- cheaper
+      -- Record-level filters are checked directly off the live pointer (matchesFilters, the
+      -- proven-correct resolution) before paying for a full getAllDetails walk -- cheaper
       -- for the common non-matching case, and sourTree is only actually needed once we know
       -- this candidate is worth keeping.
-      if recordMatchesFilters(sourPtr, recordFilters, defs) then
+      if matchesFilters(sourPtr, recordFilters, defs) then
         local sourTree = familyHelper.getAllDetails(sourPtr)
         local citationEntries = citationsBySourceId[fhGetRecordId(sourPtr)] or {}
         local citationFiltersOk = next(citationFilters) == nil
         local citedBy = {}
         for _, entry in ipairs(citationEntries) do
           table.insert(citedBy, { tag = entry.tag, qualifiedId = entry.qualifiedId })
-          if not citationFiltersOk and treeMatchesFilters(entry.node, citationFilters, defs, shortcutByCode) then
+          -- Same matchesFilters function as record-level above -- entry.ptr is the
+          -- citation's own live pointer (issue #73), resolved the same shortcut-Data-
+          -- Reference way rather than the old tag-based tree walk.
+          if not citationFiltersOk and matchesFilters(entry.ptr, citationFilters, defs) then
             citationFiltersOk = true
           end
         end
