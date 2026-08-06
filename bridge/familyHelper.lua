@@ -5,7 +5,8 @@
 -- item-pointer MoveToFirstRecord/MoveTo/MoveNext/MoveToFirstChildItem/IsNotNull/
 -- IsNull methods, fhGetValueAsLink, fhGetTag, fhGetItemText, fhGetRecordId,
 -- fhGetQualifiedRecordId, fhGetDisplayText, fhGetValueType, fhGetValueAsRichText,
--- fhHasChildItem, fhIndGetName, fhCallBuiltInFunction) is a read primitive already
+-- fhGetDataClass, fhGetValueAsText, fhHasChildItem, fhIndGetName,
+-- fhCallBuiltInFunction) is a read primitive already
 -- granted in sandbox.lua's
 -- Read-only half -- so sandbox.lua wires this module's functions through for BOTH
 -- access modes, not read-write only.
@@ -450,10 +451,24 @@ end
 -- (link-classed items only), children (any item with fhHasChildItem true) }.
 -- fhGetDisplayText(ptr, "~", "min") is used generically for .value across every
 -- other value type (text/date/integer/age/link/blob) rather than branching on
--- fhGetValueType case by case, EXCEPT richtext: fhGetItemText/fhGetValueAsText/
--- fhGetDisplayText all return a Notes-style field's raw FTF markup, not readable
--- prose (see gedcom-knowledge-corpus "Getting clean plain text out of a rich-text
--- field"), so richtext goes through fhGetValueAsRichText(ptr):GetPlainText() instead.
+-- fhGetValueType case by case, EXCEPT richtext and longtext (fhGetDataClass, not
+-- fhGetValueType -- longtext's own value type is plain "text", same as an ordinary
+-- single-line field, so fhGetValueType alone can't tell them apart):
+--   - richtext: fhGetItemText/fhGetValueAsText/fhGetDisplayText all return a
+--     Notes-style field's raw FTF markup, not readable prose (see
+--     gedcom-knowledge-corpus "Getting clean plain text out of a rich-text field")
+--     -- AND fhGetItemText(ptr, "~") can silently truncate a long richtext value
+--     entirely, independent of the markup issue (517 of 1294 chars observed on a
+--     real Source TEXT field, issue #70) -- so richtext goes through
+--     fhGetValueAsRichText(ptr):GetPlainText() instead, sidestepping both problems.
+--   - longtext: no markup to strip, but fhGetDisplayText's own docs describe its
+--     result as a short string "suitable to be used... in lists", not a
+--     truncation-safe full value -- same silent-shortening risk shape as richtext,
+--     just via a different, documented-on-purpose mechanism rather than a bug. No
+--     longtext-class field is known to exist in this project's actual data yet, but
+--     the guard costs one branch and closes the same gap issue #70 asked to have
+--     audited. Routed through fhGetValueAsText(ptr) instead, matching its "text"
+--     fhGetValueType.
 local function describeItem(ptr)
   local node = { tag = fhGetTag(ptr) }
 
@@ -467,6 +482,8 @@ local function describeItem(ptr)
   if valueType ~= "" then
     if valueType == "richtext" then
       node.value = fhGetValueAsRichText(ptr):GetPlainText()
+    elseif fhGetDataClass(ptr) == "longtext" then
+      node.value = fhGetValueAsText(ptr)
     else
       node.value = fhGetDisplayText(ptr, "~", "min")
     end

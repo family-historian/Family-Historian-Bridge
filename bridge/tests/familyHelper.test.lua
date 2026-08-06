@@ -6,7 +6,8 @@
 -- familyHelper.lua actually calls: item-pointer methods MoveToFirstRecord/MoveTo/
 -- MoveNext/MoveToFirstChildItem/IsNotNull/IsNull, plus globals fhNewItemPtr/fhGetTag/
 -- fhGetItemText/fhGetRecordId/fhGetQualifiedRecordId/fhGetValueAsLink/fhGetDisplayText/
--- fhGetValueType/fhGetValueAsRichText/fhHasChildItem/fhIndGetName.
+-- fhGetValueType/fhGetValueAsRichText/fhGetDataClass/fhGetValueAsText/fhHasChildItem/
+-- fhIndGetName.
 --
 -- Unlike sourceHelper.test.lua's fake tree (single-tag child lists only), this module
 -- walks records whose children mix several different tags as siblings (a FAM record's
@@ -215,6 +216,21 @@ fhGetValueAsRichText = function(ptr)
   return {
     GetPlainText = function() return (node and node.plainText) or "" end,
   }
+end
+
+-- dataClass is a separate axis from valueType (see familyHelper.lua's describeItem
+-- comment) -- a longtext-class field's own valueType is still plain "text", so tests
+-- for the longtext branch set both explicitly on the fixture node.
+fhGetDataClass = function(ptr)
+  return (ptr.node and ptr.node.dataClass) or ""
+end
+
+-- fullText stands in for the untruncated value fhGetValueAsText would return, kept
+-- distinct from .value (what fhGetDisplayText's fake reads) so a longtext test can
+-- prove describeItem actually took this branch rather than the fhGetDisplayText one.
+fhGetValueAsText = function(ptr)
+  local node = ptr.node
+  return (node and (node.fullText or node.value)) or ""
 end
 
 -- getDescendants' dnaLine filter calls fhCallBuiltInFunction(dnaBuiltin, indiPtr, p) --
@@ -585,6 +601,56 @@ do
     if child.tag == "NOTE2" then noteNode = child end
   end
   check(noteNode ~= nil and noteNode.value == "Plain prose, no markup.", 'richtext field value comes from GetPlainText(), not raw fhGetDisplayText')
+end
+
+------------------------------------------------------------------
+-- getAllDetails: longtext (a dataClass, not a valueType -- longtext's own valueType
+-- is plain "text", same as an ordinary single-line field) goes through
+-- fhGetValueAsText, not fhGetDisplayText's short list-representation (issue #70)
+------------------------------------------------------------------
+
+do
+  local indi = newIndi("Longtext Plugin", "Male")
+  local note = {
+    tag = "NOTE2",
+    children = {},
+    valueType = "text",
+    dataClass = "longtext",
+    value = "Short display form",
+    fullText = "Short display form plus a great deal more text that fhGetDisplayText's "
+      .. "short list-representation would have left off entirely.",
+  }
+  table.insert(indi.children, note)
+
+  local details = familyHelper.getAllDetails(ptrFor(indi))
+  local noteNode
+  for _, child in ipairs(details.children) do
+    if child.tag == "NOTE2" then noteNode = child end
+  end
+  check(noteNode ~= nil and noteNode.value == note.fullText,
+    'longtext field value comes from fhGetValueAsText(), not fhGetDisplayText\'s short form')
+  check(noteNode.value ~= note.value,
+    'longtext value differs from fhGetDisplayText\'s short-form value in this fixture (proves the branch was actually taken, not a fixture coincidence)')
+end
+
+------------------------------------------------------------------
+-- getAllDetails: a plain single-line text field (dataClass "text") still goes
+-- through fhGetDisplayText -- the longtext branch must not swallow every text-typed
+-- field, only ones fhGetDataClass actually reports as "longtext"
+------------------------------------------------------------------
+
+do
+  local indi = newIndi("PlainText Plugin", "Male")
+  local occ = { tag = "OCCU", children = {}, valueType = "text", dataClass = "text", value = "Farmer" }
+  table.insert(indi.children, occ)
+
+  local details = familyHelper.getAllDetails(ptrFor(indi))
+  local occNode
+  for _, child in ipairs(details.children) do
+    if child.tag == "OCCU" then occNode = child end
+  end
+  check(occNode ~= nil and occNode.value == "Farmer",
+    'a plain "text"-dataClass field still goes through fhGetDisplayText, unaffected by the longtext branch')
 end
 
 ------------------------------------------------------------------

@@ -163,6 +163,16 @@ fhGetValueAsRichText = function(ptr)
   }
 end
 
+-- No fixture in this file needs a "longtext" dataClass (see familyHelper.lua's
+-- describeItem for what that branch is for) -- this fake exists only so
+-- familyHelper.getAllDetails' non-richtext branch (reached via findSources ->
+-- allCitationsBySourceId) has a real global to call instead of erroring on a nil
+-- global, same "" default as fhGetValueType above.
+fhGetDataClass = function(ptr)
+  local node = currentNode(ptr)
+  return (node and node.dataClass) or ""
+end
+
 fhHasChildItem = function(ptr)
   local node = currentNode(ptr)
   return node ~= nil and #node.children > 0

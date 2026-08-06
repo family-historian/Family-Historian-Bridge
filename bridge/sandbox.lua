@@ -348,7 +348,8 @@ function M.build(accessMode)
   -- (fhNewItemPtr, item-pointer MoveToFirstRecord/MoveTo/MoveNext/
   -- MoveToFirstChildItem/IsNotNull/IsNull, fhGetValueAsLink, fhGetTag,
   -- fhGetItemText, fhGetRecordId, fhGetQualifiedRecordId, fhGetDisplayText,
-  -- fhGetValueType, fhGetValueAsRichText, fhHasChildItem, fhIndGetName,
+  -- fhGetValueType, fhGetValueAsRichText, fhGetDataClass, fhGetValueAsText,
+  -- fhHasChildItem, fhIndGetName,
   -- fhCallBuiltInFunction -- getDescendants' optional dnaLine filter, a pure
   -- lookup/query, not a write) -- unlike
   -- sourceHelper.lua's createSourceFromTemplate/citeSource below, so env.fhBridge is
