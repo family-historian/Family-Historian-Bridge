@@ -23,3 +23,8 @@ records) even when called "just to see the error message":
    neither corpus has it.
 4. Only as a last resort, probe live via `run_lua` — and even then, prefer functions that
    error on missing required args over ones that might execute with defaults.
+
+### Codebase questions
+When answering questions about codebase structure, architecture, or "how does X work",
+check for `.ua/knowledge-graph.json` first and use `/understand-chat` or
+`/understand-explain` rather than searching files directly.
