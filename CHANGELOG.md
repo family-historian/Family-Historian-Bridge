@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.0
+
 ### New `fhBridge.getPopulatedTemplateFields`; `findSources` field-matching fix, record AND citation level (issue #73)
 - Extracted issue #67's field-resolution fix out of `describe_project`'s own script into a
   reusable, read-only `fhBridge.getPopulatedTemplateFields(sourPtr)` in
