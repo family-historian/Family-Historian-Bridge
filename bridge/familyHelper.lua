@@ -56,10 +56,26 @@ end
 -- Every public function's pointer argument goes through this first: a string is
 -- treated as a qualified id and resolved via resolveQualifiedId, anything else
 -- (a live Item Pointer, or nil/false) is passed through unchanged for the caller's
--- own nil/IsNull check to catch.
+-- own nil/IsNull check to catch. A number raises a specific error instead of falling
+-- through: every descriptor this module (and getFamilyGroup/getAncestors/searchByName's
+-- results) returns carries both .id (a bare number) and .qualifiedId (a string like
+-- "I219") -- passing .id here by mistake is an easy slip (issue #65) that would
+-- otherwise only surface many calls later as Lua's own opaque "attempt to index a
+-- number value", once something tries to call a method on it. A bare number is also
+-- inherently ambiguous here regardless: unlike getFamilyGroup/getAncestors/
+-- getDescendants (Individual-only, where a bare id could only ever mean "I<n>"),
+-- getAllDetails/getFactsByTag accept any record type's qualified id, so a number alone
+-- doesn't say whether it means an INDI, FAM, SOUR, or other record -- kept uniformly
+-- string-only across every function rather than guessing by function, so the contract
+-- doesn't vary from one fhBridge.* call to the next.
 local function resolvePointer(value)
   if type(value) == "string" then
     return resolveQualifiedId(value)
+  end
+  if type(value) == "number" then
+    error("expected a qualified id string like 'I219', got the number " .. tostring(value) ..
+      " -- pass the .qualifiedId field (e.g. from getFamilyGroup/getAncestors/getDescendants/" ..
+      "searchByName), not .id")
   end
   return value
 end

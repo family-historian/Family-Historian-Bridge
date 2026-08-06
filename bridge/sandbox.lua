@@ -351,10 +351,17 @@ function M.build(accessMode)
   -- fhGetValueType, fhGetValueAsRichText, fhHasChildItem, fhIndGetName,
   -- fhCallBuiltInFunction -- getDescendants' optional dnaLine filter, a pure
   -- lookup/query, not a write) -- unlike
-  -- sourceHelper.lua/sessionLogHelper.lua below, so env.fhBridge is built here,
-  -- unconditionally, rather than inside the read-write block. The read-write block
-  -- only ever adds further (write) members to this same table, never replaces it.
+  -- sourceHelper.lua's createSourceFromTemplate/citeSource below, so env.fhBridge is
+  -- built here, unconditionally, rather than inside the read-write block. The read-write
+  -- block only ever adds further (write) members to this same table, never replaces it.
+  --
+  -- sourceHelper.lua itself is also required unconditionally here (issue #65): unlike
+  -- createSourceFromTemplate/citeSource, its findSources is a pure read (it walks
+  -- records/citations via familyHelper.getAllDetails, no fh* write primitive), so it's
+  -- wired into env.fhBridge here too, by reference like every other read-only member --
+  -- gating tracks whether a function writes, not which file it's defined in.
   local realFamilyHelper = require('familyHelper')
+  local realSourceHelper = require('sourceHelper')
   env.fhBridge = {
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
@@ -362,6 +369,7 @@ function M.build(accessMode)
     getDescendants = realFamilyHelper.getDescendants,
     searchByName = realFamilyHelper.searchByName,
     getFactsByTag = realFamilyHelper.getFactsByTag,
+    findSources = realSourceHelper.findSources,
   }
 
   if accessMode == "read-write" then
@@ -372,16 +380,16 @@ function M.build(accessMode)
       env[name] = trackedWrite(_G[name])
     end
 
-    -- Fills the one gap fhUtils itself doesn't cover (issue #18) — calls the real fh*
-    -- globals directly, same as fhUtils, so it must stay inside this read-write block.
-    local realFhBridge = require('sourceHelper')
+    -- createSourceFromTemplate/citeSource fill the one gap fhUtils itself doesn't cover
+    -- (issue #18) — call the real fh* globals directly, same as fhUtils, so they must
+    -- stay gated to read-write (unlike findSources above, already wired in unconditionally).
     -- logActivity (issue #36) is a separate sibling module, not part of sourceHelper.lua's
     -- own Source-record concerns, but exposed through the same env.fhBridge table and
     -- gated the same read-write-only way, since it also calls the real fh* globals
     -- directly.
     local realSessionLogHelper = require('sessionLogHelper')
-    env.fhBridge.createSourceFromTemplate = trackedWrite(realFhBridge.createSourceFromTemplate)
-    env.fhBridge.citeSource = trackedWrite(realFhBridge.citeSource)
+    env.fhBridge.createSourceFromTemplate = trackedWrite(realSourceHelper.createSourceFromTemplate)
+    env.fhBridge.citeSource = trackedWrite(realSourceHelper.citeSource)
     env.fhBridge.logActivity = trackedLog(realSessionLogHelper.logActivity)
   end
 

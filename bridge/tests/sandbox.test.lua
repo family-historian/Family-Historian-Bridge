@@ -195,6 +195,7 @@ package.loaded.fhUtils = fakeFhu
 local fakeSourceHelper = {
   createSourceFromTemplate = function() end,
   citeSource = function(ptrTarget, sourceNameOrId) return 'cited:' .. tostring(sourceNameOrId) end,
+  findSources = function(templateNameOrId, fieldFilters) return 'foundsources:' .. tostring(templateNameOrId) end,
 }
 package.loaded.sourceHelper = fakeSourceHelper
 
@@ -332,16 +333,18 @@ check(env.fhu.createUpdateItem == nil, 'fhu.createUpdateItem absent under read-o
 check(env.fhu.createTextFromSource == nil, 'fhu.createTextFromSource absent under read-only (undocumented in the help corpus, found by reading fhUtils.lua itself — issue #22)')
 
 -- fhBridge is present under read-only too, but only with its read-only members
--- (familyHelper.lua) — sourceHelper.lua's/sessionLogHelper.lua's members call real fh*
--- write globals directly, so those stay gated to read-write, same as fhCreateItem/
--- fhSetValueAsLink below.
+-- (familyHelper.lua, plus sourceHelper.lua's findSources -- issue #65) —
+-- sourceHelper.lua's createSourceFromTemplate/citeSource and sessionLogHelper.lua's
+-- logActivity call real fh* write globals directly, so those stay gated to read-write,
+-- same as fhCreateItem/fhSetValueAsLink below.
 check(type(env.fhBridge) == 'table', 'fhBridge present under read-only (family/detail query helpers call only read primitives)')
-check(env.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.getFamilyGroup present under read-only, by reference (not tracked-write, unlike sourceHelper/sessionLogHelper\'s members)')
+check(env.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.getFamilyGroup present under read-only, by reference (not tracked-write, unlike sourceHelper/sessionLogHelper\'s write members)')
 check(env.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails present under read-only, by reference')
 check(env.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors present under read-only, by reference')
 check(env.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants present under read-only, by reference')
 check(env.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName present under read-only, by reference')
 check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag present under read-only, by reference')
+check(env.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources present under read-only, by reference (a pure read, unlike sourceHelper.lua\'s other two members)')
 check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTemplate absent under read-only (calls real fh* write globals directly — must not be reachable without the write gate)')
 check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
@@ -511,6 +514,7 @@ check(envReadWrite3.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhB
 check(envReadWrite3.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants still present under read-write, by reference')
 check(envReadWrite3.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag still present under read-write, by reference')
+check(envReadWrite3.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources still present under read-write, by reference (still unwrapped -- it never writes)')
 
 -- fhBridge.logActivity (require('sessionLogHelper'), issue #36): present, wrapped, forwards
 -- through and flips the tracker the same way createSourceFromTemplate/citeSource do above.

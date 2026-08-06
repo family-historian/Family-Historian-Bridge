@@ -196,15 +196,23 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
   const results = searchGedcomKnowledge(corpus, "run_lua guidance");
   const combinedText = results.map((r) => r.text).join("\n");
 
-  it('finds all six "run_lua guidance" entries with a single query, via title match', () => {
-    expect(results.map((r) => r.id).sort()).toEqual([
-      "run-lua-guidance-call-shape-gotchas",
-      "run-lua-guidance-cite-every-fact",
-      "run-lua-guidance-family-query-helpers",
-      "run-lua-guidance-fhu-is-a-global",
-      "run-lua-guidance-log-activity",
-      "run-lua-guidance-write-session-rolled-back",
-    ]);
+  it('finds every "run_lua guidance" family entry with a single query, via breadcrumb match', () => {
+    // The family has grown past its original six run-lua-guidance-*-prefixed entries
+    // (e.g. checking-for-any-source-citation-is-recursive-not-getfactsbytag,
+    // generation-number-needs-a-start-point) — sibling entries that share the
+    // ["Bridge project conventions", "run_lua guidance", ...] breadcrumb but don't
+    // follow the id-prefix naming convention (gedcom-corpus-pattern memory: extend this
+    // family rather than growing RUN_LUA_DESCRIPTION). A hardcoded id list here goes
+    // stale every time a new sibling is added — derive the expected set from the
+    // corpus's own breadcrumb instead, so this test asserts the invariant that actually
+    // matters (searching "run_lua guidance" surfaces every family member in one call),
+    // not a snapshot of which ones existed when this test was last touched.
+    const expectedIds = corpus
+      .filter((entry) => entry.breadcrumb.includes("run_lua guidance"))
+      .map((entry) => entry.id)
+      .sort();
+    expect(expectedIds.length).toBeGreaterThanOrEqual(6);
+    expect(results.map((r) => r.id).sort()).toEqual(expectedIds);
   });
 
   it("lists fhu.records/fhu.allItems/fhu.indiList as the check-first iteration helpers, alongside the mutation helpers (issue #47)", () => {

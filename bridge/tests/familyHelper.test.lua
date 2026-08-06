@@ -796,6 +796,32 @@ do
   check(not okWrongType3, 'getDescendants rejects a qualified id that resolves to a non-Individual record')
 end
 
+------------------------------------------------------------------
+-- A bare number (e.g. a .id field grabbed instead of .qualifiedId, issue #65) raises a
+-- specific error rather than falling through to a raw Lua "attempt to index a number
+-- value" several calls later.
+------------------------------------------------------------------
+
+do
+  local okNumber, errNumber = pcall(familyHelper.getAllDetails, self_.id)
+  check(not okNumber, 'a bare number raises an error instead of silently misbehaving')
+  check(contains(errNumber, "qualified id string"), 'the error explains what was expected')
+  check(contains(errNumber, tostring(self_.id)), 'the error names the number that was given')
+  check(contains(errNumber, ".qualifiedId"), 'the error points at .qualifiedId as the fix')
+
+  local okNumber2, errNumber2 = pcall(familyHelper.getFactsByTag, self_.id, "FAMS")
+  check(not okNumber2, 'getFactsByTag also rejects a bare number')
+
+  local okNumber3, errNumber3 = pcall(familyHelper.getFamilyGroup, self_.id, "parents")
+  check(not okNumber3, 'getFamilyGroup also rejects a bare number (Individual-only functions are not exempted)')
+
+  local okNumber4 = pcall(familyHelper.getAncestors, self_.id)
+  check(not okNumber4, 'getAncestors also rejects a bare number')
+
+  local okNumber5 = pcall(familyHelper.getDescendants, grandpa.id)
+  check(not okNumber5, 'getDescendants also rejects a bare number')
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

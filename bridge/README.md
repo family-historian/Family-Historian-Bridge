@@ -42,7 +42,26 @@ implements.
   `fhBridge.citeSource(ptrTarget, sourceIdOrTitle)`, attaching a `SOUR` citation to any
   target item (an INDI/FAM record for a Whole-record citation, or a Fact item) instead of
   hand-assembling `fhCreateItem("SOUR", ...)` + `fhSetValueAsLink` — see
-  `docs/adr/0006-cite-every-fact-a-source-supports.md`.
+  `docs/adr/0006-cite-every-fact-a-source-supports.md`. Unlike those two, `fhBridge.findSources
+  (templateNameOrId, fieldFilters)` (issue #65) is read-only and wired into the sandbox for
+  both access modes, alongside `familyHelper.lua`'s members (see that entry below) — it calls
+  no write primitive, only `familyHelper.getAllDetails` to build each result and to scan for
+  citations. Finds every `SOUR` record linked to the given template whose populated fields
+  match every `fieldFilters` entry (`{[fieldCode] = matchValue}`): case-insensitive substring
+  for Text/Name/Place/Address/URL fields, exact match (against the same rendered display text
+  `getAllDetails` already shows) for Enum/Date/Repository fields. Which of `fieldFilters` is
+  checked against the source record's own fields vs. its citations' fields is decided per
+  field by the template's own `CITN` flag (`FDEF`'s "Citation-specific" child, see
+  `gedcom-knowledge-corpus`'s `source-template-fields` entry) — not something the caller
+  chooses — since a citation-level field is only ever populated per-citation, not once for the
+  source as a whole; a citation-level filter matches a candidate if *any* of its citations has
+  a matching value. Returns an array of `{source = <getAllDetails-shape tree for the SOUR
+  record>, citedBy = array of {tag, qualifiedId} for every fact/record across every INDI/FAM
+  in the project that cites it}` — `citedBy` is unconditional (present with or without
+  `fieldFilters`), so a caller can see how a template is actually used (e.g. "usually cited on
+  `BIRT` plus a dated `OCCU`") without a second helper call. Errors on a field code the
+  template doesn't define at all, same validation as `createSourceFromTemplate`; a field
+  that's merely unpopulated on a given candidate source just fails to match, not an error.
 - `sessionLogHelper.lua` — `fhBridge.logActivity(ptrRecord, action, media)` (issue #36; the
   optional `media` param from issue #39), a read-write-only helper that logs a Session's
   record-creating activity into one Research Note (`_RNOT`) per Session: the first call in

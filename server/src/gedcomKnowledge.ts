@@ -23,7 +23,16 @@ export interface GedcomKnowledgeStore {
   entries: GedcomKnowledgeEntry[];
 }
 
-const DEFAULT_SEARCH_LIMIT = 10;
+// 20, not 10 (issue #65): the "run_lua guidance" family (breadcrumb ["Bridge project
+// conventions", "run_lua guidance", ...]) already has 11 members as of this comment and
+// keeps growing (gedcom-corpus-pattern memory: extend this family rather than growing
+// RUN_LUA_DESCRIPTION) -- search_gedcom_knowledge exposes no caller-settable limit
+// (query is its only parameter), so a too-low default silently truncates the family a
+// caller was told relies on "one search call" (RUN_LUA_DESCRIPTION/run-lua-guidance-*'s
+// own promise) to see everything. 20 gives headroom well past the largest family today
+// while staying far below the corpus's total entry count, so an accidentally-broad query
+// still doesn't return everything.
+const DEFAULT_SEARCH_LIMIT = 20;
 
 export function parseGedcomKnowledgeCorpus(jsonlContent: string): GedcomKnowledgeEntry[] {
   return jsonlContent

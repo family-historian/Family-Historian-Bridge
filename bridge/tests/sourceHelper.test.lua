@@ -7,6 +7,16 @@
 -- MoveToFirstChildItem/MoveNext/IsNotNull/IsNull/Clone, plus globals fhGetTag/fhGetItemText/
 -- fhGetRecordId/fhCreateItem/fhSetValueAsText/fhSetValueAsDate/fhSetValueAsLink/
 -- fhSetValueAsRichText/fhNewDate/fhNewRichText/fhSrcEnableAutoTitle.
+--
+-- findSources (issue #65) additionally pulls in familyHelper.lua for real (require
+-- isn't stubbed away the way sandbox.test.lua/runScript.test.lua stub it, since this
+-- file wants findSources' actual behavior, not just that it was called) — so the fake
+-- environment below also covers familyHelper.lua's own needs: fhGetQualifiedRecordId,
+-- fhGetValueType, fhGetDisplayText, fhGetValueAsRichText, fhHasChildItem, and
+-- fhGetValueAsLink returning a real fake pointer (not just a raw node) to a linked
+-- record. Every fhSetValueAs* setter below now also stamps a .valueType on the node it
+-- touches, matching what fhGetValueType needs to tell a text/date/link/richtext field
+-- apart from a complex/record item (valueType "").
 
 package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
 
@@ -37,6 +47,11 @@ local function resetTree()
   recordsByTag = {}
   nextId = 1
 end
+
+-- Forward-declared so fhGetDisplayText (defined before fhNewDate below) can format a
+-- fake Date object's fields -- assigned (not re-declared) at fhNewDate's own definition
+-- further down, so both share the same upvalue.
+local dateObjFields
 
 local PtrMethods = {}
 PtrMethods.__index = PtrMethods
@@ -104,6 +119,55 @@ fhGetRecordId = function(ptr)
   return node and node.id
 end
 
+-- Needed for familyHelper.getAllDetails (via findSources) to build a record's
+-- id/qualifiedId pair -- only the record tags findSources' own fixtures actually use.
+local QUALIFIED_ID_PREFIX = { INDI = "I", FAM = "F", SOUR = "S", _SRCT = "T" }
+fhGetQualifiedRecordId = function(ptr)
+  local node = currentNode(ptr)
+  if not node or not node.id then return "" end
+  return (QUALIFIED_ID_PREFIX[node.tag] or "?") .. tostring(node.id)
+end
+
+-- Mirrors familyHelper.test.lua's own valueType convention: "" (unset) for a
+-- complex/record item with no value of its own, stamped onto a node by the setters
+-- below the moment it's actually given a value.
+fhGetValueType = function(ptr)
+  local node = currentNode(ptr)
+  return (node and node.valueType) or ""
+end
+
+-- Scoped to how familyHelper.lua's describeItem actually calls it: fhGetDisplayText(ptr,
+-- "~", "min") for a leaf value, fhGetDisplayText(target) (bare) for a link's display
+-- text -- both mean "this node's own display text", so the extra arguments are ignored
+-- here. A Date-valued node's fake object isn't a string (see fhNewDate below), so it's
+-- rendered as YYYY-MM-DD from the fake's own side table -- just enough for findSources'
+-- exact-match Date tests to have something comparable, not a claim this matches FH's own
+-- date formatting.
+fhGetDisplayText = function(ptr)
+  local node = currentNode(ptr)
+  if not node then return "" end
+  if type(node.value) == 'string' then return node.value end
+  local df = dateObjFields and dateObjFields[node.value]
+  if df then
+    return string.format("%04d-%02d-%02d", df.year or 0, df.month or 0, df.day or 0)
+  end
+  return ""
+end
+
+fhGetValueAsRichText = function(ptr)
+  local node = currentNode(ptr)
+  return {
+    GetPlainText = function()
+      return (node and type(node.value) == 'table' and node.value.text) or ""
+    end,
+  }
+end
+
+fhHasChildItem = function(ptr)
+  local node = currentNode(ptr)
+  return node ~= nil and #node.children > 0
+end
+
 fhCreateItem = function(tagOrShortcut, parentPtr)
   local node = { tag = tagOrShortcut, children = {} }
   local ptr = newPtr()
@@ -124,19 +188,43 @@ fhCreateItem = function(tagOrShortcut, parentPtr)
 end
 
 fhSetValueAsText = function(ptr, value)
-  currentNode(ptr).value = value
+  local node = currentNode(ptr)
+  node.value = value
+  node.valueType = "text"
 end
 
 fhSetValueAsDate = function(ptr, dateObj)
-  currentNode(ptr).value = dateObj
+  local node = currentNode(ptr)
+  node.value = dateObj
+  node.valueType = "date"
 end
 
 fhSetValueAsLink = function(ptr, targetPtr)
-  currentNode(ptr).value = currentNode(targetPtr)
+  local node = currentNode(ptr)
+  node.value = currentNode(targetPtr)
+  node.valueType = "link"
 end
 
 fhSetValueAsRichText = function(ptr, richTextObj)
-  currentNode(ptr).value = richTextObj
+  local node = currentNode(ptr)
+  node.value = richTextObj
+  node.valueType = "richtext"
+end
+
+-- Needed for familyHelper.getAllDetails (via findSources) to build a link field's
+-- descriptor ({tag, id, qualifiedId, text}, see familyHelper.lua's linkDescriptor) --
+-- wraps the raw target node (stored directly as .value by fhSetValueAsLink above) in a
+-- real fake pointer rather than handing back the node table itself.
+fhGetValueAsLink = function(ptr)
+  local node = currentNode(ptr)
+  local target = node and node.value
+  if type(target) ~= 'table' or not target.tag then
+    return newPtr()
+  end
+  local linkPtr = newPtr()
+  linkPtr.list = { target }
+  linkPtr.index = 1
+  return linkPtr
 end
 
 -- Real FH's fhNewDate returns a Date *object* (userdata, per the API's own Hungarian-
@@ -146,7 +234,7 @@ end
 -- a table here would collapse that distinction and defeat the test below. A coroutine
 -- (type 'thread') is a free, dependency-free stand-in for opaque host userdata; its fields
 -- live in this side table, keyed weakly so they don't outlive the coroutine.
-local dateObjFields = setmetatable({}, { __mode = 'k' })
+dateObjFields = setmetatable({}, { __mode = 'k' })
 fhNewDate = function(y, m, d, subtype)
   local co = coroutine.create(function() end)
   dateObjFields[co] = { kind = 'date', year = y, month = m, day = d, subtype = subtype }
@@ -176,12 +264,19 @@ local function buildTemplate(name)
   return tpl
 end
 
-local function addFieldDef(tpl, code, type_, prom)
+-- citation (optional boolean, issue #65): stamps a CITN="Yes" child on the field
+-- definition, mirroring FH's own "Citation-specific" checkbox (Source Template Field
+-- Definition Dialog) -- omitted (falsy) means the field is Source-record-level, FH's
+-- own default.
+local function addFieldDef(tpl, code, type_, prom, citation)
   local fdef = fhCreateItem("FDEF", tpl)
   fhSetValueAsText(fhCreateItem("CODE", fdef), code)
   fhSetValueAsText(fhCreateItem("TYPE", fdef), type_)
   if prom then
     fhSetValueAsText(fhCreateItem("PROM", fdef), prom)
+  end
+  if citation then
+    fhSetValueAsText(fhCreateItem("CITN", fdef), "Yes")
   end
 end
 
@@ -423,6 +518,158 @@ local okDupeCite, errDupeCite = pcall(sourceHelper.citeSource, badIdTarget, "Bir
 check(not okDupeCite, 'ambiguous source title (two sources, same title) raises an error')
 check(contains(errDupeCite, '2'), 'ambiguous-title error mentions the match count')
 check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source title is ambiguous')
+
+------------------------------------------------------------------
+-- findSources (issue #65): matches record-level fields on the SOUR record itself,
+-- citation-level fields (CITN) on its citations instead, and reports citedBy regardless.
+------------------------------------------------------------------
+
+do
+  resetTree()
+
+  local regIndex = buildTemplate("Test Registration Index")
+  addFieldDef(regIndex, "Type", "Enum", "Birth | Marriage")
+  addFieldDef(regIndex, "RegDate", "Date")
+  addFieldDef(regIndex, "District", "Text", nil, true)  -- citation-level (CITN)
+  addFieldDef(regIndex, "Ref", "Text", nil, true)        -- citation-level (CITN)
+
+  local otherTemplate = buildTemplate("Some Other Template")
+  addFieldDef(otherTemplate, "Type", "Enum", "X | Y")
+
+  local function setField(parentPtr, prefix, code, value)
+    fhSetValueAsText(fhCreateItem("~" .. prefix .. "-" .. code, parentPtr), value)
+  end
+
+  local function makeSource(templatePtr, type_, dateObj)
+    local sour = fhCreateItem("SOUR")
+    local link = fhCreateItem("_SRCT", sour)
+    fhSetValueAsLink(link, templatePtr)
+    setField(sour, "EN", "Type", type_)
+    fhSetValueAsDate(fhCreateItem("~DT-RegDate", sour), dateObj)
+    return sour
+  end
+
+  local sourceA = makeSource(regIndex, "Birth", fhNewDate(1895, 3, 12))
+  local sourceAId = fhGetRecordId(sourceA)
+  local sourceB = makeSource(regIndex, "Marriage", fhNewDate(1900, 1, 1))
+  local sourceBId = fhGetRecordId(sourceB)
+
+  -- A source linked to a different template entirely -- must never appear in
+  -- findSources("Test Registration Index", ...) results, however loose the filters.
+  local offTemplateSource = makeSource(otherTemplate, "X", fhNewDate(2000, 1, 1))
+
+  local function citeWithFields(targetPtr, sourcePtr, fields)
+    local citation = fhCreateItem("SOUR", targetPtr)
+    fhSetValueAsLink(citation, sourcePtr)
+    for code, value in pairs(fields) do
+      setField(citation, "TX", code, value)
+    end
+    return citation
+  end
+
+  local alice = fhCreateItem("INDI")
+  local aliceQualifiedId = fhGetQualifiedRecordId(alice)
+  local aliceBirt = fhCreateItem("BIRT", alice)
+  citeWithFields(aliceBirt, sourceA, { District = "Barnstaple", Ref = "123" })
+
+  local bob = fhCreateItem("INDI")
+  local bobQualifiedId = fhGetQualifiedRecordId(bob)
+  citeWithFields(bob, sourceA, { District = "Exeter", Ref = "456" })  -- whole-record citation
+
+  local fam1 = fhCreateItem("FAM")
+  local fam1QualifiedId = fhGetQualifiedRecordId(fam1)
+  citeWithFields(fam1, sourceB, { District = "London", Ref = "789" })  -- whole-record citation
+
+  local function findResult(results, id)
+    for _, r in ipairs(results) do
+      if r.source.id == id then return r end
+    end
+    return nil
+  end
+
+  local function citedByHas(citedBy, tag, qualifiedId)
+    for _, entry in ipairs(citedBy) do
+      if entry.tag == tag and entry.qualifiedId == qualifiedId then return true end
+    end
+    return false
+  end
+
+  ----------------------------------------------------------------
+  -- No filters: every source linked to the template, each with its own citedBy
+  ----------------------------------------------------------------
+
+  local allResults = sourceHelper.findSources("Test Registration Index", {})
+  check(#allResults == 2, 'findSources with no filters returns every SOUR linked to the template (not the off-template one)')
+
+  local resultA = findResult(allResults, sourceAId)
+  check(resultA ~= nil, 'sourceA is among the results')
+  check(#resultA.citedBy == 2, 'sourceA.citedBy has both its citations (Alice\'s BIRT + Bob\'s whole-record)')
+  check(citedByHas(resultA.citedBy, "BIRT", aliceQualifiedId), 'sourceA.citedBy reports the Fact-level citation with the enclosing Fact\'s own tag (BIRT), not "SOUR"')
+  check(citedByHas(resultA.citedBy, "INDI", bobQualifiedId), 'sourceA.citedBy reports the whole-record citation with the owning record\'s own tag (INDI)')
+
+  local resultB = findResult(allResults, sourceBId)
+  check(resultB ~= nil, 'sourceB is among the results')
+  check(#resultB.citedBy == 1 and citedByHas(resultB.citedBy, "FAM", fam1QualifiedId),
+    'sourceB.citedBy reports its one whole-record citation on the FAM record')
+
+  check(sourceHelper.findSources("Test Registration Index") ~= nil, 'fieldFilters is optional -- omitting it entirely behaves like {}')
+
+  ----------------------------------------------------------------
+  -- Record-level field filter (Enum, exact match)
+  ----------------------------------------------------------------
+
+  local birthOnly = sourceHelper.findSources("Test Registration Index", { Type = "Birth" })
+  check(#birthOnly == 1 and birthOnly[1].source.id == sourceAId, 'record-level Enum filter (Type=Birth) matches only sourceA, exactly')
+
+  ----------------------------------------------------------------
+  -- Record-level field filter (Date, exact match against the rendered display text)
+  ----------------------------------------------------------------
+
+  local byDate = sourceHelper.findSources("Test Registration Index", { RegDate = "1900-01-01" })
+  check(#byDate == 1 and byDate[1].source.id == sourceBId, 'record-level Date filter matches only sourceB, exactly')
+
+  ----------------------------------------------------------------
+  -- Citation-level field filter (Text, case-insensitive substring) -- checked against
+  -- citations, not the SOUR record's own fields (District/Ref aren't even populated
+  -- there)
+  ----------------------------------------------------------------
+
+  local byDistrict = sourceHelper.findSources("Test Registration Index", { District = "barn" })
+  check(#byDistrict == 1 and byDistrict[1].source.id == sourceAId,
+    'citation-level filter (District ~ "barn") matches sourceA via Alice\'s citation, substring + case-insensitive')
+
+  local byDistrict2 = sourceHelper.findSources("Test Registration Index", { District = "London" })
+  check(#byDistrict2 == 1 and byDistrict2[1].source.id == sourceBId, 'citation-level filter matches sourceB via its own citation')
+
+  local byRef = sourceHelper.findSources("Test Registration Index", { Ref = "456" })
+  check(#byRef == 1 and byRef[1].source.id == sourceAId,
+    'citation-level filter matches a source if ANY of its citations has a matching value (Bob\'s, not Alice\'s)')
+
+  local noMatch = sourceHelper.findSources("Test Registration Index", { District = "Nowhere" })
+  check(type(noMatch) == 'table' and #noMatch == 0, 'a citation-level filter matching no citation returns an empty array, not an error')
+
+  ----------------------------------------------------------------
+  -- Combined record-level + citation-level filters (AND, both must hold for the same
+  -- source; the citation-level check is scoped to THAT source's own citations)
+  ----------------------------------------------------------------
+
+  local combinedMatch = sourceHelper.findSources("Test Registration Index", { Type = "Birth", District = "Exeter" })
+  check(#combinedMatch == 1 and combinedMatch[1].source.id == sourceAId, 'record-level and citation-level filters combine (AND) on the same source')
+
+  local combinedNoMatch = sourceHelper.findSources("Test Registration Index", { Type = "Marriage", District = "Exeter" })
+  check(#combinedNoMatch == 0, 'combined filters don\'t cross-match -- sourceB\'s Type matches but "Exeter" is only on sourceA\'s citation')
+
+  ----------------------------------------------------------------
+  -- Errors
+  ----------------------------------------------------------------
+
+  local okBadCode, errBadCode = pcall(sourceHelper.findSources, "Test Registration Index", { NotAField = "x" })
+  check(not okBadCode, 'an unknown field code raises an error')
+  check(contains(errBadCode, "NotAField"), 'the error names the offending field code')
+
+  local okBadTemplate = pcall(sourceHelper.findSources, "No Such Template", {})
+  check(not okBadTemplate, 'an unresolvable template name raises an error, same as createSourceFromTemplate')
+end
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

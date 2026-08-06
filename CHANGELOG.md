@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### `fhBridge.findSources`, clearer bad-id errors, and rollback-scoping guidance (issue #65)
+- New helper `fhBridge.findSources(templateNameOrId, fieldFilters)` in
+  `bridge/sourceHelper.lua`: finds every `SOUR` record linked to a given template whose
+  populated fields match `fieldFilters` (case-insensitive substring for Text/Name/Place/
+  Address/URL fields, exact match for Enum/Date/Repository fields). A field's own `CITN`
+  ("Citation-specific") flag on the template decides whether a filter is checked against
+  the source record's own fields or against its citations' fields instead — a
+  citation-level filter matches if *any* of the source's citations has a matching value.
+  Read-only (unlike `createSourceFromTemplate`/`citeSource`) and wired into `env.fhBridge`
+  unconditionally, same as `familyHelper.lua`'s read helpers. Returns an array of
+  `{source = <getAllDetails-shape tree>, citedBy = [{tag, qualifiedId}, ...]}`, so "find a
+  comparable existing source and see how it's normally cited" is one call.
+- `familyHelper.lua`'s `resolvePointer` now raises a specific error when given a bare
+  number instead of a qualified id string (e.g. `.id` grabbed where `.qualifiedId` was
+  needed) — `"expected a qualified id string like 'I219', got the number 136 -- pass the
+  .qualifiedId field..., not .id"` — instead of a raw Lua `"attempt to index a number
+  value"` several calls later. Uniform across every `fhBridge.*` function; none accept a
+  bare number (ambiguous across record types for the generic ones).
+- New `gedcom-knowledge-corpus` entry (`run_lua guidance` family): never combine a write
+  call with read-only verification logic in the same `run_lua` script — a bug in the
+  verification half can otherwise trigger FH's whole-Session rollback (docs/adr/0005) even
+  though the verification itself changed nothing, since the write tracker was already
+  flipped by the write half earlier in the same script.
+- `source-template-fields`/`source-template-creating-a-templated-source` corpus entries
+  now document `FDEF`'s `CITN` subfield and lead with `fhBridge.getAllDetails
+  (templateQualifiedId)` as the one-call way to discover a template's fields, keeping the
+  manual `FDEF` walk as a documented fallback.
+- `search_gedcom_knowledge`'s default result limit raised 10 → 20: the `run_lua guidance`
+  family had already grown past 10 members, so the single-query-surfaces-everything
+  promise that family's own design relies on was silently broken (no caller-settable
+  `limit` on this tool).
+
 ### `fhBridge.getDescendants` (issue #64)
 - New helper in `bridge/familyHelper.lua`, alongside `getFamilyGroup`/`getAllDetails`/
   `getAncestors`/`searchByName`/`getFactsByTag`: `fhBridge.getDescendants(ptr,

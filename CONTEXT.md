@@ -241,6 +241,30 @@ a shared helper instead of each script hand-rolling `fhCreateItem("SOUR", ...)` 
 _Avoid_: Add source, link source (this project's own name for the operation is
 `citeSource`, matching the domain term "citation")
 
+**findSources**:
+The `fhBridge` helper (`sourceHelper.lua`) that finds every `SOUR` record linked to a given
+Source template whose populated fields match a set of filters — unlike `createSourceFromTemplate`/
+`citeSource`, it's read-only, wired into `run_lua`'s sandbox for both access modes (issue
+#65). Matching a filter against a candidate source's own fields or against its citations'
+fields instead is decided per field by the template's own **Citation-specific field** flag
+(below), not chosen by the caller. Always returns `citedBy` (which facts/records cite each
+match, across the whole project), so "find a comparable existing source and see how it's
+normally cited" is one call, not a hand-rolled scan over every `SOUR` record.
+_Avoid_: searchSources, findSource (this project's own name for the operation is
+`findSources`, plural, matching that it can return more than one)
+
+**Citation-specific field**:
+A Source Template field whose `FDEF` (field definition) is marked "Citation-specific" in
+FH's own Source Template Field Definition Dialog — populated per-citation instead of once
+on the Source record as a whole (e.g. a GRO Index template's Registration District, which
+varies citation to citation even though the Source record itself is shared). Live-confirmed
+(issue #65) as directly readable via the plugin API: the field's `FDEF` node carries a
+`CITN` child with value `"Yes"`; a Source-record-level field simply has no `CITN` child at
+all. Same record-vs-citation distinction as `QUAY` and a citation's `AUTH`/`TITL`
+overrides — see the `gedcom-knowledge-corpus`'s `source-template-fields` entry.
+_Avoid_: Record-level field (as the unmarked default without contrasting it against this —
+the point of the term is the *citation* side of the distinction)
+
 **logActivity**:
 The `fhBridge` helper (`sessionLogHelper.lua`) that logs a Read-write Session's
 record-creating activity into one Research Note (`_RNOT` record) per Session — creating it
