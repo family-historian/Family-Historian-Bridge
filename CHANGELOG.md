@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### `describe_project`: report Family Historian's own app version (issue #69)
+- `describe_project` now returns `fhAppVersion` — Family Historian's own application
+  version (e.g. `"8.0.0"`), read via `fhGetAppVersion()` (already wired into the
+  Read-only sandbox) and formatted as a dotted string, matching how
+  `BRIDGE_VERSION`/`SERVER_VERSION` are already represented elsewhere in this codebase
+  rather than the three separate integers that function returns. Lets a session know
+  which FH version it's actually talking to without a separate `run_lua` round-trip.
+
 ## 0.7.0
 
 ### `fhBridge.findSources`, clearer bad-id errors, and rollback-scoping guidance (issue #65)

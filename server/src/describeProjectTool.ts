@@ -69,7 +69,8 @@ Returns JSON shaped as:
     "CI_APP_DATA_FOLDER": "<FH's own application data folder path>",
     "CI_APP_MODE": "<\\"Project Mode\\" | \\"Gedcom Mode\\" | \\"Gedcom Mode (new)\\">",
     "CI_STRING_ENCODING": "<\\"ANSI\\" | \\"UTF-8\\">"
-  }
+  },
+  "fhAppVersion": "<Family Historian's own application version, e.g. \\"8.0.0\\", from fhGetAppVersion()>"
 }
 
 flagCensus covers Individual record flags only (Living/Private plus any project-specific
@@ -203,6 +204,14 @@ do
   end
 end
 
+-- fhGetAppVersion() (issue #69) returns the three version integers separately, not a
+-- pre-joined string (FH help: fhGetAppVersion) — formatted here as a dotted "X.Y.Z"
+-- string to match how BRIDGE_VERSION/SERVER_VERSION are already represented everywhere
+-- else in this codebase (see bridge/versionCompare.lua), rather than shipping a
+-- {major, minor, patch} table shape found nowhere else.
+local major, minor, patch = fhGetAppVersion()
+local fhAppVersion = string.format("%d.%d.%d", major, minor, patch)
+
 local flagCensus = {}
 local livingStatusAmbiguousCount = 0
 do
@@ -260,6 +269,7 @@ return {
     livingStatusAmbiguousCount = livingStatusAmbiguousCount,
   },
   contextInfo = contextInfo,
+  fhAppVersion = fhAppVersion,
 }
 `;
 

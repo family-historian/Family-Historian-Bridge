@@ -152,6 +152,24 @@ describe("DESCRIBE_PROJECT_DESCRIPTION contextInfo shape (issue #51)", () => {
   });
 });
 
+describe("DESCRIBE_PROJECT_DESCRIPTION fhAppVersion shape (issue #69)", () => {
+  it("documents fhAppVersion as a dotted version string", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"fhAppVersion"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/family historian/);
+  });
+});
+
+describe("DESCRIBE_PROJECT_SCRIPT fhAppVersion logic (issue #69)", () => {
+  it("calls fhGetAppVersion and returns fhAppVersion alongside the existing top-level keys", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/fhGetAppVersion\(\)/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/fhAppVersion = fhAppVersion,/);
+  });
+
+  it("formats the three version integers as a dotted string, not a table of parts", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/string\.format\("%d\.%d\.%d"/);
+  });
+});
+
 describe("DESCRIBE_PROJECT_SCRIPT contextInfo logic (issue #51)", () => {
   it("calls fhGetContextInfo for every documented string/bool CI_* key", () => {
     for (const key of [

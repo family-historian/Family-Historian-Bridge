@@ -94,6 +94,11 @@ are plain strings/booleans (`CI_PROJECT_NAME`, `CI_PROJECT_FILE`, `CI_GEDCOM_FIL
 are excluded — they return Lua light userdata, which `bridge/jsonEncode.lua` can't encode
 at all — as are the report/book-only `CI_BOOK_CONTEXT`/`CI_BOOK_ITEM_HEADING`, which are
 meaningless outside a report plugin's book context.
+Also returns `fhAppVersion` (issue #69) — Family Historian's own application version
+(e.g. `"8.0.0"`), read via `fhGetAppVersion()` and formatted as a dotted string to match
+how `BRIDGE_VERSION`/`SERVER_VERSION` are already represented elsewhere in this codebase
+(`bridge/versionCompare.lua`), rather than the three separate integers that function
+actually returns.
 Recomputed on every call; see docs/adr/0002-describe-project-no-server-cache.md for why
 it isn't cached. Always executes in the Read-only sandbox regardless of the Session's own
 Access mode — its script is fixed and known to never call a write function, so there's no
