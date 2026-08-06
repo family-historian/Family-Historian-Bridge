@@ -4,7 +4,7 @@
 @Author: Jane_t
 @Version: 0.7.0
 @Keywords: MCP, Claude, AI, bridge, automation
-@LastUpdated: 2026-07-31
+@LastUpdated: 2026-08-06
 @Licence: This plugin is copyright (c) 2026 Jane_t and contributors, and is licensed under the MIT License
 which is hereby incorporated by reference (see https://pluginstore.family-historian.co.uk/fh-plugin-licence)
 @Description: Local TCP bridge plugin - starts a Session that lets Claude (via the FH MCP server) query and edit your Family Historian project through a Read-only/Read-write sandboxed script API.
@@ -73,7 +73,7 @@ local timeoutDisplay = require("timeoutDisplay")
 local versionCompare = require("versionCompare")
 
 local PORT = 8734
-local DEFAULT_IDLE_TIMEOUT_MINUTES = 5 -- unchanged from the previous hardcoded 300s default
+local DEFAULT_IDLE_TIMEOUT_MINUTES = 15 -- Changed to 15 from 5 minutes
 
 -- Dialog background colours: a muted traffic-light so the Session's state -- and, while
 -- listening, whether write access is armed -- is visible without reading the status label.
