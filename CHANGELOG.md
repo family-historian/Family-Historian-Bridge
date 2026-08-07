@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.10.0
+
+### Exit button on the Bridge dialog (issue #77)
+- New third button, "Exit", always active regardless of whether a Session is running —
+  equivalent to closing the dialog via the window's X. Both now share one teardown path
+  (`stopSessionIfRunning()`) rather than X's previous, narrower `server:close()`-only
+  handling, which skipped stopping the poll timer and clearing session state.
+- Closing via Exit/X prompts to confirm (Yes/No) only when a request was actually handled
+  within the last 10 seconds — the only real proxy for "Claude might send another request
+  imminently," tracked via a new `lastRequestHandledTime`, deliberately separate from the
+  pre-existing `lastActivityTime` (also stamped at Start, for the idle-timeout clock) so a
+  plain Start-then-Exit with no request in flight doesn't trigger a spurious warning.
+  Declining the prompt leaves the Session running untouched. See
+  `docs/adr/0020-exit-button-shared-teardown-freshness-confirm.md`.
+
+### FTF table column widths computed from content (issue #76)
+- Every `run_lua`-built FTF table now sizes each column from its actual cell content
+  (`ceil(max_chars/0.011) + 200` twips, no minimum-width floor) instead of the flat
+  800-twip default used in prior practice, so generated tables render proportioned to
+  their content rather than uniformly wide. Constants are a ballpark estimate, not
+  measured against FH's own rendering. Also documents the leading-blank-line rule for a
+  table placed at the very top of a rich-text field. See
+  `docs/adr/0019-ftf-table-widths-computed-from-content-not-fh-default.md`.
+- `run_lua` guidance corpus also gained the `fhNewItemPtr()`/`MoveTo` idiom for getting a
+  blank Item Pointer to jump straight to a named child item, found while building this.
+
 ### Bridge entry file split into a stub plus `bridgeSession.lua`, for Serena coverage (issue #75)
 - `bridge/Claude MCP Bridge.fh_lua` — the repo's only source `.fh_lua` file, unrecognized by
   Serena's installed Lua language server integration (no `file_filter` hook, unlike its
