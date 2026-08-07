@@ -1,5 +1,7 @@
 # FH MCP Bridge
 
+<img src="docs/fh_bridge_logo_small.png" alt="FH Bridge logo" width="150">
+
 An MCP server, installable alongside Family Historian (FH), that lets Claude query a
 user's own open FH project directly — no GEDCOM export, no separate app — by sending Lua
 scripts to a companion FH plugin over a local TCP socket.
