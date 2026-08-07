@@ -4,6 +4,11 @@ There's no script for this yet — every release so far (0.1.0, 0.2.0, 0.3.0) ha
 by hand, in the order below, reconstructed from git/Forgejo history rather than written
 down in advance. Treat this doc as the checklist until it's worth automating.
 
+**Step 9 (create the Forgejo release + upload the zip) is mandatory for every release, not
+an optional extra.** A version bump/tag with no matching Forgejo release is an incomplete
+release — don't stop at step 8. (0.9.0 shipped this way once, caught and fixed after the
+fact; see CHANGELOG/git history around 2026-08-07.)
+
 See `docs/agents/issue-tracker.md` for the Forgejo API base URL and `FORGEJO_TOKEN` auth
 used in step 6.
 
@@ -133,7 +138,7 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-## 9. Create the Forgejo release and upload the zip
+## 9. Create the Forgejo release and upload the zip (required — do not skip)
 
 ```bash
 source ~/.zshrc   # FORGEJO_TOKEN
