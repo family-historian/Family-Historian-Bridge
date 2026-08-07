@@ -21,12 +21,24 @@ _Avoid_: Plugin (alone, when the bridge specifically is meant), server (reserve 
 for the MCP server)
 
 **Session**:
-The period between a user clicking Start and clicking Stop (or an idle timeout, or a
-socket `STOP` command) on the bridge plugin's dialog. FH's main window is locked for the
-whole session — a deliberate trade-off, not a bug. Access mode (read-only vs read-write)
-is chosen once, at Start, and holds for the whole session.
+The period between a user clicking Start and clicking Stop (or an idle timeout, a
+socket `STOP` command, or closing the dialog via Exit or the window's X) on the bridge
+plugin's dialog. FH's main window is locked for the whole session — a deliberate
+trade-off, not a bug. Access mode (read-only vs read-write) is chosen once, at Start, and
+holds for the whole session.
 _Avoid_: Connection (a session can span many short-lived socket connections, one per
 `run_lua` call)
+
+**Exit**:
+Closes the whole Bridge plugin (not just the Session) — the Exit button and the dialog's
+own window X are equivalent and share the same teardown. If a Session is running, it's
+torn down first; the user is prompted to confirm only when a request was actually handled
+within the last 10 seconds (a hardcoded freshness heuristic, not user-configurable, and
+distinct from merely having clicked Start) — the only observable signal that Claude might
+be about to send another request. See
+docs/adr/0020-exit-button-shared-teardown-freshness-confirm.md.
+_Avoid_: Stop (alone, when Exit specifically is meant — Stop only ends the Session and
+leaves the plugin open; Exit ends the plugin itself)
 
 **Access mode**:
 The read-only/read-write toggle set by the user at session Start. Read-only exposes only

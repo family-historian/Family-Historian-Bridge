@@ -50,6 +50,16 @@ local versionCompare = require("versionCompare")
 
 local PORT = 8734
 local DEFAULT_IDLE_TIMEOUT_MINUTES = 15 -- Changed to 15 from 5 minutes
+-- Issue #77 / docs/adr/0020: Exit (and the window's X, which shares Exit's teardown) only
+-- prompts to confirm closing a running Session when the last request was handled this
+-- recently -- the only observable proxy for "Claude might send another request any
+-- moment," since a script actually executing can never overlap with a button click (IUP's
+-- mainloop is single-threaded). Hardcoded, not exposed on the dialog like the idle
+-- timeout -- this is a safety-net nudge, not a per-user tunable. Measured against
+-- lastRequestHandledTime, not lastActivityTime -- lastActivityTime is also stamped at
+-- Start itself (for the idle-timeout clock), so using it here would warn on a Start-then-
+-- immediately-Exit even though no request was ever handled.
+local RECENT_ACTIVITY_CONFIRM_SECONDS = 10
 
 -- Dialog background colours: a muted traffic-light so the Session's state -- and, while
 -- listening, whether write access is armed -- is visible without reading the status label.
@@ -65,6 +75,9 @@ local STATUS_COLOR_READWRITE = "255 243 205" -- amber: listening, read-write (ca
 local STATUS_COLOR_ERROR     = "248 215 218" -- red: failed to bind
 local server = nil
 local lastActivityTime = nil
+-- Distinct from lastActivityTime above: only stamped when a real request (stop/version/lua)
+-- is actually handled, never at Start -- see RECENT_ACTIVITY_CONFIRM_SECONDS above for why.
+local lastRequestHandledTime = nil
 -- Set by a VERSION request (issue #45), cleared on a match or a fresh Start. A VERSION
 -- check arrives on its own connection, handled and closed within a single poll tick — a
 -- mismatch noted only in that tick's own status update would be overwritten by the very
@@ -89,6 +102,9 @@ local txtIdleTimeout = iup.text{
 local lblTimeLeft = iup.label{title="", padding="0x4"}
 local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
+-- Always active, Session running or not -- mirrors the window's X, which is likewise
+-- clickable regardless of Session state (issue #77, docs/adr/0020).
+local btnExit   = iup.button{title="Exit", padding="4x4"}
 
 lblStatus.expand = "HORIZONTAL"
 -- Same fix as lblStatus: this label is created with an empty title, so without an
@@ -119,7 +135,7 @@ local dlg = iup.dialog{
         -- empty-titled label maps at near-zero width and won't regrow to fit the "Time
         -- left: M:SS" text set into it later -- it just now expands within this row
         -- instead of its own.
-        iup.hbox{btnStart, btnStop, lblTimeLeft, gap="10"},
+        iup.hbox{btnStart, btnStop, btnExit, lblTimeLeft, gap="10"},
         margin="10x10", gap="10"
     },
     title="Claude MCP Bridge",
@@ -215,6 +231,7 @@ function timPoll:action_cb()
 
     if request.kind == "stop" then
         lastActivityTime = os.time()
+        lastRequestHandledTime = lastActivityTime
         client:send("STOPPING\n")
         client:close()
         -- treat a socket STOP the same as clicking the Stop button
@@ -223,6 +240,7 @@ function timPoll:action_cb()
 
     if request.kind == "version" then
         lastActivityTime = os.time()
+        lastRequestHandledTime = lastActivityTime
         local severity = versionCompare.compare(BRIDGE_VERSION, request.serverVersion)
         client:send(json.encode({ version = BRIDGE_VERSION }) .. "\n")
         client:close()
@@ -236,6 +254,7 @@ function timPoll:action_cb()
     end
 
     lastActivityTime = os.time()
+    lastRequestHandledTime = lastActivityTime
 
     local script = client:receive(request.byteCount)
     if not script then
@@ -297,13 +316,23 @@ function btnStart:action()
         "\nWaiting for a connection..."
 end
 
-function btnStop:action()
+-- Shared by btnStop, Exit and the window's X (docs/adr/0020) so the socket/timer teardown
+-- can't drift between the three -- issue #77 flagged that close_cb previously skipped most
+-- of this. Only the socket/timer/activity state; the "return dialog to Start-ready" UI
+-- reset stays in btnStop:action() below, since it's meaningless when the dialog is about
+-- to close (Exit/X) rather than staying open (Stop).
+local function stopSessionIfRunning()
     timPoll.run = "NO"
     if server then
         server:close()
         server = nil
     end
     lastActivityTime = nil
+    lastRequestHandledTime = nil
+end
+
+function btnStop:action()
+    stopSessionIfRunning()
     btnStart.active = "YES"
     btnStop.active = "NO"
     togReadOnly.active = "YES"
@@ -314,12 +343,32 @@ function btnStop:action()
     lblStatus.title = "Not listening."
 end
 
-function dlg:close_cb()
-    if server then
-        server:close()
-        server = nil
+-- Exit and the window's X both funnel through here (docs/adr/0020). Confirms only when a
+-- Session is running and the last request was handled within
+-- RECENT_ACTIVITY_CONFIRM_SECONDS -- otherwise closes straight away, silently. Returns
+-- false (and leaves the Session untouched) if the user declines the prompt.
+local function confirmAndStopSession()
+    if server and lastRequestHandledTime and os.time() - lastRequestHandledTime < RECENT_ACTIVITY_CONFIRM_SECONDS then
+        local pressed = iup.Alarm("Confirm Exit", "A request was just handled -- close anyway?", "Yes", "No")
+        if pressed ~= 1 then
+            return false
+        end
     end
-    return iup.CLOSE
+    stopSessionIfRunning()
+    return true
+end
+
+function btnExit:action()
+    if confirmAndStopSession() then
+        return iup.CLOSE
+    end
+end
+
+function dlg:close_cb()
+    if confirmAndStopSession() then
+        return iup.CLOSE
+    end
+    return iup.IGNORE
 end
 
 dlg:show()
