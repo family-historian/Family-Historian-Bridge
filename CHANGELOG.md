@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0
+
 ### `describe_project`: split structural field definitions from occurrence counting (issue #74)
 - `sourceTemplateFields` (issue #67/#73) silently gave zero for every citation-specific
   (CITN) field, since those populate on a citation, not the SOUR record itself. Extending
