@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### `describe_project`: split structural field definitions from occurrence counting (issue #74)
+- `sourceTemplateFields` (issue #67/#73) silently gave zero for every citation-specific
+  (CITN) field, since those populate on a citation, not the SOUR record itself. Extending
+  the walk to cover citations would mean scanning every citation across every INDI/FAM
+  record on every `describe_project` call (no caching, ADR 0002) whether or not the
+  conversation ever touches sources.
+- `describe_project`'s census key is renamed `sourceTemplateFieldDefinitions` and made
+  structural only: walks `_SRCT` template records and their `FDEF` children directly,
+  reporting each field's CODE/TYPE/CITN, nested per template name. Cheap and bounded by
+  template count, not record/citation count.
+- All occurrence counting (record-level and citation-level) moves to a new opt-in
+  `fhBridge.getTemplateFieldCensus(templateNameOrId)` helper in `bridge/sourceHelper.lua`,
+  single-template scoped like `findSources`/`getPopulatedTemplateFields`, wired into
+  `sandbox.lua`'s `env.fhBridge` unconditionally (pure read, both access modes). Only pays
+  for the whole-project citation walk when the template actually has a citation-level
+  field to count.
+- See ADR 0017 for the full design rationale.
+
 ## 0.8.0
 
 ### New `fhBridge.getPopulatedTemplateFields`; `findSources` field-matching fix, record AND citation level (issue #73)
