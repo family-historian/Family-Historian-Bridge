@@ -21,18 +21,19 @@ local M = {}
 -- requires sourceHelper.lua and sessionLogHelper.lua from inside a function body, not at
 -- module load time). Order here is arbitrary — see the note above.
 M.MODULE_NAMES = {
-  "familyHelper", "jsonEncode", "requestFraming", "runScript", "sandbox", "sessionLogHelper",
-  "sourceHelper", "timeoutDisplay", "versionCompare", "watchdog",
+  "bridgeSession", "familyHelper", "jsonEncode", "requestFraming", "runScript", "sandbox",
+  "sessionLogHelper", "sourceHelper", "timeoutDisplay", "versionCompare", "watchdog",
 }
 
 -- Must match bridge/Claude MCP Bridge.fh_lua's Install comment byte-for-byte — if that
 -- comment changes, update this (buildBundle errors loudly instead of silently shipping a
 -- bundle with the stale, dev-only install text).
-local INSTALL_COMMENT_SOURCE = [[-- Install: this source form is split into sibling modules (require()'d below) purely so
--- each one can be unit-tested standalone outside FH (see bridge/README.md). It is not
--- itself the installable artifact — FH's own plugin convention expects one file, and
--- install_fh_plugin can only write one file per call (see docs/adr/0009). Build the
--- single-file artifact with:
+local INSTALL_COMMENT_SOURCE = [[-- Install: this source form is split into sibling modules (require()'d below, including
+-- bridgeSession.lua) purely so each one can be unit-tested standalone outside FH where
+-- possible (see bridge/README.md) and, for bridgeSession.lua, so Serena can navigate it.
+-- It is not itself the installable artifact — FH's own plugin convention expects one
+-- file, and install_fh_plugin can only write one file per call (see docs/adr/0009). Build
+-- the single-file artifact with:
 --   lua bridge/scripts/build.lua
 -- then copy just bridge/dist/Claude MCP Bridge.fh_lua into FH's Plugins folder and load
 -- it via Tools -> Plugins, same as any other plugin.]]

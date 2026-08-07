@@ -4,13 +4,23 @@ The FH-side half of the MCP bridge — see the repo root `CONTEXT.md` and
 `docs/adr/0001-arbitrary-sandboxed-lua-execution.md` for the concepts and decisions this
 implements.
 
-- `Claude MCP Bridge.fh_lua` — the plugin itself: IUP dialog (Access-mode selector, idle-timeout
-  spin-box and countdown, Start/Stop, idle auto-Stop timer), TCP listener, request framing.
-  Calls `fhInitialise(7, 0, 0, "save_required")` as its very first statement, before any
-  `require()`, so FH prompts to save unsaved changes the moment the plugin loads rather
-  than partway through (issue #33) — Cancel there ends the plugin before the dialog is
-  ever built. Also calls `fhUpdateDisplay()` after every accepted request, so any change a
-  write script made is reflected on FH's own screen right away (issue #33).
+- `Claude MCP Bridge.fh_lua` — the entry file, and now just a stub (issue #75, docs/adr/0018):
+  the `@Title`/`@Type`/... header FH's plugin loader reads, `fhInitialise(7, 0, 0,
+  "save_required")` as its very first statement, before any `require()`, so FH prompts to
+  save unsaved changes the moment the plugin loads rather than partway through (issue #33)
+  — Cancel there ends the plugin before the dialog is ever built — then
+  `fhSetStringEncoding("UTF-8")` (also mandatorily direct here, never inside a required
+  module — see `bridgeSession.lua` below), then one `require("bridgeSession")`. Nothing
+  else lives here any more.
+- `bridgeSession.lua` — the dialog UI (Access-mode selector, idle-timeout spin-box and
+  countdown, Start/Stop, idle auto-Stop timer), TCP listener, and request framing — moved
+  out of the entry file itself (issue #75, docs/adr/0018) so Serena's symbol tools can
+  cover it; `.fh_lua` files can't be recognized by Serena's Lua language server, `.lua`
+  files can. Also calls `fhUpdateDisplay()` after every accepted request, so any change a
+  write script made is reflected on FH's own screen right away (issue #33). Like the entry
+  file before it, this has no automatable seam (needs `iup`/`luasocket`/FH's own globals
+  regardless of which file it lives in) — no `bridgeSession.test.lua`, tested manually
+  inside FH instead (see "Manual test" below).
 - `requestFraming.lua` — parses a request's first line (`STOP` / `LUA <n>` / `LUA_RO <n>` /
   `VERSION <server-version>`) into a structured form; `LUA_RO` forces the Read-only sandbox
   regardless of the Session's own Access mode (issue #16 — used exclusively by
@@ -173,8 +183,9 @@ plugin's own running code otherwise. Both are build tooling, not part of the plu
 itself, same reason `tests/` is kept out of the top level: `dist/` is generated and
 gitignored, rebuilt with `lua bridge/scripts/build.lua`.
 
-`Claude MCP Bridge.fh_lua` itself (the socket/IUP dialog plumbing) has no automatable seam — FH is
-proprietary and Windows/CrossOver-only. It's tested manually, inside FH:
+`bridgeSession.lua` (the socket/IUP dialog plumbing, moved out of the entry file by issue #75/
+docs/adr/0018) has no automatable seam — FH is proprietary and Windows/CrossOver-only. It's
+tested manually, inside FH:
 
 ## Manual test
 

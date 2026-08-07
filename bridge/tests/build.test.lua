@@ -99,11 +99,36 @@ local entryMissingLastUpdated = realEntrySource:gsub('@LastUpdated:%s*%S+', '@No
 local lastUpdatedOk = pcall(bundler.buildBundle, entryMissingLastUpdated, fakeReadModule)
 assertEqual(lastUpdatedOk, false, 'a missing @LastUpdated header makes buildBundle fail loudly, not silently')
 
--- The rest of the entry file (the actual dialog/socket logic) must survive untouched.
-assertTrue(bundled:find('socket = require("socket")', 1, true) ~= nil,
-  'socket require survives after the bundled modules')
-assertTrue(bundled:find('function btnStart:action()', 1, true) ~= nil,
-  'dialog logic after the module requires survives untouched')
+-- The rest of the entry file — now just the require() for bridgeSession.lua (issue #75,
+-- docs/adr/0018) — must survive untouched.
+assertTrue(bundled:find('require("bridgeSession")', 1, true) ~= nil,
+  'bridgeSession require survives after the bundled modules')
+
+-- bridgeSession's package.preload closure must actually see BRIDGE_VERSION as an upvalue
+-- at runtime, not just at the right text position (docs/adr/0018) — FH only ever loads the
+-- bundled artifact, never the raw split source, so this is what actually has to work.
+-- fhInitialise/fhSetStringEncoding are stubbed as no-ops (real FH globals, not part of this
+-- module's own responsibility) so the bundled stub can actually run in a plain interpreter.
+local versionCaptureBundled = bundler.buildBundle(realEntrySource, function(name)
+  if name == 'bridgeSession' then
+    return 'assert(BRIDGE_VERSION == ' .. string.format('%q', expectedVersion) ..
+      ', "BRIDGE_VERSION not visible inside bridgeSession module: " .. tostring(BRIDGE_VERSION))\n' ..
+      'return true'
+  end
+  return fakeReadModule(name)
+end)
+local versionCaptureChunk, versionCaptureLoadErr = load(versionCaptureBundled)
+assertTrue(versionCaptureChunk ~= nil, 'BRIDGE_VERSION-capture bundle parses' ..
+  (versionCaptureChunk == nil and (' (' .. tostring(versionCaptureLoadErr) .. ')') or ''))
+if versionCaptureChunk then
+  local previousFhInitialise, previousFhSetStringEncoding = _G.fhInitialise, _G.fhSetStringEncoding
+  _G.fhInitialise = function() end
+  _G.fhSetStringEncoding = function() end
+  local execOk, execErr = pcall(versionCaptureChunk)
+  assertTrue(execOk, 'bridgeSession package.preload closure sees BRIDGE_VERSION as an upvalue' ..
+    (execOk and '' or (' (' .. tostring(execErr) .. ')')))
+  _G.fhInitialise, _G.fhSetStringEncoding = previousFhInitialise, previousFhSetStringEncoding
+end
 
 -- A stale entry source (anchors no longer match) must fail loudly, not silently ship a
 -- bundle with the wrong install note or no splice point.

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Bridge entry file split into a stub plus `bridgeSession.lua`, for Serena coverage (issue #75)
+- `bridge/Claude MCP Bridge.fh_lua` — the repo's only source `.fh_lua` file, unrecognized by
+  Serena's installed Lua language server integration (no `file_filter` hook, unlike its
+  perl/php equivalents) — held 359 lines of real logic (dialog UI, TCP listener, request
+  dispatch, Session lifecycle), all invisible to Serena's symbol tools.
+- Moved everything but the two FH-mandated setup calls into a new `bridge/bridgeSession.lua`:
+  the entry file is now just the `@Title`/... header, `fhInitialise(...)`,
+  `fhSetStringEncoding("UTF-8")`, and one `require("bridgeSession")`. Both setup calls must
+  stay direct calls in the entry file (FH's own docs: `fhSetStringEncoding` "should never be
+  used by modules"; `fhInitialise` "should be the first function called in the plugin") —
+  confirmed against `fh-help-corpus.jsonl` before ruling out a one-line stub.
+- `bundler.lua`'s `MODULE_NAMES` gains `"bridgeSession"`, using the same `package.preload`
+  splice mechanism ADR 0009 built for the other 8 sibling modules. `BRIDGE_VERSION` (injected
+  by the bundler right after `fhInitialise(...)`) needed no bundler change to stay visible
+  inside `bridgeSession`'s `package.preload` closure — Lua closures capture enclosing locals
+  lexically — verified with a new runtime test in `bridge/tests/build.test.lua`, not just
+  reasoned about.
+- See ADR 0018 for the full design rationale, including why this isn't folded into ADR 0009
+  (different motivation: Serena coverage, not standalone unit-testability).
+
 ## 0.9.0
 
 ### `describe_project`: split structural field definitions from occurrence counting (issue #74)

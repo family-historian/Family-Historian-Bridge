@@ -7,12 +7,16 @@ local TCP socket.
 ## Language
 
 **Bridge plugin**:
-The Lua plugin (`bridge/Claude MCP Bridge.fh_lua`) that runs inside FH itself, opens the local TCP
-listener, and executes scripts sent to it. Supersedes an earlier prototype
-(`bridge_prototype_v2.fh_lua`, removed from this repo) — a user who never updated their
-FH Plugins folder past that old prototype gets a specific error telling them to switch,
-rather than a generic connection failure; see **run_lua**'s "stale plugin" handshake check
-in `bridgeResponse.ts`.
+The Lua plugin that runs inside FH itself, opens the local TCP listener, and executes
+scripts sent to it. Its entry file, `bridge/Claude MCP Bridge.fh_lua`, is a stub — header
+comment, `fhInitialise(...)`, `fhSetStringEncoding("UTF-8")`, then `require("bridgeSession")`
+— with the dialog UI, socket poll loop, and Session lifecycle living in `bridge/bridgeSession.lua`
+instead, so Serena's symbol tools can cover it (issue #75, docs/adr/0018-split-bridge-entry-file
+-into-stub-and-bridgesession.md); `.fh_lua` files aren't recognized by Serena's Lua language
+server, `.lua` files are. Supersedes an earlier prototype (`bridge_prototype_v2.fh_lua`, removed
+from this repo) — a user who never updated their FH Plugins folder past that old prototype gets
+a specific error telling them to switch, rather than a generic connection failure; see
+**run_lua**'s "stale plugin" handshake check in `bridgeResponse.ts`.
 _Avoid_: Plugin (alone, when the bridge specifically is meant), server (reserve "server"
 for the MCP server)
 
