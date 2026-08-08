@@ -135,14 +135,26 @@ local lastSave = setValueCalls[#setValueCalls]
 check(lastSave.node == noteNode.textNode, 'fhSetValueAsRichText is called on the new _RNOT record\'s TEXT subfield, not the record\'s own pointer')
 
 local segments = lastSave.richText.segments
-check(#segments == 3, 'one call produces a title segment, an entry-prefix segment, and one record link')
+check(#segments == 7, 'one call produces bold/size heading markup, the heading text, the static intro paragraph, a bullet marker, an entry-prefix segment, and one record link')
 
-local titleSegment = segments[1]
+check(segments[1].kind == 'text' and segments[1].text == '<b><fs="+2">' and segments[1].rich == true,
+  'heading opens with bold + a +2pt size bump, as real FTF markup (issue #79)')
+
+local titleSegment = segments[2]
 check(titleSegment.kind == 'text' and contains(titleSegment.text, 'Claude session log'),
-  'first segment is a title, timestamped with "Claude session log"')
-check(titleSegment.rich == false, 'title text is added as plain (non-FTF) text')
+  'second segment is the heading text, timestamped with "Claude session log"')
+check(titleSegment.rich == false, 'heading text itself is added as plain (auto-escaped) text, separate from the markup segments')
 
-local firstLink = segments[3]
+check(segments[3].kind == 'text' and segments[3].text == '</fs></b>\n\n' and segments[3].rich == true,
+  'heading closes bold/size and leaves a blank paragraph before the intro line (issue #79 follow-up)')
+
+check(segments[4].kind == 'text' and segments[4].text == 'The following updates were applied to the project:\n' and segments[4].rich == false,
+  'a static intro paragraph follows the heading, written once, in default (non-FTF-markup) font (issue #79)')
+
+check(segments[5].kind == 'text' and segments[5].text == '* ' and segments[5].rich == true,
+  'the entry starts a new bulleted FTF paragraph (issue #79)')
+
+local firstLink = segments[7]
 check(firstLink.kind == 'reclink', 'the record reference is a real record link, not plain text')
 check(firstLink.node == currentNode(indiA), 'the record link points at the record passed to logActivity')
 check(firstLink.display == nil,
@@ -160,19 +172,24 @@ local lastSave2 = setValueCalls[#setValueCalls]
 check(lastSave2.node == noteNode.textNode, 'second call still saves onto the same _RNOT record\'s TEXT subfield')
 
 local segments2 = lastSave2.richText.segments
-check(#segments2 == 6, 'second call appends a further entry rather than replacing the buffer')
+check(#segments2 == 11, 'second call appends a further bulleted entry (separator, bullet, prefix, link) rather than replacing the buffer')
 
 -- Earlier entry untouched.
-check(segments2[1].text == segments[1].text, 'the first entry\'s title text is unchanged after the second call')
-check(segments2[3].kind == 'reclink' and segments2[3].node == firstLink.node and segments2[3].display == firstLink.display,
+check(segments2[2].text == segments[2].text, 'the heading text is unchanged after the second call')
+check(segments2[7].kind == 'reclink' and segments2[7].node == firstLink.node and segments2[7].display == firstLink.display,
   'the first entry\'s record link is unchanged after the second call')
 
-local secondLink = segments2[6]
+check(segments2[8].kind == 'text' and segments2[8].text == '\n' and segments2[8].rich == false,
+  'a blank-line separator precedes the second entry, as before')
+check(segments2[9].kind == 'text' and segments2[9].text == '* ' and segments2[9].rich == true,
+  'the second entry also starts its own bulleted FTF paragraph')
+
+local secondLink = segments2[11]
 check(secondLink.kind == 'reclink', 'the second entry\'s record reference is also a real record link')
 check(secondLink.node == currentNode(indiB), 'the second record link points at the second record passed to logActivity')
 check(secondLink.display == nil, 'the second record link is also "automatic" (no display-text argument)')
 
-local actionText = segments2[5]
+local actionText = segments2[10]
 check(actionText.kind == 'text' and contains(actionText.text, 'fact added Birth'),
   'the second entry\'s action text is included in the appended segment')
 
@@ -194,9 +211,11 @@ local freshNoteNode = recordsByTag["_RNOT"][#recordsByTag["_RNOT"]]
 check(freshNoteNode ~= noteNode, 'the fresh Session\'s note is a different record from the previous Session\'s')
 
 ------------------------------------------------------------------
--- Optional media detail (issue #39): appends an indented #ToDo sub-line under the entry,
--- opt-in per call. Exact no-location wording is pinned to the 2026-08-01 grilling
--- session's own Nellie Record birth-certificate example from issue #23/#39.
+-- Optional media detail (issue #39): appends an indented (">") #ToDo sub-line as its own
+-- FTF paragraph under the entry, opt-in per call. Exact no-location wording is pinned to
+-- the 2026-08-01 grilling session's own Nellie Record birth-certificate example from issue
+-- #23/#39; the leading-space indent from that session was replaced with a real FTF indent
+-- marker in the 2026-08-08 grilling session on issue #79.
 ------------------------------------------------------------------
 
 local indiD = fhCreateItem("INDI")
@@ -211,13 +230,18 @@ local lastSaveMedia = setValueCalls[#setValueCalls]
 check(lastSaveMedia.node == freshNoteNode.textNode, 'a call with a media detail still saves onto the same Session note\'s TEXT subfield')
 
 local segmentsMedia = lastSaveMedia.richText.segments
-check(#segmentsMedia == segmentCountBeforeMedia + 4,
-  'a media detail appends one extra segment (the sub-line) beyond the usual separator/prefix/link three')
+check(#segmentsMedia == segmentCountBeforeMedia + 7,
+  'a media detail appends its own separator/indent-marker/sub-line-text three segments beyond the usual separator/bullet/prefix/link four')
+
+check(segmentsMedia[#segmentsMedia - 2].kind == 'text' and segmentsMedia[#segmentsMedia - 2].text == '\n' and segmentsMedia[#segmentsMedia - 2].rich == false,
+  'the media sub-line starts its own paragraph with a blank-line separator')
+check(segmentsMedia[#segmentsMedia - 1].kind == 'text' and segmentsMedia[#segmentsMedia - 1].text == '>' and segmentsMedia[#segmentsMedia - 1].rich == true,
+  'the media sub-line paragraph opens with a real FTF indent marker (issue #79), not literal leading spaces')
 
 local sublineNoLocation = segmentsMedia[#segmentsMedia]
-check(sublineNoLocation.kind == 'text', 'the media sub-line is added as plain text')
-check(sublineNoLocation.text == '\n      [ ] #ToDo Media to be added bc-nellie.jpg',
-  'the media sub-line (no location) matches the grilling session\'s exact Nellie Record format')
+check(sublineNoLocation.kind == 'text' and sublineNoLocation.rich == false, 'the media sub-line text itself is added as plain (auto-escaped) text')
+check(sublineNoLocation.text == '[ ] #ToDo Media to be added bc-nellie.jpg',
+  'the media sub-line (no location) matches the grilling session\'s Nellie Record wording, now without the old leading-space indent')
 
 ------------------------------------------------------------------
 -- Media detail with a location: the location appears in the sub-line too.
@@ -230,11 +254,11 @@ freshSessionLogHelper.logActivity(indiE, "fact added Marriage", { name = "cert.j
 
 local lastSaveLocation = setValueCalls[#setValueCalls]
 local segmentsLocation = lastSaveLocation.richText.segments
-check(#segmentsLocation == segmentCountBeforeLocation + 4,
-  'a media detail with a location also appends exactly one sub-line segment')
+check(#segmentsLocation == segmentCountBeforeLocation + 7,
+  'a media detail with a location also appends exactly one separator/indent-marker/sub-line-text trio')
 
 local sublineWithLocation = segmentsLocation[#segmentsLocation]
-check(sublineWithLocation.text == '\n      [ ] #ToDo Media to be added cert.jpg (family archive box)',
+check(sublineWithLocation.text == '[ ] #ToDo Media to be added cert.jpg (family archive box)',
   'the media sub-line includes the location when one is given')
 
 ------------------------------------------------------------------
@@ -249,7 +273,7 @@ freshSessionLogHelper.logActivity(indiF, "created")
 
 local lastSaveNoMedia = setValueCalls[#setValueCalls]
 local segmentsNoMedia = lastSaveNoMedia.richText.segments
-check(#segmentsNoMedia == segmentCountBeforeNoMedia + 3,
+check(#segmentsNoMedia == segmentCountBeforeNoMedia + 4,
   'calling logActivity without a media detail appends no sub-line (opt-in per call)')
 
 ------------------------------------------------------------------
@@ -268,7 +292,7 @@ check(#setValueCalls == setValueCallCountBeforeBadMedia, 'the failed call never 
 
 freshSessionLogHelper.logActivity(indiG, "created")
 local lastSaveAfterBadMedia = setValueCalls[#setValueCalls]
-check(#lastSaveAfterBadMedia.richText.segments == segmentCountBeforeBadMedia + 3,
+check(#lastSaveAfterBadMedia.richText.segments == segmentCountBeforeBadMedia + 4,
   'the buffer is unaffected by the earlier failed call -- no stray entry was left behind')
 
 if failures > 0 then
