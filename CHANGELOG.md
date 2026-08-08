@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### `.mcpb` bundle wired into the standard release scripts (issue #59)
+- `installer/release-mac.sh` and `installer/release-windows.ps1` now each run
+  `installer/build-dxt.mjs --verify` as their last step, so a single script invocation
+  produces the platform installer/zip *and* the cross-platform `installer/output/fh-mcp-bridge-<version>.mcpb`,
+  instead of the `.mcpb` needing a separate manual build. Both scripts abort early with
+  an install hint if Node isn't on PATH, matching the existing Lua-interpreter check in
+  `release-mac.sh`. No change to `build-dxt.mjs`/`verify-dxt.mjs` themselves. Windows
+  `.mcpb` installs still have an open, unresolved upstream risk (Claude Desktop's MSIX
+  build failing on all three documented install methods) — see issue #60 and
+  `installer/README.md`'s "Known risk" note; this change only wires up building the
+  artifact, not the install/handoff itself.
+
 ## 0.11.0
 
 ### Bridge dialog remembers Access mode and idle timeout (issue #80)

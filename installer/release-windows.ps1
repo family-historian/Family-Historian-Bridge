@@ -35,4 +35,14 @@ Write-Host "== Stage 2b: compiling installer with $iscc =="
 if ($LASTEXITCODE -ne 0) { throw "ISCC compile failed" }
 
 $outputExe = Get-ChildItem (Join-Path $installerDir 'output\*.exe') | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+Write-Host "== Stage 2c: building .mcpb bundle (Claude Desktop Extension) =="
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw "Node.js not found on PATH. Install it first (e.g. 'winget install --id OpenJS.NodeJS.LTS -e')."
+}
+node (Join-Path $installerDir 'build-dxt.mjs') --verify
+if ($LASTEXITCODE -ne 0) { throw "build-dxt.mjs failed" }
+$outputMcpb = Get-ChildItem (Join-Path $installerDir 'output\*.mcpb') | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
 Write-Host "`nWindows installer ready: $($outputExe.FullName)"
+Write-Host ".mcpb bundle ready: $($outputMcpb.FullName)"

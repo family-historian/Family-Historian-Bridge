@@ -82,5 +82,16 @@ ZIP_PATH="$INSTALLER_DIR/output/FH-MCP-Bridge-mac-$VERSION.zip"
 rm -f "$ZIP_PATH"
 (cd "$STAGE_DIR" && zip -r -X "$ZIP_PATH" . -x ".*")
 
+echo "== Building .mcpb bundle (Claude Desktop Extension) =="
+NODE_BIN="${NODE_BIN:-node}"
+if ! command -v "$NODE_BIN" >/dev/null 2>&1; then
+  echo "Node.js not found on PATH (looked for '$NODE_BIN')." >&2
+  echo "Install it (e.g. 'brew install node') or set NODE_BIN to its full path." >&2
+  exit 1
+fi
+"$NODE_BIN" "$INSTALLER_DIR/build-dxt.mjs" --verify
+MCPB_PATH="$INSTALLER_DIR/output/fh-mcp-bridge-$VERSION.mcpb"
+
 echo ""
 echo "Mac release ready: $ZIP_PATH"
+echo ".mcpb bundle ready: $MCPB_PATH"
