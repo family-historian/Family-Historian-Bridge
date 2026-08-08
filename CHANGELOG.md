@@ -4,13 +4,13 @@
 
 ### Blood-relatives-only filter on getAncestors/getDescendants (issue #78)
 - `dnaLine` (the DNA-line filter already on `getDescendants`) gains a `"blood"` value,
-  backed by FH's `DnaBloodRelation` built-in — weeds an adoptive/step FAMC or FAMS link
-  out of an ancestor/descendant list. The same `dnaLine` parameter (all three values:
-  `"y-chrom"`/`"mtdna"`/`"blood"`) is now also available on `getAncestors`, which
-  previously had no third argument. `DnaHalfBlood` ("half-blood") was considered and
-  deliberately excluded — FH's own docs say a direct ancestor/descendant is never a
-  "half blood" relation, so it would always return empty for these two helpers
-  specifically. See
+  backed by FH's `DnaBloodRelation` built-in — weeds an adoptive/step FAMC link out of
+  an ancestor list, or FAMS link out of a descendant list. The same `dnaLine` parameter
+  (all three values: `"y-chrom"`/`"mtdna"`/`"blood"`) is now also available on
+  `getAncestors`, which previously had no third argument. `DnaHalfBlood` ("half-blood")
+  was considered and deliberately excluded — FH's own docs say a direct
+  ancestor/descendant is never a "half blood" relation, so it would always return empty
+  for these two helpers specifically. See
   `docs/adr/0021-blood-relation-filter-shared-by-ancestors-and-descendants.md`.
 
 ## 0.10.0
