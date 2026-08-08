@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.11.0
+
 ### Bridge dialog remembers Access mode and idle timeout (issue #80)
 - The bridge dialog's Access-mode selector and idle-timeout minutes now survive a plugin
   reload, via FH's supported `fhu.loadOptions`/`fhu.saveOptions` settings-file API
