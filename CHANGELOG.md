@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### `run_lua` rejects scripts calling unrecognized `fh*` globals (issue #81)
+- A new static pre-scan in `runScript.lua`, run before `load()` alongside the existing
+  write-then-log pre-scan (docs/adr/0012), rejects a script that calls a bare `fh*` global
+  this sandbox doesn't recognize — before the script ever executes, catching a
+  typo'd/hallucinated function name (e.g. `fhGetQualifiedId` instead of
+  `fhGetQualifiedRecordId`) that would otherwise only fail at runtime, potentially after a
+  partial write. A known-but-permanently-excluded name (e.g. `fhMessageBox`, `fhSleep`)
+  gets a specific reason instead of a generic "unrecognized" message. `sandbox.lua` gains
+  `KNOWN_FH_GLOBAL_NAMES` (mode-independent) and `EXCLUDED_FH_GLOBAL_REASONS`. If a script
+  also trips the existing write-then-log pre-scan, both violation messages are reported
+  together, not just the first. Out of scope for v1: `fhu.*` method calls and item-pointer
+  `:Method()` calls. See docs/adr/0022-static-pre-scan-rejects-unrecognized-fh-globals.md.
+
 ### `.mcpb` bundle wired into the standard release scripts (issue #59)
 - `installer/release-mac.sh` and `installer/release-windows.ps1` now each run
   `installer/build-dxt.mjs --verify` as their last step, so a single script invocation

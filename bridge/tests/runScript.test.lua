@@ -210,6 +210,62 @@ check(contains(runScript.run(
   'read-write'), '"ok":true'),
   'a script that batches several writes with a single trailing logActivity call completes normally')
 
+-- Unrecognized-fh*-global pre-scan (issue #81, docs/adr/0022): rejects a script calling a
+-- bare fh* global this sandbox doesn't recognize, before it ever runs -- the real incident
+-- was fhGetQualifiedId (guessed), a typo for fhGetQualifiedRecordId (the real, allowlisted
+-- name).
+do
+  local response, rethrow = runScript.run("return fhGetQualifiedId(newest)", 'read-only')
+  check(contains(response, '"error"') and contains(response, 'unrecognized') and contains(response, 'fhGetQualifiedId'),
+    'a script calling a genuine typo\'d/unknown fh* name is rejected before execution with a clear message')
+  check(rethrow == nil, 'an unrecognized-fh*-call rejection returns no second value (nothing executed)')
+end
+
+-- A known-but-permanently-excluded name (sandbox.EXCLUDED_FH_GLOBAL_REASONS) gets the
+-- specific reason, not the generic "unrecognized" message -- distinguishes a typo from a
+-- deliberate exclusion.
+do
+  local response = runScript.run("return fhShellExecute('calc.exe')", 'read-only')
+  check(contains(response, '"error"') and contains(response, 'fhShellExecute') and contains(response, 'not supported over run_lua'),
+    'a script calling a known-but-excluded fh* name gets the specific exclusion reason')
+  check(not contains(response, 'unrecognized'),
+    'a known-but-excluded name is not also reported as unrecognized')
+end
+
+-- A script calling only known-good bare fh* names is unaffected by the new check. This
+-- plain-lua test process doesn't stub every individual fh* global the way sandbox.test.lua
+-- does (out of scope for a runScript-level test), so fhBeginsWithVowel resolves to nil here
+-- and the call still fails -- but as an ordinary "attempt to call a nil value" runtime
+-- error, exactly like the existing os.execute ("sandboxed-away") check above, proving the
+-- pre-scan itself let it through rather than rejecting it as unrecognized.
+do
+  local response = runScript.run("return fhBeginsWithVowel('Anne')")
+  check(not contains(response, 'unrecognized'),
+    'a script calling only a known-good fh* name is not rejected by the pre-scan')
+  check(contains(response, 'nil value'),
+    'the known-good name reaches execution and fails only because this plain-lua test process has no real fhBeginsWithVowel global stubbed')
+end
+
+-- A name appearing only inside a comment/string doesn't false-positive -- documenting the
+-- pre-scan's known text-heuristic limitation (same limitation preScanViolation already has,
+-- issue #43): it looks for an identifier-boundary match immediately followed by '(', so a
+-- bare mention with no call paren (e.g. inside a string, with no trailing parenthesis) is
+-- not flagged. A name followed by '(' *inside* a string literal WOULD still false-positive,
+-- same as preScanViolation -- not exercised here since it isn't this check's job to be a
+-- real parser, just to fast-fail the common case.
+check(not contains(runScript.run("return 'mentions fhGetQualifiedId but never calls it'"), '"error"'),
+  'a fh*-prefixed name with no trailing call paren (e.g. mentioned in a string) does not false-positive')
+
+-- Report-both (2026-08-08 grilling session follow-up): a script tripping both the
+-- write-violation pre-scan and the unrecognized-fh*-call pre-scan in the same run gets both
+-- messages, concatenated into the single existing `error` string -- not just the first hit.
+do
+  local response = runScript.run("fhu.createIndi('X'); return fhGetQualifiedId(newest)", 'read-only')
+  check(contains(response, '"error"') and contains(response, 'createIndi') and contains(response, 'Read-only')
+    and contains(response, 'unrecognized') and contains(response, 'fhGetQualifiedId'),
+    'a script tripping both pre-scans in the same run reports both violations, not just the first')
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

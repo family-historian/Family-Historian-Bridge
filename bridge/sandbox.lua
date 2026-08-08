@@ -80,6 +80,52 @@ for _, name in ipairs(FHU_WRITE_METHOD_NAMES) do
 end
 M.WRITE_NAMES = WRITE_NAMES
 
+-- Every bare fh* global wired into env under Read-only (issue #81) -- listed here as flat
+-- data, not introspected from M.build, so it exists independently of whether M.build is
+-- ever actually called (this file's own tests, and runScript.lua's pre-scan below, run
+-- under plain lua with no real FH host). Kept in the same grouping/order as M.build's own
+-- env.fhX = fhX assignments purely so the two stay easy to eyeball against each other; this
+-- list has no other relationship to M.build beyond both needing the same names.
+local READ_ONLY_FH_GLOBAL_NAMES = {
+  'fhNewItemPtr', 'fhGetItemText', 'fhGetDisplayText', 'fhGetContextInfo', 'fhGetAppVersion',
+  'fhGetTag', 'fhCallBuiltInFunction', 'fhGetValueAsLink',
+  'fhNewAge', 'fhNewDate', 'fhNewDatePt', 'fhNewRichText', 'fhNewSection',
+  'fhGetCurrentRecordSel', 'fhGetCurrentPropertyBoxRecord', 'fhGetDataClass', 'fhGetDataList',
+  'fhGetFactTypeInfo', 'fhGetGedcomInfo', 'fhGetItemPtr', 'fhGetLabelledText',
+  'fhGetQualifiedRecordId', 'fhGetRecordId', 'fhGetRecordTypeCount', 'fhGetRecordTypeTag',
+  'fhGetTypeInfo', 'fhGetValueAsAge', 'fhGetValueAsDate', 'fhGetValueAsInteger',
+  'fhGetValueAsRichText', 'fhGetValueAsText', 'fhGetValueType', 'fhGetMetafieldDefinition',
+  'fhGetMetafieldShortcut', 'fhGetMetafieldType',
+  'fhHasChildItem', 'fhHasNextSibItem', 'fhHasParentItem', 'fhHasPrevSibItem', 'fhIsAttribute',
+  'fhIsEvent', 'fhIsFact', 'fhIsHidden', 'fhIsUDF', 'fhIsValidDataRef',
+  'fhConvertANSItoUTF8', 'fhConvertUTF8toANSI', 'fhGetStringEncoding', 'fhIsConversionLossFlagSet',
+  'fhIndGetFactList', 'fhIndGetName', 'fhSrcIsAutoTitleEnabled',
+  'fhGetNarrSentence', 'fhGetNarrSentenceTemplate',
+  'fhFtfEncode', 'fhFtfParamEncode',
+  'fhGetNamedList', 'fhGetNamedListByIndex', 'fhGetNamedListCount',
+  'fhBeginsWithVowel',
+  -- fhGetFlagTag/fhGetFactTag (issue #51): bare names, present read-only as the guarded
+  -- wrappers -- also appear in WRITE_PRIMITIVE_NAMES above, deduped below via a set.
+  'fhGetFlagTag', 'fhGetFactTag',
+}
+
+-- Mode-independent union of every bare fh* global name ever assigned into env, across BOTH
+-- access modes (issue #81) -- exported for runScript.lua's unrecognized-fh*-call pre-scan,
+-- which needs "is this a real, known function" independent of which mode is actually
+-- running (M.build only ever populates env for one mode at a time, so neither
+-- READ_ONLY_FH_GLOBAL_NAMES alone nor WRITE_PRIMITIVE_NAMES alone is the right answer for a
+-- pre-scan that has to run before accessMode-specific gating even matters). Deduped via a
+-- set, since fhGetFactTag/fhGetFlagTag appear in both source lists.
+local knownFhGlobalSet = toSet(READ_ONLY_FH_GLOBAL_NAMES)
+for _, name in ipairs(WRITE_PRIMITIVE_NAMES) do
+  knownFhGlobalSet[name] = true
+end
+local KNOWN_FH_GLOBAL_NAMES = {}
+for name in pairs(knownFhGlobalSet) do
+  table.insert(KNOWN_FH_GLOBAL_NAMES, name)
+end
+M.KNOWN_FH_GLOBAL_NAMES = KNOWN_FH_GLOBAL_NAMES
+
 -- fhu methods that pop a real iup.Popup(dlg) modal dialog and block waiting for a human
 -- to click a button, or that read/write straight to disk -- neither is survivable in
 -- run_lua's headless script->JSON-return model, and both bypass this sandbox's env the
@@ -100,6 +146,43 @@ local FHU_UNSUPPORTED_REASONS = {
   loadOptions = 'it reads directly from disk, which this project\'s filesystem exclusion policy does not allow over run_lua',
   resetOptions = 'it writes directly to disk, which this project\'s filesystem exclusion policy does not allow over run_lua',
 }
+
+-- Bare fh* globals permanently excluded from the sandbox regardless of access mode --
+-- converted from the prose list in M.build's own comment below into a real table (issue
+-- #81), so runScript.lua's unrecognized-fh*-call pre-scan can report *why* a known-but-
+-- unsupported name is rejected, instead of lumping it in with a genuine typo/hallucination
+-- under a generic "unrecognized function" message. Kept separate from
+-- FHU_UNSUPPORTED_REASONS above: that table is for fhu.* method calls (env.fhu.getParam
+-- etc.), this one is for bare fh* global calls (env.fhFoo) -- the two namespaces never
+-- overlap, though several of the underlying reasons do (both hit the same
+-- headless-script/filesystem-exclusion policy limits). Reason text matches
+-- sandbox.test.lua's own absence-assertion comments below, kept in sync by hand.
+local EXCLUDED_FH_GLOBAL_REASONS = {
+  fhSetStringEncoding = 'it mutates app/session state, not tree data, which is outside this sandbox\'s tree-data write model',
+  fhSetConversionLossFlag = 'it mutates app/session state, the same concern as fhSetStringEncoding',
+  fhShellExecute = 'it launches arbitrary programs, which this project\'s exclusion policy does not allow over run_lua',
+  fhLoadTextFile = 'it reads an arbitrary local file, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  fhSaveTextFile = 'it writes an arbitrary local file, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  fhGetIniFileValue = 'it reads an arbitrary local file, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  fhSetIniFileValue = 'it writes an arbitrary local file, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  fhGetClipboardData = 'it reads the OS clipboard, unrelated to tree data and privacy-sensitive',
+  fhGetValueAsBlob = 'it writes an attached media file to an arbitrary local path, which this project\'s filesystem exclusion policy does not allow over run_lua',
+  fhSetValueAsBlob = 'it reads an arbitrary local file to attach as media, the same filesystem exclusion policy as fhGetValueAsBlob',
+  fhGetPluginDataFileName = 'it returns a filesystem path, inert without the excluded Load/Save functions and needlessly discloses internal paths',
+  fhMessageBox = 'it opens a modal dialog and would hang a headless run_lua script',
+  fhDisplayRichTextBox = 'it opens a modal dialog and would hang a headless run_lua script',
+  fhPromptUserForDate = 'it opens a modal dialog and would hang a headless run_lua script',
+  fhPromptUserForRecordSel = 'it opens a modal dialog and would hang a headless run_lua script',
+  fhPromptUserForRichText = 'it opens a modal dialog and would hang a headless run_lua script',
+  fhUpdateDisplay = 'it is a UI side effect with no return value run_lua would ever see',
+  fhOutputResultSetColumn = 'it writes to FH\'s own Query Window; run_lua only reads a script\'s return value, so this is invisible to Claude',
+  fhOutputResultSetTitles = 'it writes to FH\'s own Query Window, the same concern as fhOutputResultSetColumn',
+  fhSleep = 'it blocks without executing Lua VM instructions, so watchdog.lua\'s instruction-count hook cannot interrupt it',
+  fhOverridePreference = 'it mutates an app-wide preference, not tree data',
+  fhExhibitResponsiveness = 'it pumps the Windows message queue mid-script, which could reintroduce UI reentrancy the watchdog design did not account for',
+  fhInitialise = 'it is a plugin bootstrap entry point, not applicable to a per-script sandbox',
+}
+M.EXCLUDED_FH_GLOBAL_REASONS = EXCLUDED_FH_GLOBAL_REASONS
 
 local function unsupportedFhu(name, reason)
   return function()

@@ -23,6 +23,13 @@ local function containsName(scriptText, name)
   return scriptText:find('%f[%w_]' .. name .. '%f[^%w_]') ~= nil
 end
 
+-- Set form of sandbox.KNOWN_FH_GLOBAL_NAMES (issue #81), built once at module load rather
+-- than per-call, for O(1) membership checks in unrecognizedFhCallViolation below.
+local knownFhGlobalNames = {}
+for _, name in ipairs(sandbox.KNOWN_FH_GLOBAL_NAMES) do
+  knownFhGlobalNames[name] = true
+end
+
 -- Static pre-scan (issue #43, docs/adr/0012): a best-effort heuristic over the script's
 -- raw source text, not a security boundary -- the runtime backstop in M.run below is what
 -- actually guarantees no write escapes detection. Runs before load() is even attempted, so
@@ -50,6 +57,50 @@ local function preScanViolation(scriptText, accessMode)
   return nil
 end
 
+-- Extracts every bare fh*-prefixed identifier immediately followed by a call paren (issue
+-- #81) -- e.g. matches 'fhGetQualifiedId' in 'fhGetQualifiedId(newest)'. A dot immediately
+-- after the identifier breaks the match ('fhu.foo(', 'fhBridge.getFamilyGroup(' never
+-- match), which is exactly right: this check is scoped to bare fh* globals only, not
+-- fhu.* methods or item-pointer :Method() calls (out of scope for v1 -- a text pre-scan
+-- can't validate a method call without knowing the calling object's type). Generalizes
+-- containsName's %f[%w_]/%f[^%w_] identifier-boundary convention above to capture the name
+-- instead of checking one fixed candidate.
+local function eachFhCallName(scriptText)
+  return scriptText:gmatch('%f[%w_](fh%w*)%f[^%w_]%s*%(')
+end
+
+-- Unrecognized-fh*-global pre-scan (issue #81, docs/adr/0022): rejects a run_lua script
+-- that calls a bare fh* global this sandbox doesn't recognize -- either a genuine
+-- typo/hallucination (real incident: fhGetQualifiedId, guessed, vs. the real
+-- fhGetQualifiedRecordId already in sandbox.lua's allowlist) or a known-but-permanently-
+-- excluded name (sandbox.EXCLUDED_FH_GLOBAL_REASONS) -- before load() is even attempted,
+-- same "before load()" placement and same rationale as preScanViolation above: catches the
+-- violation even in a script that wouldn't otherwise compile, and avoids the
+-- partial-write-then-rollback cost of only finding out at runtime, which is what actually
+-- happened in the incident that prompted this issue. A best-effort text heuristic, not a
+-- security boundary -- same known limitations as preScanViolation (a name inside a
+-- comment/string, or reached via indirection like `local f = fhGetQualifiedId`, isn't
+-- caught).
+local function unrecognizedFhCallViolation(scriptText)
+  local messages = {}
+  local seen = {}
+  for name in eachFhCallName(scriptText) do
+    if not seen[name] then
+      seen[name] = true
+      local excludedReason = sandbox.EXCLUDED_FH_GLOBAL_REASONS[name]
+      if excludedReason then
+        table.insert(messages, 'script calls ' .. name .. ', which is not supported over run_lua: ' .. excludedReason)
+      elseif not knownFhGlobalNames[name] then
+        table.insert(messages, 'script calls an unrecognized function ' .. name)
+      end
+    end
+  end
+  if #messages == 0 then
+    return nil
+  end
+  return table.concat(messages, '; ')
+end
+
 -- Shared shape for a write-mode response that FH's own auto-undo should act on (docs/adr/0005):
 -- a JSON error carrying writeSessionRolledBack: true, plus the original error/message as a
 -- second return value the caller re-raises after sending. Both the write-mode-runtime-error
@@ -62,9 +113,24 @@ end
 function M.run(scriptText, accessMode)
   accessMode = accessMode or 'read-only'
 
-  local violation = preScanViolation(scriptText, accessMode)
-  if violation then
-    return json.encode({ error = violation })
+  -- Both pre-scans below run unconditionally and their messages are joined rather than
+  -- short-circuiting after the first hit (2026-08-08 grilling session, issue #81 follow-up):
+  -- a script that both writes without logging AND calls an unrecognized/excluded fh* name
+  -- should hear about everything wrong with it in one round-trip, not fix one violation only
+  -- to hit the next on resubmission. Response shape stays the existing single `error`
+  -- string (both messages concatenated), not a structured list, to keep today's response
+  -- contract unchanged.
+  local violations = {}
+  local writeViolation = preScanViolation(scriptText, accessMode)
+  if writeViolation then
+    table.insert(violations, writeViolation)
+  end
+  local fhCallViolation = unrecognizedFhCallViolation(scriptText)
+  if fhCallViolation then
+    table.insert(violations, fhCallViolation)
+  end
+  if #violations > 0 then
+    return json.encode({ error = table.concat(violations, '; ') })
   end
 
   local envOk, env, tracker = pcall(sandbox.build, accessMode)

@@ -378,6 +378,31 @@ do
   check(nameSet['addWitness'] == true, 'WRITE_NAMES includes addWitness (from FHU_WRITE_METHOD_NAMES)')
 end
 
+-- Mode-independent known-fh*-global set (issue #81): exported alongside M.build so
+-- runScript.lua's unrecognized-fh*-call pre-scan reuses this exact list rather than a
+-- second, driftable copy. Checked as set membership, not exact list identity, same
+-- regression-guard style as the WRITE_NAMES check above.
+do
+  local nameSet = {}
+  for _, name in ipairs(sandbox.KNOWN_FH_GLOBAL_NAMES) do
+    nameSet[name] = true
+  end
+  check(nameSet['fhGetQualifiedRecordId'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhGetQualifiedRecordId (read-only)')
+  check(nameSet['fhBeginsWithVowel'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhBeginsWithVowel (read-only)')
+  check(nameSet['fhCreateItem'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhCreateItem (from WRITE_PRIMITIVE_NAMES, mode-independent)')
+  check(nameSet['fhSetValueAsLink'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhSetValueAsLink (from WRITE_PRIMITIVE_NAMES, mode-independent)')
+  check(nameSet['fhGetFactTag'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhGetFactTag exactly once despite appearing in both source lists')
+  check(nameSet['fhGetQualifiedId'] == nil, 'KNOWN_FH_GLOBAL_NAMES does not include the guessed/hallucinated fhGetQualifiedId (the real incident behind issue #81)')
+end
+
+-- Excluded-fh*-global reasons (issue #81): a sample from each prose category, proving the
+-- table exists with real reason text rather than just names -- runScript.test.lua covers
+-- the reject-before-execution behavior end to end.
+check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhShellExecute'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhShellExecute')
+check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhMessageBox'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhMessageBox')
+check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhSleep'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhSleep')
+check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhGetQualifiedRecordId'] == nil, 'EXCLUDED_FH_GLOBAL_REASONS has no entry for a genuinely known-good function')
+
 -- Dangerous globals must be absent — the whole point of an allowlist sandbox.
 check(env.os.execute == nil, 'os.execute absent')
 check(env.os.remove == nil, 'os.remove absent')
