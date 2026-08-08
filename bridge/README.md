@@ -157,10 +157,10 @@ implements.
   `tags` argument (nil, `""`, an empty array, or a non-string entry in the array).
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
-`timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, `familyHelper.lua`, and
-`versionCompare.lua` have standalone unit tests, in `tests/` (`*.test.lua`, run with a
-plain `lua` interpreter — no FH dependency). Keeping tests out of this folder means every
-file directly in `bridge/`
+`timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, `sessionSettings.lua`,
+`familyHelper.lua`, and `versionCompare.lua` have standalone unit tests, in `tests/`
+(`*.test.lua`, run with a plain `lua` interpreter — no FH dependency). Keeping tests out
+of this folder means every file directly in `bridge/`
 is exactly what `scripts/build.lua` bundles into the single installable file (see
 `docs/adr/0009-bundle-bridge-plugin-for-install.md`) — nothing to filter by name:
 
@@ -173,6 +173,7 @@ lua bridge/tests/requestFraming.test.lua
 lua bridge/tests/timeoutDisplay.test.lua
 lua bridge/tests/sourceHelper.test.lua
 lua bridge/tests/sessionLogHelper.test.lua
+lua bridge/tests/sessionSettings.test.lua
 lua bridge/tests/familyHelper.test.lua
 lua bridge/tests/versionCompare.test.lua
 lua bridge/tests/build.test.lua
@@ -207,8 +208,9 @@ tested manually, inside FH:
    With no unsaved changes, confirm this prompt is skipped entirely and the Bridge dialog
    appears directly (fhInitialise's documented behavior when there's nothing to save).
 3. A small "Claude MCP Bridge" dialog appears with a Read-only/Read-write selector (Read-only
-   selected by default), an "Idle timeout (min)" spin-box (default 5, spinnable between 5
-   and 120 — issue #34), and Start/Stop buttons. Confirm the selector and the spin-box are
+   selected by default on a machine with no prior settings file — issue #80, see step 3a
+   below for the persisted case), an "Idle timeout (min)" spin-box (spinnable between 5 and
+   120 — issue #34), and Start/Stop buttons. Confirm the selector and the spin-box are
    both clickable/editable, then click Start. Confirm the selector and the spin-box both
    grey out (inactive) once the Session is running, the status label shows the chosen mode,
    e.g. "Listening on 127.0.0.1:8734 (read-only)", and a "Time left: M:SS" label appears
@@ -219,6 +221,16 @@ tested manually, inside FH:
    and spin-box both become editable again, and the "Time left" label clears. Select
    Read-write, click Start again, and confirm the status label now shows "(read-write)" —
    Sandbox behavior is unchanged either way this stage, so only the label/lock differs.
+   Click Stop.
+3a. Settings persistence (issue #80): with the dialog still open from step 3 (Read-write/
+   a non-default idle-timeout minutes last used), close the plugin (window X, no Session
+   running so no confirm prompt) and reload it (Tools -> Plugins -> Run again). Confirm the
+   Access-mode selector and idle-timeout spin-box both reopen with the same values you left
+   them on, not reset to Read-only/15. Change the idle-timeout to a different in-range value
+   without clicking Start, then reload again — confirm that unsaved change was *not*
+   persisted (settings are only saved on a successful Start, per issue #80's ticket), i.e.
+   the dialog still shows the value from the last successful Start. Then click Start with
+   the new value, Stop, reload — confirm it now sticks.
    Click Stop.
 4. Resize: drag the dialog wider and taller. Confirm the status label's text isn't
    truncated at the new width, and that the Start/Stop buttons stay pinned to the bottom

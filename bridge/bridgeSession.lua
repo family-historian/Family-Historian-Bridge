@@ -37,6 +37,14 @@
 -- full write API (issue #14). describe_project's fixed script instead forces the
 -- Read-only sandbox regardless of the Session's access mode, via the LUA_RO request form
 -- (issue #16) — see requestFraming.lua.
+--
+-- The Access-mode and idle-timeout selections a Start succeeds with are persisted (issue
+-- #80, sessionSettings.lua) via FH's supported fhu.loadOptions/saveOptions settings-file
+-- API, LOCAL_MACHINE scope, so the dialog reopens with last time's choices instead of
+-- always resetting to read-only/15 minutes. This is a different code path from
+-- bridge/sandbox.lua's block on the same fhu functions for run_lua-submitted scripts
+-- (issue #22) — that block is about keeping filesystem access out of Claude-authored
+-- scripts, not about this file's own dialog code, which calls fhUtils directly.
 
 socket = require("socket")
 require("iuplua")
@@ -47,9 +55,15 @@ local json = require("jsonEncode")
 local requestFraming = require("requestFraming")
 local timeoutDisplay = require("timeoutDisplay")
 local versionCompare = require("versionCompare")
+local sessionSettings = require("sessionSettings")
 
 local PORT = 8734
-local DEFAULT_IDLE_TIMEOUT_MINUTES = 15 -- Changed to 15 from 5 minutes
+-- Last-used Access mode and idle-timeout minutes (issue #80), loaded once here so the
+-- widgets below can seed themselves from it. sessionSettings.load() already falls back to
+-- (read-only, 15) -- matching this file's own former hardcoded defaults -- on a missing or
+-- unreadable settings file, so this is safe to use unconditionally, first run or not.
+local lastSettings = sessionSettings.load()
+local DEFAULT_IDLE_TIMEOUT_MINUTES = lastSettings.idleTimeoutMinutes
 -- Issue #77 / docs/adr/0020: Exit (and the window's X, which shares Exit's teardown) only
 -- prompts to confirm closing a running Session when the last request was handled this
 -- recently -- the only observable proxy for "Claude might send another request any
@@ -87,8 +101,11 @@ local lastRequestHandledTime = nil
 local currentVersionWarning = nil
 
 local lblStatus = iup.label{title="Not listening.", padding="10x10"}
-local togReadOnly  = iup.toggle{title="Read-only", value="ON"}
-local togReadWrite = iup.toggle{title="Read-write"}
+-- Seeded from lastSettings (issue #80) rather than always "Read-only" -- ON goes on
+-- whichever toggle matches the last-saved Access mode, so a read-write habit is restored
+-- too, not just clamped back to the safer default every reload.
+local togReadOnly  = iup.toggle{title="Read-only", value=(lastSettings.accessMode == "read-only") and "ON" or "OFF"}
+local togReadWrite = iup.toggle{title="Read-write", value=(lastSettings.accessMode == "read-write") and "ON" or "OFF"}
 local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
 -- Idle-timeout control (issue #34): minutes, 5-120 per the ticket's stated range, editable
 -- only while the Session is stopped (locked the same way togReadOnly/togReadWrite are —
@@ -304,6 +321,16 @@ function btnStart:action()
     server:settimeout(0)
     lastActivityTime = os.time()
     currentVersionWarning = nil
+    -- Persist the values that just took effect (issue #80) -- only here, after the bind
+    -- above has already succeeded, never on every toggle/spin-box edit and never for a
+    -- Start that failed. currentIdleTimeoutSeconds() isn't used here since that returns
+    -- seconds for the idle-Session clock -- clampMinutes(txtIdleTimeout.value) is the
+    -- minutes figure this settings file actually stores. A write failure inside save() is
+    -- swallowed silently and never blocks Start (see sessionSettings.lua).
+    sessionSettings.save({
+        accessMode = currentAccessMode(),
+        idleTimeoutMinutes = timeoutDisplay.clampMinutes(txtIdleTimeout.value),
+    })
     timPoll.run = "YES"
     btnStart.active = "NO"
     btnStop.active = "YES"

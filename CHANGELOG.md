@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Bridge dialog remembers Access mode and idle timeout (issue #80)
+- The bridge dialog's Access-mode selector and idle-timeout minutes now survive a plugin
+  reload, via FH's supported `fhu.loadOptions`/`fhu.saveOptions` settings-file API
+  (`LOCAL_MACHINE` scope) in new module `bridge/sessionSettings.lua`. Loaded on dialog
+  init to seed both widgets' defaults; saved only after a Start succeeds, with the values
+  that actually took effect. A missing/corrupt settings file falls back silently to
+  today's prior hardcoded defaults (read-only, 15 minutes); a stored timeout is re-clamped
+  through the existing `timeoutDisplay.clampMinutes` on load. A settings-file write failure
+  is silent and never blocks Start. Distinct from `bridge/sandbox.lua`'s unrelated block on
+  the same `fhu` functions for `run_lua`-submitted scripts (issue #22) — that block doesn't
+  reach this dialog code, which calls `fhUtils` directly.
+
 ### Blood-relatives-only filter on getAncestors/getDescendants (issue #78)
 - `dnaLine` (the DNA-line filter already on `getDescendants`) gains a `"blood"` value,
   backed by FH's `DnaBloodRelation` built-in — weeds an adoptive/step FAMC link out of
