@@ -262,7 +262,18 @@ function M.getFamilyGroup(indiPtr, type)
   return results
 end
 
--- familyHelper.getAncestors(indiPtr, maxGenerations)
+-- Maps the dnaLine argument (shared by getAncestors and getDescendants) to the
+-- exact built-in-function name fhCallBuiltInFunction expects -- see
+-- fhCallBuiltInFunction.htm ("You can call any built-in function from within
+-- Lua...") and FH's own DnaShareYChrom/DnaShareMtDna/DnaBloodRelation help
+-- pages for what each actually computes. "blood" (issue #78) is
+-- DnaBloodRelation, FH's general blood-relation test -- deliberately not
+-- DnaHalfBlood: FH's own docs state a direct ancestor/descendant is never a
+-- "half blood" relation, so offering it here would just be a dnaLine value
+-- guaranteed to always return an empty result (see ADR 0021).
+local DNA_LINE_BUILTIN = { ["y-chrom"] = "DnaShareYChrom", mtdna = "DnaShareMtDna", blood = "DnaBloodRelation" }
+
+-- familyHelper.getAncestors(indiPtr, maxGenerations, dnaLine)
 -- indiPtr may be a live Item Pointer or a qualified id string (e.g. "I219") -- see
 -- resolvePointer above.
 --
@@ -280,13 +291,31 @@ end
 -- (pedigree collapse) -- also what keeps this from looping forever on a malformed
 -- project where a FAMC chain cycles back on itself, which a correctly-formed tree
 -- can't do but this doesn't assume.
-function M.getAncestors(indiPtr, maxGenerations)
+--
+-- dnaLine (optional, nil/"y-chrom"/"mtdna"/"blood", issue #78) filters the returned
+-- array down to ancestors who share a specific DNA line with indiPtr, via the same
+-- DNA_LINE_BUILTIN/fhCallBuiltInFunction mechanism getDescendants uses (see its own
+-- doc comment below for the full rationale, which applies here unchanged): defers
+-- to FH's own DnaShareYChrom/DnaShareMtDna/DnaBloodRelation rather than
+-- reimplementing DNA inheritance/relatedness rules, and the full ancestor tree is
+-- still walked regardless of dnaLine, filtered only at result-insertion time.
+-- dnaLine="blood" (DnaBloodRelation) is the case issue #78 actually asked for --
+-- weeding an adoptive/step FAMC line out of an ancestor list, the same way
+-- "y-chrom"/"mtdna" already weed a non-matching line out of a descendant list.
+function M.getAncestors(indiPtr, maxGenerations, dnaLine)
   indiPtr = resolvePointer(indiPtr)
   if not indiPtr or indiPtr:IsNull() then
     error("getAncestors: indiPtr must point to an Individual record")
   end
   if fhGetTag(indiPtr) ~= "INDI" then
     error("getAncestors: indiPtr must point to an Individual record (got a '" .. tostring(fhGetTag(indiPtr)) .. "' record)")
+  end
+  local dnaBuiltin = nil
+  if dnaLine ~= nil then
+    dnaBuiltin = DNA_LINE_BUILTIN[dnaLine]
+    if not dnaBuiltin then
+      error("getAncestors: dnaLine must be nil, 'y-chrom', 'mtdna', or 'blood' (got '" .. tostring(dnaLine) .. "')")
+    end
   end
 
   local results = {}
@@ -305,12 +334,14 @@ function M.getAncestors(indiPtr, maxGenerations)
       local line = {}
       for i, step in ipairs(parentLine) do line[i] = step end
       line[#line + 1] = role
-      table.insert(results, {
-        generation = generation,
-        line = line,
-        individual = indiDescriptor(p),
-        family = famDescriptor(fam),
-      })
+      if not dnaBuiltin or fhCallBuiltInFunction(dnaBuiltin, indiPtr, p) then
+        table.insert(results, {
+          generation = generation,
+          line = line,
+          individual = indiDescriptor(p),
+          family = famDescriptor(fam),
+        })
+      end
       table.insert(nextFrontier, { ptr = p, line = line })
     end
 
@@ -326,12 +357,6 @@ function M.getAncestors(indiPtr, maxGenerations)
 
   return results
 end
-
--- Maps getDescendants' dnaLine argument to the exact built-in-function name
--- fhCallBuiltInFunction expects -- see fhCallBuiltInFunction.htm ("You can call any
--- built-in function from within Lua...") and FH's own DnaShareYChrom/DnaShareMtDna
--- help pages for what each actually computes.
-local DNA_LINE_BUILTIN = { ["y-chrom"] = "DnaShareYChrom", mtdna = "DnaShareMtDna" }
 
 -- familyHelper.getDescendants(indiPtr, maxGenerations, dnaLine)
 -- indiPtr may be a live Item Pointer or a qualified id string (e.g. "I219") -- see
@@ -353,24 +378,31 @@ local DNA_LINE_BUILTIN = { ["y-chrom"] = "DnaShareYChrom", mtdna = "DnaShareMtDn
 -- error over it -- a descendant list shouldn't fail outright just because one person's
 -- sex was never entered.
 --
--- dnaLine (optional, nil/"y-chrom"/"mtdna") filters the returned array down to
--- descendants who share a specific DNA line with indiPtr, using FH's own built-in
--- DnaShareYChrom/DnaShareMtDna functions (via fhCallBuiltInFunction) as the actual
+-- dnaLine (optional, nil/"y-chrom"/"mtdna"/"blood") filters the returned array down
+-- to descendants who share a specific DNA line -- or, for "blood" (issue #78), any
+-- blood relation at all -- with indiPtr, using FH's own built-in DnaShareYChrom/
+-- DnaShareMtDna/DnaBloodRelation functions (via fhCallBuiltInFunction) as the actual
 -- test -- deliberately not reimplemented as a son/daughter-only tree-prune here, so
 -- this defers to FH's own authoritative definition (including whatever edge cases
--- its own implementation accounts for) rather than this module's own understanding
--- of Y-DNA/mtDNA inheritance rules. The full descendant tree is still walked
--- regardless of dnaLine (nextFrontier is never pruned by the filter) -- simpler to
--- reason about than pruning during the walk, at the cost of some wasted work
--- descending through a branch that can no longer match (e.g. every descendant of a
--- daughter, for "y-chrom") on a very large tree. Per FH's own docs, DnaShareYChrom is
--- always false if either party is female (only males carry a Y chromosome) and
--- DnaShareMtDna's propagation from indiPtr only continues through daughters (though a
--- son one generation down still shares it, from indiPtr's own mother) -- so
--- dnaLine="y-chrom" against a female indiPtr, or dnaLine="mtdna" against a male
--- indiPtr's grandchildren-and-beyond, legitimately returns an empty (not erroring)
--- result, matching what DnaShareYChrom/DnaShareMtDna themselves would say for every
--- pair.
+-- its own implementation accounts for, e.g. an adoptive FAMS link for "blood")
+-- rather than this module's own understanding of DNA inheritance/relatedness rules.
+-- The full descendant tree is still walked regardless of dnaLine (nextFrontier is
+-- never pruned by the filter) -- simpler to reason about than pruning during the
+-- walk, at the cost of some wasted work descending through a branch that can no
+-- longer match (e.g. every descendant of a daughter, for "y-chrom") on a very large
+-- tree. Per FH's own docs, DnaShareYChrom is always false if either party is female
+-- (only males carry a Y chromosome) and DnaShareMtDna's propagation from indiPtr
+-- only continues through daughters (though a son one generation down still shares
+-- it, from indiPtr's own mother) -- so dnaLine="y-chrom" against a female indiPtr,
+-- or dnaLine="mtdna" against a male indiPtr's grandchildren-and-beyond, legitimately
+-- returns an empty (not erroring) result, matching what DnaShareYChrom/DnaShareMtDna
+-- themselves would say for every pair.
+--
+-- dnaLine deliberately does NOT support FH's DnaHalfBlood ("half-blood"): FH's own
+-- docs state a direct ancestor/descendant is never a "half blood" relation ("If one
+-- person is the direct descendant of another, they are not 'half blood'
+-- relations"), so it would be a dnaLine value guaranteed to always return an empty
+-- result here -- considered and rejected for this reason, see ADR 0021.
 function M.getDescendants(indiPtr, maxGenerations, dnaLine)
   indiPtr = resolvePointer(indiPtr)
   if not indiPtr or indiPtr:IsNull() then
@@ -383,7 +415,7 @@ function M.getDescendants(indiPtr, maxGenerations, dnaLine)
   if dnaLine ~= nil then
     dnaBuiltin = DNA_LINE_BUILTIN[dnaLine]
     if not dnaBuiltin then
-      error("getDescendants: dnaLine must be nil, 'y-chrom', or 'mtdna' (got '" .. tostring(dnaLine) .. "')")
+      error("getDescendants: dnaLine must be nil, 'y-chrom', 'mtdna', or 'blood' (got '" .. tostring(dnaLine) .. "')")
     end
   end
 

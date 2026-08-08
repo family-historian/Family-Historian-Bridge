@@ -97,25 +97,28 @@ implements.
   `"father"`/`"mother"`/`"sibling"`/`"spouse"`, and `family` identifies which FAMC/FAMS
   record the relationship came through (so a caller can tell full siblings from half-
   siblings, or one marriage from another, by comparing `.family.id`).
-  `fhBridge.getAncestors(indiPtr, maxGenerations)` walks the same FAMC chain breadth-first,
-  as far up as `maxGenerations` allows (omit/nil for unlimited), returning an array of
-  `{ generation, line, individual, family }` — `line` is an array of `"father"`/`"mother"`
-  steps from `indiPtr` down to that ancestor (e.g. `{"mother", "father"}` is the maternal
-  grandfather), left unresolved to an English title like "grandfather" since that's a
-  presentation choice, not this helper's job. Both dedupe by record id (pedigree collapse)
-  and never hand back a raw Item Pointer — `individual`/`family` are plain descriptor
-  tables (`id`, `qualifiedId`, plus `name`/`sex` for an individual), since jsonEncode.lua
-  cannot encode a pointer at all. `fhBridge.getDescendants(indiPtr, maxGenerations,
-  dnaLine)` (issue #64) is the mirror image of `getAncestors`: breadth-first walk down
-  every FAMS/CHIL record instead of up FAMC/HUSB/WIFE, same optional generation cap and
-  pedigree-collapse dedupe. `line` entries are `"son"`/`"daughter"` (read off each
-  step's own SEX, `"child"` if unrecorded) rather than `getAncestors`' `"father"`/
-  `"mother"` role labels — a CHIL item carries no equivalent role of its own. Optional
-  third argument `dnaLine` (`"y-chrom"`/`"mtdna"`) filters the result to descendants
-  sharing that DNA line with `indiPtr`, via FH's own built-in `DnaShareYChrom`/
-  `DnaShareMtDna` functions (`fhCallBuiltInFunction`) rather than this module
-  reimplementing Y-DNA/mitochondrial inheritance rules itself — see
-  `docs/adr/0016-getdescendants-defers-dna-line-logic-to-fh-builtin.md`.
+  `fhBridge.getAncestors(indiPtr, maxGenerations, dnaLine)` walks the same FAMC chain
+  breadth-first, as far up as `maxGenerations` allows (omit/nil for unlimited), returning
+  an array of `{ generation, line, individual, family }` — `line` is an array of
+  `"father"`/`"mother"` steps from `indiPtr` down to that ancestor (e.g. `{"mother",
+  "father"}` is the maternal grandfather), left unresolved to an English title like
+  "grandfather" since that's a presentation choice, not this helper's job. Both dedupe by
+  record id (pedigree collapse) and never hand back a raw Item Pointer —
+  `individual`/`family` are plain descriptor tables (`id`, `qualifiedId`, plus `name`/`sex`
+  for an individual), since jsonEncode.lua cannot encode a pointer at all.
+  `fhBridge.getDescendants(indiPtr, maxGenerations, dnaLine)` (issue #64) is the mirror
+  image of `getAncestors`: breadth-first walk down every FAMS/CHIL record instead of up
+  FAMC/HUSB/WIFE, same optional generation cap and pedigree-collapse dedupe. `line` entries
+  are `"son"`/`"daughter"` (read off each step's own SEX, `"child"` if unrecorded) rather
+  than `getAncestors`' `"father"`/`"mother"` role labels — a CHIL item carries no
+  equivalent role of its own. Both functions share an optional third argument `dnaLine`
+  (`"y-chrom"`/`"mtdna"`/`"blood"`) that filters the result to ancestors/descendants
+  sharing that DNA line — or, for `"blood"` (issue #78), any blood relation at all — with
+  `indiPtr`, via FH's own built-in `DnaShareYChrom`/`DnaShareMtDna`/`DnaBloodRelation`
+  functions (`fhCallBuiltInFunction`) rather than this module reimplementing DNA
+  inheritance/relatedness rules itself — see
+  `docs/adr/0016-getdescendants-defers-dna-line-logic-to-fh-builtin.md` and
+  `docs/adr/0021-blood-relation-filter-shared-by-ancestors-and-descendants.md`.
   `fhBridge.getAllDetails(ptr)` works on any item pointer
   (a whole record or a single field/Fact) and recursively describes it and every child
   item beneath it as one plain tree (`tag`, `id`/`qualifiedId` for record items, `value`

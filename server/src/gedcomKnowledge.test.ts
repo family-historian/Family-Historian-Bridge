@@ -288,7 +288,7 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
 
   it("documents fhBridge's read-only family/detail query helpers (getFamilyGroup/getAncestors/getAllDetails), that they're available under Read-only too, and that they accept a qualified id string as well as a pointer (issue #62)", () => {
     expect(combinedText).toMatch(/fhBridge\.getFamilyGroup\(indiPtr, type\)/);
-    expect(combinedText).toMatch(/fhBridge\.getAncestors\(indiPtr, maxGenerations\)/);
+    expect(combinedText).toMatch(/fhBridge\.getAncestors\(indiPtr, maxGenerations, dnaLine\)/);
     expect(combinedText).toMatch(/fhBridge\.getAllDetails\(ptr\)/);
     expect(combinedText.toLowerCase()).toMatch(/both read-only and read-write/);
     expect(combinedText).toMatch(/qualified id string/);
@@ -307,6 +307,13 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText).toMatch(/DIRECT children/);
     expect(combinedText).toMatch(/\{"BIRT", "DEAT"\}/);
     expect(combinedText.toLowerCase()).toMatch(/not just individuals/);
+  });
+
+  it("documents dnaLine=\"blood\" (DnaBloodRelation), shared by getAncestors and getDescendants, and that half-blood was considered and excluded (issue #78)", () => {
+    expect(combinedText).toMatch(/DnaBloodRelation/);
+    expect(combinedText.toLowerCase()).toMatch(/dnaline="blood"/);
+    expect(combinedText.toLowerCase()).toMatch(/does not support|deliberately does not/);
+    expect(combinedText).toMatch(/DnaHalfBlood/);
   });
 
   it("documents that Date has no GetDatePoint() method, naming the correct GetDatePt1()/GetDatePt2() (issue #51)", () => {

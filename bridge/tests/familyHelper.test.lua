@@ -456,6 +456,34 @@ do
 end
 
 ------------------------------------------------------------------
+-- getAncestors: dnaLine filters results via fhCallBuiltInFunction (issue #78),
+-- via the same DNA_LINE_BUILTIN map getDescendants uses -- now including "blood"
+------------------------------------------------------------------
+
+do
+  dnaCallLog = {}
+  local selfPtr = ptrFor(self_)
+  local bloodLine = familyHelper.getAncestors(selfPtr, nil, "blood")
+  check(#bloodLine == 1, 'dnaLine="blood" filters down to whatever fhCallBuiltInFunction says matches (the fake\'s fixed rule: Dad only, among self\'s 4 ancestors)')
+  check(bloodLine[1].individual.name == "Dad Plugin", 'the one match is Dad, per the fake\'s rule')
+
+  check(#dnaCallLog == 4, 'fhCallBuiltInFunction was called once per visited ancestor (all 4), not just the match')
+  for _, call in ipairs(dnaCallLog) do
+    check(call.fn == "DnaBloodRelation", 'dnaLine="blood" calls the DnaBloodRelation built-in')
+    check(call.a == self_, 'the built-in\'s first argument is always the origin (self)')
+  end
+
+  dnaCallLog = {}
+  local yLine = familyHelper.getAncestors(selfPtr, nil, "y-chrom")
+  check(#dnaCallLog == 4 and dnaCallLog[1].fn == "DnaShareYChrom", 'dnaLine="y-chrom" also works on getAncestors, via the same shared map')
+
+  local okBad, errBad = pcall(familyHelper.getAncestors, selfPtr, nil, "x-chrom")
+  check(not okBad, 'an invalid dnaLine raises an error')
+  check(contains(errBad, "x-chrom"), 'the error names the invalid dnaLine given')
+  check(contains(errBad, "blood"), 'the error message lists blood as a valid value')
+end
+
+------------------------------------------------------------------
 -- getDescendants: unbounded, with lines and generations (mirror image of getAncestors)
 ------------------------------------------------------------------
 
@@ -537,9 +565,17 @@ do
   local mtLine = familyHelper.getDescendants(grandpaPtr, nil, "mtdna")
   check(#dnaCallLog == 4 and dnaCallLog[1].fn == "DnaShareMtDna", 'dnaLine="mtdna" calls the DnaShareMtDna built-in instead')
 
+  dnaCallLog = {}
+  local bloodLine = familyHelper.getDescendants(grandpaPtr, nil, "blood")
+  check(#dnaCallLog == 4 and dnaCallLog[1].fn == "DnaBloodRelation", 'dnaLine="blood" (issue #78) calls the DnaBloodRelation built-in instead')
+  local bloodByName = {}
+  for _, entry in ipairs(bloodLine) do bloodByName[entry.individual.name] = true end
+  check(#bloodLine == 2 and bloodByName["Dad Plugin"] and bloodByName["Self Plugin"], 'dnaLine="blood" filters down to whatever fhCallBuiltInFunction says matches (the fake\'s fixed rule: Dad + Self)')
+
   local okBad, errBad = pcall(familyHelper.getDescendants, grandpaPtr, nil, "x-chrom")
   check(not okBad, 'an invalid dnaLine raises an error')
   check(contains(errBad, "x-chrom"), 'the error names the invalid dnaLine given')
+  check(contains(errBad, "blood"), 'the error message lists blood as a valid value')
 end
 
 ------------------------------------------------------------------
