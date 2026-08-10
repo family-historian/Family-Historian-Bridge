@@ -1,7 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
-import { handleRunLua, RUN_LUA_DESCRIPTION, type RunLuaDeps } from "./runLuaTool.js";
+import { handleRunLua, RUN_LUA_DESCRIPTION, registerRunLuaTool, type RunLuaDeps } from "./runLuaTool.js";
 import { SERVER_VERSION } from "./serverVersion.js";
+
+// Stubs bridgeClient's two exports so the module-scope defaultDeps built in runLuaTool.ts
+// (used whenever a caller doesn't override deps -- registerRunLuaTool's own production
+// wiring) can be exercised below without ever opening a real socket. vi.hoisted is required
+// because vi.mock's factory runs before this file's own top-level statements, including the
+// static import above.
+const bridgeClientMocks = vi.hoisted(() => ({
+  runLuaOnBridge: vi.fn<(script: string) => Promise<string>>(),
+  queryBridgeVersion: vi.fn<(serverVersion: string) => Promise<string>>(),
+}));
+
+vi.mock("./bridgeClient.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bridgeClient.js")>();
+  return {
+    ...actual,
+    runLuaOnBridge: bridgeClientMocks.runLuaOnBridge,
+    queryBridgeVersion: bridgeClientMocks.queryBridgeVersion,
+  };
+});
 
 // A queryBridgeVersion stub that reports a Bridge on the exact same version as the
 // server — i.e. "match", so version-check tests below don't have to think about it.
@@ -182,6 +204,53 @@ describe("handleRunLua version check (issue #45)", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/no .*session/i);
     expect(text).toMatch(/click start/i);
+  });
+});
+
+describe("default deps (production wiring used when a caller doesn't override deps)", () => {
+  beforeEach(() => {
+    bridgeClientMocks.runLuaOnBridge.mockReset();
+    bridgeClientMocks.queryBridgeVersion.mockReset();
+  });
+
+  it("threads SERVER_VERSION into bridgeClient's queryBridgeVersion, and the script into runLuaOnBridge, with no deps argument supplied", async () => {
+    bridgeClientMocks.queryBridgeVersion.mockResolvedValue(JSON.stringify({ version: SERVER_VERSION }));
+    bridgeClientMocks.runLuaOnBridge.mockResolvedValue('{"ok":true}');
+
+    const result = await handleRunLua({ script: "return 1" });
+
+    expect(bridgeClientMocks.queryBridgeVersion).toHaveBeenCalledWith(SERVER_VERSION);
+    expect(bridgeClientMocks.runLuaOnBridge).toHaveBeenCalledWith("return 1");
+    expect(result.isError).toBeFalsy();
+    expect(result.content).toEqual([{ type: "text", text: '{"ok":true}' }]);
+  });
+});
+
+describe("registerRunLuaTool", () => {
+  // Registers the tool on a real McpServer and calls it over a real (in-memory) MCP
+  // client connection -- the only way to exercise the handler closure registerTool is
+  // actually given, as opposed to calling handleRunLua directly the way every test above
+  // does. Mirrors the pattern toolNames.test.ts uses for the same reason.
+  it("wires an MCP tools/call for run_lua through to handleRunLua and returns its result", async () => {
+    const server = new McpServer({ name: "fh-mcp-bridge", version: "0.0.0-test" });
+    const deps: RunLuaDeps = {
+      runLuaOnBridge: async () => '{"ok":true}',
+      queryBridgeVersion: async () => JSON.stringify({ version: SERVER_VERSION }),
+    };
+    registerRunLuaTool(server, deps);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "runLuaTool-test", version: "0.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    try {
+      const result = await client.callTool({ name: "run_lua", arguments: { script: "return 1" } });
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toEqual([{ type: "text", text: '{"ok":true}' }]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 });
 

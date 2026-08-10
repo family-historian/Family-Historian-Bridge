@@ -1,13 +1,18 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   getFhHelpPage,
   grepFhHelp,
   loadCorpusFromFile,
   parseCorpus,
+  registerFhHelpTools,
   resourceUriForUrl,
   searchFhHelp,
 } from "./fhHelp.js";
+import type { FhHelpCorpusStore } from "./fhHelp.js";
 
 const FIXTURE_JSONL = [
   JSON.stringify({
@@ -280,5 +285,152 @@ describe("grepFhHelp real-corpus case (issue #21)", () => {
     expect(match).toBeDefined();
     expect(match?.title).not.toContain("fhCallBuiltInFunction");
     expect(match?.text).toContain("fhCallBuiltInFunction");
+  });
+});
+
+describe("registerFhHelpTools", () => {
+  // Registers the tools/resource on a real McpServer and calls them over a real
+  // (in-memory) MCP client connection -- the only way to exercise searchResult/grepResult
+  // and the registered handler closures themselves, as opposed to the pure functions
+  // (searchFhHelp, grepFhHelp, getFhHelpPage) every test above calls directly.
+  async function connectedClient(store: FhHelpCorpusStore) {
+    const server = new McpServer({ name: "fh-mcp-bridge", version: "0.0.0-test" });
+    registerFhHelpTools(server, store);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "fhHelp-test", version: "0.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    return { client, server };
+  }
+
+  describe("search_fh_help tool", () => {
+    it("returns the matches as JSON when the query matches something", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({ name: "search_fh_help", arguments: { query: "merge" } });
+        expect(result.isError).toBeFalsy();
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(JSON.parse(text)).toEqual(searchFhHelp(parseCorpus(FIXTURE_JSONL), "merge"));
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("returns a retry hint (not an error, not an empty array) when the query matches nothing", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "search_fh_help",
+          arguments: { query: "xyzzynonexistentterm" },
+        });
+        expect(result.isError).toBeFalsy();
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(text).toContain('No match for "xyzzynonexistentterm"');
+        expect(text).toContain("retry with a single keyword");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+  });
+
+  describe("grep_fh_help tool", () => {
+    it("returns matches as JSON, untruncated, when everything fits under the limit", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({ name: "grep_fh_help", arguments: { pattern: "Map Window" } });
+        expect(result.isError).toBeFalsy();
+        const body = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        expect(body.matches).toHaveLength(1);
+        expect(body.truncated).toBe(false);
+        expect(body.note).toBeUndefined();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("returns a no-match message (not an error) when the pattern matches nothing", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "grep_fh_help",
+          arguments: { pattern: "xyzzynonexistentterm" },
+        });
+        expect(result.isError).toBeFalsy();
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(text).toContain('No match for "xyzzynonexistentterm" anywhere in the corpus');
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("adds a truncation note when limit caps the returned matches below the total", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        // "How to" matches both the merging-people and plugin-tutorial breadcrumbs.
+        const result = await client.callTool({
+          name: "grep_fh_help",
+          arguments: { pattern: "How to", limit: 1 },
+        });
+        const body = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        expect(body.matches).toHaveLength(1);
+        expect(body.totalMatches).toBe(2);
+        expect(body.truncated).toBe(true);
+        expect(body.note).toContain("Narrow the pattern");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("reports an invalid regex pattern as a tool error instead of throwing through the handler", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "grep_fh_help",
+          arguments: { pattern: "(unclosed", regex: true },
+        });
+        expect(result.isError).toBe(true);
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(text).toContain("Invalid pattern:");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+  });
+
+  describe("fh_help_page resource", () => {
+    it("returns the topic's full text for a uri matching a topic in the store", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.readResource({ uri: resourceUriForUrl("/help/fh8/mapwindow.html") });
+        expect(result.contents).toEqual([
+          {
+            uri: resourceUriForUrl("/help/fh8/mapwindow.html"),
+            mimeType: "text/plain",
+            text: "The Map Window shows places on a map. Use the Map Window to add shapes.",
+          },
+        ]);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("rejects a uri with no matching topic in the store", async () => {
+      const { client, server } = await connectedClient({ topics: parseCorpus(FIXTURE_JSONL) });
+      try {
+        await expect(
+          client.readResource({ uri: resourceUriForUrl("/help/fh8/does-not-exist.html") }),
+        ).rejects.toThrow();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
   });
 });
