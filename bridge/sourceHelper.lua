@@ -253,9 +253,18 @@ end
 -- way createSourceFromTemplate resolves a template. ptrTarget may be an INDI/FAM record
 -- (a Whole-record citation, per FH's own "citation for the record as a whole" concept —
 -- see docs/adr/0006-cite-every-fact-a-source-supports.md) or any Fact item already
--- positioned by the caller (a Fact-level citation). Errors on an unresolvable source
--- before creating anything, so a bad call never leaves a stray citation behind.
+-- positioned by the caller (a Fact-level citation). Errors on an unresolvable source or an
+-- invalid ptrTarget before creating anything, so a bad call never leaves a stray citation
+-- behind -- the ptrTarget check specifically (same "not ptr or ptr:IsNull()" idiom
+-- familyHelper.lua uses throughout) matters beyond tidiness: sandbox.lua's trackedWrite
+-- flips the write tracker before fhCreateItem even runs, so an invalid ptrTarget reaching
+-- fhCreateItem("SOUR", ptrTarget) unvalidated would arm ADR 0005's rollback/Session-death
+-- path for a caller mistake that wrote nothing, exactly like the sessionLogHelper.logActivity
+-- gap fixed in issue #95 -- this is that same audit finding it a second time (issue #96).
 function M.citeSource(ptrTarget, sourceNameOrId)
+  if not ptrTarget or ptrTarget:IsNull() then
+    error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to")
+  end
   local source = resolveSource(sourceNameOrId)
   local citation = fhCreateItem("SOUR", ptrTarget)
   fhSetValueAsLink(citation, source)

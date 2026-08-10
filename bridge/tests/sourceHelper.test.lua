@@ -638,6 +638,21 @@ check(contains(errDupeCite, '2'), 'ambiguous-title error mentions the match coun
 check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source title is ambiguous')
 
 ------------------------------------------------------------------
+-- citeSource: an invalid ptrTarget errors before any mutation too (issue #96) -- the same
+-- validate-before-mutate coverage as the unknown/ambiguous-source cases above, just for the
+-- other argument. Both cases must fail before fhCreateItem("SOUR", ptrTarget) is ever
+-- called, not just eventually.
+------------------------------------------------------------------
+
+local okNilTarget, errNilTarget = pcall(sourceHelper.citeSource, nil, certSourceId)
+check(not okNilTarget, 'a nil ptrTarget raises an error rather than proceeding')
+check(contains(errNilTarget, 'ptrTarget'), 'the nil-ptrTarget error names ptrTarget specifically')
+
+local nullTarget = newPtr()
+local okNullTarget = pcall(sourceHelper.citeSource, nullTarget, certSourceId)
+check(not okNullTarget, 'a non-nil but IsNull() ptrTarget also raises an error rather than proceeding')
+
+------------------------------------------------------------------
 -- findSources (issue #65): matches record-level fields on the SOUR record itself,
 -- citation-level fields (CITN) on its citations instead, and reports citedBy regardless.
 ------------------------------------------------------------------
