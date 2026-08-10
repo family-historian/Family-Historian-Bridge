@@ -330,6 +330,25 @@ check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeInvalid,
 check(#setValueCalls == setValueCallCountBeforeInvalid,
   'none of the four invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
 
+------------------------------------------------------------------
+-- validateLogActivity (issue #97): the pure validation half of logActivity, exported so
+-- sandbox.lua can run it untracked before arming the write tracker. Same success/failure
+-- behavior as logActivity's own up-front checks, but never touches the tree -- not even on
+-- success (that's the rest of logActivity's job).
+------------------------------------------------------------------
+
+local rnotBeforeValidateOnly = #(recordsByTag["_RNOT"] or {})
+local setValueCallCountBeforeValidateOnly = #setValueCalls
+
+local okValidateOnly = pcall(freshSessionLogHelper.validateLogActivity, indiG, "created")
+check(okValidateOnly == true, 'validateLogActivity succeeds silently on valid input')
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeValidateOnly, 'validateLogActivity never creates a _RNOT record, even on success')
+check(#setValueCalls == setValueCallCountBeforeValidateOnly, 'validateLogActivity never writes to the buffer, even on success')
+
+local okValidateOnlyNilPtr, errValidateOnlyNilPtr = pcall(freshSessionLogHelper.validateLogActivity, nil, "created")
+check(okValidateOnlyNilPtr == false, 'validateLogActivity rejects a nil ptrRecord, same as logActivity')
+check(contains(errValidateOnlyNilPtr, "ptrRecord"), 'the rejection names ptrRecord specifically')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

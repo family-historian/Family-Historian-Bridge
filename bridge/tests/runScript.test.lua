@@ -43,12 +43,22 @@ package.loaded.fhUtils = {
 -- package.path, but their real implementations call further real fh* globals this plain-lua
 -- test process doesn't stub. Stub via package.loaded the same way fhUtils is stubbed above,
 -- needed as a prerequisite for the write-then-log tests further down (issue #43), which
--- exercise fhBridge.logActivity as the one avenue to flip tracker.logged.
+-- exercise fhBridge.logActivity as the one avenue to flip tracker.logged. validate* stubs
+-- (issue #97) are always-succeeding no-ops, same "independent of the real module's own
+-- behavior" reasoning as the mutate stubs beside them -- sandbox.lua's validatedTrackedWrite/
+-- validatedTrackedLog now call these before the real mutate function, and the fixture scripts
+-- below pass a plain 'ptr' string (not a real Item Pointer with :IsNull()), which the real
+-- validateLogActivity/validateCiteSource would reject -- that rejection path is covered by
+-- sourceHelper.test.lua/sessionLogHelper.test.lua instead, this file is only testing
+-- runScript.lua's own pre-scan/rollback/backstop behavior.
 package.loaded.sourceHelper = {
+  validateCreateSourceFromTemplate = function() end,
   createSourceFromTemplate = function() end,
+  validateCiteSource = function() end,
   citeSource = function() end,
 }
 package.loaded.sessionLogHelper = {
+  validateLogActivity = function() end,
   logActivity = function(ptrRecord, action) return 'logged:' .. tostring(action) end,
 }
 

@@ -579,6 +579,24 @@ check(not okMissingId, 'missing template id raises an error')
 check(contains(errMissingId, '999999'), 'missing-id error names the id that was looked for')
 
 ------------------------------------------------------------------
+-- validateCreateSourceFromTemplate (issue #97): the pure validation half of
+-- createSourceFromTemplate, exported so sandbox.lua can run it untracked before arming the
+-- write tracker. Same success/failure behavior as createSourceFromTemplate's own steps 1-3,
+-- but never creates anything -- not even on success (that's mutate's job, step 4).
+------------------------------------------------------------------
+
+local validatedTemplate, validatedDefs = sourceHelper.validateCreateSourceFromTemplate(civilRegId, { Type = "Birth" })
+check(validatedTemplate ~= nil, 'validateCreateSourceFromTemplate returns the resolved template on success')
+check(type(validatedDefs) == 'table' and validatedDefs.Type ~= nil, 'validateCreateSourceFromTemplate returns the template\'s field-def map on success')
+
+local okValidateBadField, errValidateBadField = pcall(sourceHelper.validateCreateSourceFromTemplate, civilRegId, { NotAField = "x" })
+check(not okValidateBadField, 'validateCreateSourceFromTemplate rejects an unknown field code, same as createSourceFromTemplate')
+check(contains(errValidateBadField, 'NotAField'), 'the rejection names the unknown field code')
+
+local okValidateMissingId = pcall(sourceHelper.validateCreateSourceFromTemplate, 999999, {})
+check(not okValidateMissingId, 'validateCreateSourceFromTemplate rejects an unresolvable template id, same as createSourceFromTemplate')
+
+------------------------------------------------------------------
 -- citeSource: attaches a SOUR citation to any target item (record or Fact)
 ------------------------------------------------------------------
 
@@ -651,6 +669,20 @@ check(contains(errNilTarget, 'ptrTarget'), 'the nil-ptrTarget error names ptrTar
 local nullTarget = newPtr()
 local okNullTarget = pcall(sourceHelper.citeSource, nullTarget, certSourceId)
 check(not okNullTarget, 'a non-nil but IsNull() ptrTarget also raises an error rather than proceeding')
+
+------------------------------------------------------------------
+-- validateCiteSource (issue #97): the pure validation half of citeSource, exported so
+-- sandbox.lua can run it untracked before arming the write tracker. Same success/failure
+-- behavior as citeSource's own checks, but never creates a citation -- not even on success.
+------------------------------------------------------------------
+
+local validatedSource = sourceHelper.validateCiteSource(indiTarget, certSourceId)
+check(validatedSource ~= nil, 'validateCiteSource returns the resolved source on success')
+check(sourCountOnTarget(badIdTarget) == 0, 'validateCiteSource never creates a citation, even on success')
+
+local okValidateNilTarget, errValidateNilTarget = pcall(sourceHelper.validateCiteSource, nil, certSourceId)
+check(not okValidateNilTarget, 'validateCiteSource rejects a nil ptrTarget, same as citeSource')
+check(contains(errValidateNilTarget, 'ptrTarget'), 'the rejection names ptrTarget specifically')
 
 ------------------------------------------------------------------
 -- findSources (issue #65): matches record-level fields on the SOUR record itself,

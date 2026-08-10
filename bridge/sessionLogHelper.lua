@@ -69,7 +69,15 @@ end
 -- the Session and prompting FH's own undo dialog) for what's actually just a caller mistake
 -- with nothing yet on the tree to undo (issue #95, from a live run_lua call that passed a
 -- nil ptrRecord and only found out via that whole rollback path).
-function M.logActivity(ptrRecord, action, media)
+-- sessionLogHelper.validateLogActivity(ptrRecord, action, media)
+-- The pure validation half of M.logActivity below, extracted (issue #97) so sandbox.lua can
+-- call it on its own, untracked, before arming the write tracker -- flipping tracker.wrote
+-- purely from entering the wrapped fhBridge.logActivity call (as the old single-function
+-- wrapping did) meant even a call rejected right here still armed ADR 0005's rollback path,
+-- for a call that (by definition, once this errors) never touched the tree. M.logActivity
+-- itself still calls this first too, so direct callers/tests keep today's single-call,
+-- validate-then-mutate contract unchanged.
+function M.validateLogActivity(ptrRecord, action, media)
   if not ptrRecord or ptrRecord:IsNull() then
     error("logActivity: ptrRecord must point to the record this activity concerns")
   end
@@ -79,6 +87,10 @@ function M.logActivity(ptrRecord, action, media)
   if media and not media.name then
     error("media.name is required when a media detail is given")
   end
+end
+
+function M.logActivity(ptrRecord, action, media)
+  M.validateLogActivity(ptrRecord, action, media)
 
   if not notePtr then
     notePtr = fhCreateItem("_RNOT")

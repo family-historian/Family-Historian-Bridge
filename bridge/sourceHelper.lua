@@ -216,16 +216,32 @@ local function setField(sour, code, value, def)
   end
 end
 
+-- sourceHelper.validateCreateSourceFromTemplate(templateNameOrId, fields)
+-- The pure validation half of M.createSourceFromTemplate below (steps 1-3 of the design
+-- spec's "validate everything, then mutate" order), extracted (issue #97) so sandbox.lua can
+-- call it on its own, untracked, before arming the write tracker -- flipping tracker.wrote
+-- purely from entering the wrapped fhBridge.createSourceFromTemplate call (as the old
+-- single-function wrapping did) meant even a call rejected right here still armed ADR 0005's
+-- rollback path, for a call that (by definition, once this errors) never reached
+-- fhCreateItem. Returns the resolved template pointer and its CODE -> field-def map, both
+-- of which M.createSourceFromTemplate itself needs for step 4 -- so it also calls this
+-- first (rather than duplicating steps 1-3), keeping today's single-call, validate-then-
+-- mutate contract unchanged for direct callers/tests.
+function M.validateCreateSourceFromTemplate(templateNameOrId, fields)
+  local template = resolveTemplate(templateNameOrId)
+  local defs = fieldDefs(template)
+  validateFields(fields or {}, defs)
+  return template, defs
+end
+
 -- sourceHelper.createSourceFromTemplate(templateNameOrId, fields, transcription)
--- See the design spec for the full contract. Validates everything (steps 1-3) before any
--- fhCreateItem call (step 4), so a bad call never leaves a partially-created record behind.
+-- See the design spec for the full contract. Validates everything (steps 1-3, delegated to
+-- validateCreateSourceFromTemplate above) before any fhCreateItem call (step 4), so a bad
+-- call never leaves a partially-created record behind.
 function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
   fields = fields or {}
 
-  local template = resolveTemplate(templateNameOrId)
-  local defs = fieldDefs(template)
-
-  validateFields(fields, defs)
+  local template, defs = M.validateCreateSourceFromTemplate(templateNameOrId, fields)
 
   local sour = fhCreateItem("SOUR")
   local link = fhCreateItem("_SRCT", sour)
@@ -248,24 +264,35 @@ function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
   }
 end
 
+-- sourceHelper.validateCiteSource(ptrTarget, sourceNameOrId)
+-- The pure validation half of M.citeSource below, extracted (issue #97) so sandbox.lua can
+-- call it on its own, untracked, before arming the write tracker -- same rationale as
+-- validateCreateSourceFromTemplate above: flipping tracker.wrote purely from entering the
+-- wrapped fhBridge.citeSource call armed ADR 0005's rollback path even for a ptrTarget/
+-- sourceNameOrId rejected right here, before fhCreateItem ever ran. Returns the resolved
+-- source pointer, which M.citeSource itself needs -- so it also calls this first (rather
+-- than duplicating the ptrTarget check and resolveSource call), keeping today's single-
+-- call, validate-then-mutate contract unchanged for direct callers/tests. The ptrTarget
+-- check itself (same "not ptr or ptr:IsNull()" idiom familyHelper.lua uses throughout) was
+-- added in issue #96, the same audit that found the sessionLogHelper.logActivity gap fixed
+-- in issue #95.
+function M.validateCiteSource(ptrTarget, sourceNameOrId)
+  if not ptrTarget or ptrTarget:IsNull() then
+    error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to")
+  end
+  return resolveSource(sourceNameOrId)
+end
+
 -- sourceHelper.citeSource(ptrTarget, sourceNameOrId)
 -- Attaches a SOUR citation to ptrTarget, resolving the source the same by-id-or-by-title
 -- way createSourceFromTemplate resolves a template. ptrTarget may be an INDI/FAM record
 -- (a Whole-record citation, per FH's own "citation for the record as a whole" concept —
 -- see docs/adr/0006-cite-every-fact-a-source-supports.md) or any Fact item already
 -- positioned by the caller (a Fact-level citation). Errors on an unresolvable source or an
--- invalid ptrTarget before creating anything, so a bad call never leaves a stray citation
--- behind -- the ptrTarget check specifically (same "not ptr or ptr:IsNull()" idiom
--- familyHelper.lua uses throughout) matters beyond tidiness: sandbox.lua's trackedWrite
--- flips the write tracker before fhCreateItem even runs, so an invalid ptrTarget reaching
--- fhCreateItem("SOUR", ptrTarget) unvalidated would arm ADR 0005's rollback/Session-death
--- path for a caller mistake that wrote nothing, exactly like the sessionLogHelper.logActivity
--- gap fixed in issue #95 -- this is that same audit finding it a second time (issue #96).
+-- invalid ptrTarget (delegated to validateCiteSource above) before creating anything, so a
+-- bad call never leaves a stray citation behind.
 function M.citeSource(ptrTarget, sourceNameOrId)
-  if not ptrTarget or ptrTarget:IsNull() then
-    error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to")
-  end
-  local source = resolveSource(sourceNameOrId)
+  local source = M.validateCiteSource(ptrTarget, sourceNameOrId)
   local citation = fhCreateItem("SOUR", ptrTarget)
   fhSetValueAsLink(citation, source)
 end

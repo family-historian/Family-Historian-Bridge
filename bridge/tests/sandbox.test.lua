@@ -191,10 +191,29 @@ package.loaded.fhUtils = fakeFhu
 -- but is stubbed the same way here so this test stays a pure allowlist check, independent
 -- of sourceHelper.lua's own behavior (covered by sourceHelper.test.lua). citeSource
 -- returns an identifiable value for the same forwarding-proof reason as fakeFhu.createIndi
--- above.
+-- above. validateCreateSourceFromTemplate/validateCiteSource (issue #97) record into
+-- helperCallLog (below) and raise when their first argument is the sentinel string 'BAD',
+-- so the validatedTrackedWrite/validatedTrackedLog tests further down can prove both
+-- ordering (validate runs before mutate) and the actual regression fix (a rejected
+-- validate call never reaches mutate, and never flips the tracker).
+local helperCallLog = {}
 local fakeSourceHelper = {
-  createSourceFromTemplate = function() end,
-  citeSource = function(ptrTarget, sourceNameOrId) return 'cited:' .. tostring(sourceNameOrId) end,
+  validateCreateSourceFromTemplate = function(templateNameOrId, fields)
+    table.insert(helperCallLog, { 'validateCreateSourceFromTemplate', templateNameOrId })
+    if templateNameOrId == 'BAD' then error('validateCreateSourceFromTemplate rejected it') end
+  end,
+  createSourceFromTemplate = function(templateNameOrId, fields)
+    table.insert(helperCallLog, { 'createSourceFromTemplate', templateNameOrId })
+    return 'created:' .. tostring(templateNameOrId)
+  end,
+  validateCiteSource = function(ptrTarget, sourceNameOrId)
+    table.insert(helperCallLog, { 'validateCiteSource', ptrTarget })
+    if ptrTarget == 'BAD' then error('validateCiteSource rejected it') end
+  end,
+  citeSource = function(ptrTarget, sourceNameOrId)
+    table.insert(helperCallLog, { 'citeSource', ptrTarget })
+    return 'cited:' .. tostring(sourceNameOrId)
+  end,
   findSources = function(templateNameOrId, fieldFilters) return 'foundsources:' .. tostring(templateNameOrId) end,
   getPopulatedTemplateFields = function(sourPtr) return 'populatedfields:' .. tostring(sourPtr) end,
   getTemplateFieldCensus = function(templateNameOrId) return 'fieldcensus:' .. tostring(templateNameOrId) end,
@@ -204,9 +223,17 @@ package.loaded.sourceHelper = fakeSourceHelper
 -- sessionLogHelper.lua (issue #36) is stubbed the same way, for the same reason: this test
 -- stays a pure allowlist check, independent of sessionLogHelper.lua's own behavior (covered
 -- by sessionLogHelper.test.lua). logActivity returns an identifiable value for the same
--- forwarding-proof reason as fakeSourceHelper.citeSource above.
+-- forwarding-proof reason as fakeSourceHelper.citeSource above. validateLogActivity (issue
+-- #97) records into the same helperCallLog and raises on the 'BAD' sentinel, same as above.
 local fakeSessionLogHelper = {
-  logActivity = function(ptrRecord, action) return 'logged:' .. tostring(action) end,
+  validateLogActivity = function(ptrRecord, action, media)
+    table.insert(helperCallLog, { 'validateLogActivity', ptrRecord })
+    if ptrRecord == 'BAD' then error('validateLogActivity rejected it') end
+  end,
+  logActivity = function(ptrRecord, action)
+    table.insert(helperCallLog, { 'logActivity', ptrRecord })
+    return 'logged:' .. tostring(action)
+  end,
 }
 package.loaded.sessionLogHelper = fakeSessionLogHelper
 
@@ -533,6 +560,47 @@ local envReadWrite3, trackerReadWrite3 = sandbox.build("read-write")
 check(type(envReadWrite3.fhBridge) == 'table', 'read-write build includes fhBridge (require("sourceHelper"))')
 check(envReadWrite3.fhBridge.citeSource('ptr', 'my-source') == 'cited:my-source', 'wrapped fhBridge.citeSource forwards through to the real sourceHelper.citeSource')
 check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips the tracker too')
+
+-- validatedTrackedWrite/validatedTrackedLog (issue #97): validate runs before mutate, and a
+-- rejected validate call never reaches mutate and never flips the tracker -- the actual
+-- regression this issue was about (a bad call to one of these three used to arm the tracker,
+-- and so trigger ADR 0005's rollback/Session-death path, purely from being entered, even
+-- though its own validation would have rejected it before any real write).
+helperCallLog = {}
+local envValidateCreate, trackerValidateCreate = sandbox.build("read-write")
+envValidateCreate.fhBridge.createSourceFromTemplate('T1', {})
+check(#helperCallLog == 2 and helperCallLog[1][1] == 'validateCreateSourceFromTemplate' and helperCallLog[2][1] == 'createSourceFromTemplate',
+  'a valid createSourceFromTemplate call runs validate before mutate, in that order')
+check(trackerValidateCreate.wrote == true, 'a valid createSourceFromTemplate call still flips tracker.wrote')
+
+helperCallLog = {}
+local envRejectCreate, trackerRejectCreate = sandbox.build("read-write")
+local okRejectCreate = pcall(envRejectCreate.fhBridge.createSourceFromTemplate, 'BAD', {})
+check(okRejectCreate == false, 'a createSourceFromTemplate call rejected by validation raises an error')
+check(#helperCallLog == 1 and helperCallLog[1][1] == 'validateCreateSourceFromTemplate',
+  'the rejected call never reached the real createSourceFromTemplate (mutate) at all')
+check(trackerRejectCreate.wrote == false,
+  'a createSourceFromTemplate call rejected by validation leaves tracker.wrote false -- nothing was written, so ADR 0005 rollback never arms')
+
+helperCallLog = {}
+local envRejectCite, trackerRejectCite = sandbox.build("read-write")
+local okRejectCite = pcall(envRejectCite.fhBridge.citeSource, 'BAD', 'my-source')
+check(okRejectCite == false, 'a citeSource call rejected by validation raises an error')
+check(#helperCallLog == 1 and helperCallLog[1][1] == 'validateCiteSource',
+  'the rejected citeSource call never reached the real citeSource (mutate) at all')
+check(trackerRejectCite.wrote == false,
+  'a citeSource call rejected by validation leaves tracker.wrote false')
+
+helperCallLog = {}
+local envRejectLog, trackerRejectLog = sandbox.build("read-write")
+local okRejectLog = pcall(envRejectLog.fhBridge.logActivity, 'BAD', 'created')
+check(okRejectLog == false, 'a logActivity call rejected by validation raises an error')
+check(#helperCallLog == 1 and helperCallLog[1][1] == 'validateLogActivity',
+  'the rejected logActivity call never reached the real logActivity (mutate) at all')
+check(trackerRejectLog.wrote == false,
+  'a logActivity call rejected by validation leaves tracker.wrote false')
+check(trackerRejectLog.logged == false,
+  'a logActivity call rejected by validation leaves tracker.logged false too')
 
 -- fhBridge's read-only members (familyHelper.lua) are still present under read-write too,
 -- by reference (not tracked-write) — env.fhBridge gains members going into read-write, it

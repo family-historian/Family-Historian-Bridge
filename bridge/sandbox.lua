@@ -265,6 +265,39 @@ function M.build(accessMode)
     end
   end
 
+  -- validatedTrackedWrite(validateFn, fn) / validatedTrackedLog(validateFn, fn) (issue #97):
+  -- for the three fhBridge.* composite functions (createSourceFromTemplate/citeSource/
+  -- logActivity) that each now expose their own pure validation half -- calls validateFn(...)
+  -- first, untracked, so a call it rejects never arms tracker.wrote/tracker.logged at all,
+  -- and only calls the real fn(...) (which re-validates internally too, harmlessly -- see
+  -- each validateFn's own comment) once validation has actually passed. Plain trackedWrite/
+  -- trackedLog above flip the tracker purely from being entered, before fn(...) even runs --
+  -- correct for a raw fh* write primitive (the call itself IS the mutation, so there's
+  -- nothing to validate first), but wrong for these three: each has a genuine, separate,
+  -- pure validation phase (resolveTemplate/resolveSource/the ptrRecord-action checks), and
+  -- wrapping the whole call with plain trackedWrite meant even a call rejected during that
+  -- validation phase -- one that, by definition, never reached fhCreateItem -- still armed
+  -- ADR 0005's rollback path and killed the Session. Confirmed live (issue #97) against
+  -- Family Historian Sample Project 8: pcall(fhBridge.createSourceFromTemplate, 999999, {})
+  -- still ended the Session even though resolveTemplate(999999) errors on a pure read, with
+  -- nothing ever written, and even though the caller's own pcall caught that error.
+  local function validatedTrackedWrite(validateFn, fn)
+    return function(...)
+      validateFn(...)
+      tracker.wrote = true
+      return fn(...)
+    end
+  end
+
+  local function validatedTrackedLog(validateFn, fn)
+    return function(...)
+      validateFn(...)
+      tracker.logged = true
+      tracker.wrote = true
+      return fn(...)
+    end
+  end
+
   env.string = string
   env.table = table
   env.math = math
@@ -475,10 +508,17 @@ function M.build(accessMode)
     -- own Source-record concerns, but exposed through the same env.fhBridge table and
     -- gated the same read-write-only way, since it also calls the real fh* globals
     -- directly.
+    -- validatedTrackedWrite/validatedTrackedLog (issue #97), not plain trackedWrite/
+    -- trackedLog, for these three -- see their own comment above for why: each has a real
+    -- validation phase (validateCreateSourceFromTemplate/validateCiteSource/
+    -- validateLogActivity) worth running before the tracker arms, unlike a raw fh* primitive.
     local realSessionLogHelper = require('sessionLogHelper')
-    env.fhBridge.createSourceFromTemplate = trackedWrite(realSourceHelper.createSourceFromTemplate)
-    env.fhBridge.citeSource = trackedWrite(realSourceHelper.citeSource)
-    env.fhBridge.logActivity = trackedLog(realSessionLogHelper.logActivity)
+    env.fhBridge.createSourceFromTemplate = validatedTrackedWrite(
+      realSourceHelper.validateCreateSourceFromTemplate, realSourceHelper.createSourceFromTemplate)
+    env.fhBridge.citeSource = validatedTrackedWrite(
+      realSourceHelper.validateCiteSource, realSourceHelper.citeSource)
+    env.fhBridge.logActivity = validatedTrackedLog(
+      realSessionLogHelper.validateLogActivity, realSessionLogHelper.logActivity)
   end
 
   return env, tracker
