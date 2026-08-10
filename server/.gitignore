@@ -1,3 +1,4 @@
 node_modules/
 dist/
+coverage/
 data/fh-help-corpus.meta.json
