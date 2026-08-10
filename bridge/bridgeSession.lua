@@ -53,6 +53,7 @@ iup.SetGlobal("CUSTOMQUITMESSAGE", "YES") -- avoids known FH/IUP interaction iss
 local runScript = require("runScript")
 local json = require("jsonEncode")
 local requestFraming = require("requestFraming")
+local sessionPolicy = require("sessionPolicy")
 local timeoutDisplay = require("timeoutDisplay")
 local versionCompare = require("versionCompare")
 local sessionSettings = require("sessionSettings")
@@ -75,18 +76,15 @@ local DEFAULT_IDLE_TIMEOUT_MINUTES = lastSettings.idleTimeoutMinutes
 -- immediately-Exit even though no request was ever handled.
 local RECENT_ACTIVITY_CONFIRM_SECONDS = 10
 
--- Dialog background colours: a muted traffic-light so the Session's state -- and, while
--- listening, whether write access is armed -- is visible without reading the status label.
--- Read-write gets its own colour rather than sharing "listening" with read-only since it's
--- the one state where a script can actually mutate the user's data. Muted (not saturated)
--- tones so the dialog doesn't read as alarming at a glance; grey/green/amber/red differ in
--- lightness as well as hue so the states stay distinguishable under common colour-blindness.
--- Set on the dialog itself (dlg.bgcolor), not lblStatus -- IUP native labels don't reliably
--- honour BGCOLOR, confirmed not working live.
-local STATUS_COLOR_STOPPED   = "224 224 224" -- grey: idle, nothing listening
-local STATUS_COLOR_READONLY  = "212 237 218" -- green: listening, read-only (safe)
-local STATUS_COLOR_READWRITE = "255 243 205" -- amber: listening, read-write (can mutate data)
-local STATUS_COLOR_ERROR     = "248 215 218" -- red: failed to bind
+-- Dialog background colours (see sessionPolicy.lua for the palette rationale): a muted
+-- traffic-light so the Session's state -- and, while listening, whether write access is
+-- armed -- is visible without reading the status label. Aliased locally so call sites below
+-- read the same as before this issue #88 extraction. Set on the dialog itself (dlg.bgcolor),
+-- not lblStatus -- IUP native labels don't reliably honour BGCOLOR, confirmed not working live.
+local STATUS_COLOR_STOPPED   = sessionPolicy.STATUS_COLOR_STOPPED
+local STATUS_COLOR_READONLY  = sessionPolicy.STATUS_COLOR_READONLY
+local STATUS_COLOR_READWRITE = sessionPolicy.STATUS_COLOR_READWRITE
+local STATUS_COLOR_ERROR     = sessionPolicy.STATUS_COLOR_ERROR
 local server = nil
 local lastActivityTime = nil
 -- Distinct from lastActivityTime above: only stamped when a real request (stop/version/lua)
@@ -175,11 +173,10 @@ local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"
 end
 
--- dlg's bgcolor while listening -- see the STATUS_COLOR_* comment above for why read-write
--- gets its own colour.
-local function statusColorForMode(accessMode)
-    return accessMode == "read-write" and STATUS_COLOR_READWRITE or STATUS_COLOR_READONLY
-end
+-- dlg's bgcolor while listening -- issue #88: moved to sessionPolicy.lua so it's testable
+-- standalone (this file can't be require()'d from a plain-lua test at all, see this file's
+-- own header comment). Aliased locally so call sites below read the same as before.
+local statusColorForMode = sessionPolicy.statusColorForMode
 
 -- Read live rather than snapshotted at Start, same as currentAccessMode() above — safe
 -- because txtIdleTimeout is locked (active="NO") for the whole Session, just like
@@ -218,7 +215,9 @@ local pendingRethrow = nil
 function timPoll:action_cb()
     if not server then return end
 
-    if lastActivityTime and os.time() - lastActivityTime > currentIdleTimeoutSeconds() then
+    -- Issue #34's auto-Stop rule, moved to sessionPolicy.lua (issue #88) so it's testable
+    -- standalone -- see that module for the decision itself.
+    if sessionPolicy.shouldAutoStopForIdle(lastActivityTime, currentIdleTimeoutSeconds(), os.time()) then
         return btnStop:action()
     end
 
@@ -375,7 +374,10 @@ end
 -- RECENT_ACTIVITY_CONFIRM_SECONDS -- otherwise closes straight away, silently. Returns
 -- false (and leaves the Session untouched) if the user declines the prompt.
 local function confirmAndStopSession()
-    if server and lastRequestHandledTime and os.time() - lastRequestHandledTime < RECENT_ACTIVITY_CONFIRM_SECONDS then
+    -- ADR 0020's freshness-confirm rule, moved to sessionPolicy.lua (issue #88) so it's
+    -- testable standalone -- see that module for the decision itself. `server ~= nil` is
+    -- this file's own "is a Session running" check; only the decision logic moved.
+    if sessionPolicy.shouldConfirmBeforeExit(server ~= nil, lastRequestHandledTime, os.time(), RECENT_ACTIVITY_CONFIRM_SECONDS) then
         local pressed = iup.Alarm("Confirm Exit", "A request was just handled -- close anyway?", "Yes", "No")
         if pressed ~= 1 then
             return false
