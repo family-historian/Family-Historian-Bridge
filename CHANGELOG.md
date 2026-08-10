@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+### `docs/release.md` brought back in line with how releases are actually cut (issue #86)
+- The doc predated `installer/release-mac.sh`, `installer/release-windows.ps1` and
+  `installer/build-dxt.mjs`, mentioned none of them, never mentioned the `.mcpb` flow at
+  all, and its Risks section still asserted *"No full packaging script exists."*
+- It now opens with what actually ships (as of 0.11.0: the hand-assembled
+  `fh-mcp-bridge-X.Y.Z.zip` **and** `fh-mcp-bridge-X.Y.Z.mcpb`) and a table of the three
+  build scripts and their outputs — including the awkward part worth knowing: the platform
+  artifacts those scripts build are *not* what has been attached to Forgejo releases, so
+  the scripted path and the released path currently produce different artifacts.
+- Step 4 no longer claims three hand-maintained version copies with no source of truth.
+  Two are hand-maintained (`server/package.json`, the Bridge's `@Version:` header, the
+  latter tracked as issue #89); `serverVersion.ts`, the `.iss` `AppVersion`, the `.mcpb`
+  manifest version and `package-lock.json` are all derived.
+- Step 6 now runs the aggregate `npm test` and builds the `.mcpb`; step 9 uploads both
+  assets rather than just the zip; the Risks section names the hand-assembled zip as the
+  real remaining gap instead of denying the scripts exist.
+
+### One source of truth for the MCP tool list, and a test that actually checks it (issue #85)
+- The tool list existed as four hand-synced copies — the `register*Tool` call sites,
+  `installer/dxt/manifest.mjs`, `installer/dxt/manifest.test.mjs` and
+  `installer/verify-dxt.mjs`. The test named *"buildManifest lists every tool
+  server/src/index.ts currently registers, and no others"* did not do that: it compared the
+  manifest to a literal array declared in the test file itself, never reading the server. A
+  ninth tool could be added and every suite would still pass while the shipped `.mcpb`
+  silently under-declared it.
+- `server/src/toolNames.json` is now the single source: tool names plus the one-line blurbs
+  the bundle manifest shows. JSON rather than TypeScript so the installer's plain-Node
+  scripts read it with no build step and no dependency on the gitignored `server/dist`.
+  `manifest.mjs` generates its `tools` array from it, and `verify-dxt.mjs` reads it too.
+- `server/src/toolNames.test.ts` is what makes the guarantee real: it stands up a real
+  `McpServer`, registers every tool the way `index.ts` does, connects an MCP client over
+  `InMemoryTransport`, and asserts the served `tools/list` is exactly that JSON's list. The
+  server is asked what it registers rather than parsed for it, so the TypeScript AST walk
+  ADR 0015 assumed would be needed isn't.
+- ADR 0015's "tool list is a static array" section is marked superseded, with the original
+  reasoning kept.
+- No change to what the server serves or what the bundle declares — the eight tools are
+  the same eight.
+
+### One `npm test` runs every suite, and releases are gated on it (issue #84)
+- The repo had three test runners with three invocation styles and no command that ran them
+  all: `cd server && npm test` (vitest) covered roughly a third of the tested surface, the
+  12 `bridge/tests/*.test.lua` files had to be looped over by hand, and
+  `installer/dxt/manifest.test.mjs` was wired into nothing at all — no npm script, neither
+  release script, not `docs/release.md` — so a release could be cut with it failing and
+  nothing would say so.
+- A new root `package.json` exposes `test:server`, `test:bridge`, `test:installer` and an
+  aggregate `test` that runs all three, stopping at the first failure. It is `private`, has
+  no dependencies, and deliberately carries **no** `version` field: `server/package.json`
+  remains the single version source of truth (issue #44).
+- `scripts/run-bridge-tests.mjs` is the new aggregate Lua runner — Node rather than a shell
+  loop so it behaves the same from bash on the Mac and PowerShell on Windows, where the
+  release scripts also run it. It finds an interpreter via `LUA_BIN`, then `lua` on `PATH`,
+  then `C:\Utils\lua\lua.exe` (`installer/stage.ps1`'s fixed location), and reports a clear
+  "not a working Lua interpreter" error rather than failing all 12 files.
+- `installer/release-mac.sh` and `installer/release-windows.ps1` now run the aggregate
+  `npm test` before building anything, so a release cannot be built over a failing suite.
+
 ### `run_lua` rejects scripts calling unrecognized `fh*` globals (issue #81)
 - A new static pre-scan in `runScript.lua`, run before `load()` alongside the existing
   write-then-log pre-scan (docs/adr/0012), rejects a script that calls a bare `fh*` global
