@@ -13,6 +13,26 @@
 // manifest_version "0.4" targets the current MCPB manifest schema
 // (schemas/mcpb-manifest-v0.4.schema.json in modelcontextprotocol/mcpb) -- validated against
 // the real schema by `mcpb validate` in build-dxt.mjs, not just this module's own tests.
+//
+// The `tools` array is likewise generated, from server/src/toolNames.json, rather than
+// hand-listed here -- issue #85, which found the test that claimed to guard this list was
+// only comparing it to a literal copy in the test file itself. server/src/toolNames.test.ts
+// pins that JSON to what the server really registers, so this file now follows the server
+// by construction. Read from src/ rather than dist/ deliberately: dist/ is gitignored, so
+// depending on it would break `npm run test:installer` on a fresh clone.
+
+import { readFileSync } from "node:fs";
+
+const TOOL_CATALOG_PATH = new URL("../../server/src/toolNames.json", import.meta.url);
+
+/** @returns {{ name: string, bundleDescription: string }[]} */
+export function readToolCatalog() {
+  const { tools } = JSON.parse(readFileSync(TOOL_CATALOG_PATH, "utf-8"));
+  if (!Array.isArray(tools) || tools.length === 0) {
+    throw new Error(`${TOOL_CATALOG_PATH.pathname} has no "tools" array`);
+  }
+  return tools;
+}
 
 /**
  * @param {{ version: string }} opts
@@ -42,40 +62,10 @@ export function buildManifest({ version }) {
     },
     // No user_config: server/src/index.ts takes no env vars or CLI args today -- every
     // request goes through the single run_lua tool instead of build-time configuration.
-    tools: [
-      {
-        name: "run_lua",
-        description: "Run a freshly-authored Lua script against the open FH project via the Bridge plugin.",
-      },
-      {
-        name: "describe_project",
-        description: "Fixed, built-in census of the open FH project (record counts, flag/tag breakdowns).",
-      },
-      {
-        name: "author_fh_plugin",
-        description: "Scaffold a standalone FH Report/Query plugin for the user to save and install.",
-      },
-      {
-        name: "install_fh_plugin",
-        description: "Write a plugin author_fh_plugin generated into FH's own Plugins folder.",
-      },
-      {
-        name: "search_fh_help",
-        description: "Search FH's own help corpus.",
-      },
-      {
-        name: "grep_fh_help",
-        description: "Full-text search over FH's own help corpus.",
-      },
-      {
-        name: "check_fh_help_updates",
-        description: "Check for and pull down updated FH help content.",
-      },
-      {
-        name: "search_gedcom_knowledge",
-        description: "Search the GEDCOM/FH domain-knowledge corpus (FTF, Shared Facts, Source Templates, ...).",
-      },
-    ],
+    tools: readToolCatalog().map(({ name, bundleDescription }) => ({
+      name,
+      description: bundleDescription,
+    })),
     keywords: ["genealogy", "family-historian", "gedcom"],
     license: "ISC",
     compatibility: {

@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildManifest } from "./manifest.mjs";
+import { buildManifest, readToolCatalog } from "./manifest.mjs";
 
 // Every top-level key the MCPB v0.4 manifest schema
 // (schemas/mcpb-manifest-v0.4.schema.json in modelcontextprotocol/mcpb) actually declares --
@@ -41,21 +41,6 @@ const SCHEMA_V0_4_TOP_LEVEL_KEYS = new Set([
   "user_config",
   "_meta",
 ]);
-
-// The fixed set of tool names server/src/index.ts registers today (run_lua,
-// describe_project, author_fh_plugin, install_fh_plugin, search_fh_help, grep_fh_help,
-// check_fh_help_updates, search_gedcom_knowledge) -- see that file if this list and the
-// manifest's own `tools` entries ever need to grow together.
-const EXPECTED_TOOL_NAMES = [
-  "run_lua",
-  "describe_project",
-  "author_fh_plugin",
-  "install_fh_plugin",
-  "search_fh_help",
-  "grep_fh_help",
-  "check_fh_help_updates",
-  "search_gedcom_knowledge",
-];
 
 test("buildManifest requires a version", () => {
   assert.throws(() => buildManifest({}), /version/i);
@@ -107,15 +92,25 @@ test("buildManifest declares only the platforms this project actually ships a re
   assert.deepEqual(compatibility.platforms, ["darwin", "win32"]);
 });
 
-test("buildManifest lists every tool server/src/index.ts currently registers, and no others", () => {
+// What this can and can't prove: it pins the manifest to server/src/toolNames.json, the
+// single source of truth (issue #85). Proving that JSON matches what the server *actually*
+// registers is server/src/toolNames.test.ts's job -- it stands up a real McpServer and reads
+// back its tools/list. The two together give the guarantee this test's previous name claimed
+// on its own while comparing the manifest to a literal array declared right here.
+test("buildManifest declares exactly the tools in server/src/toolNames.json, in order", () => {
   const { tools } = buildManifest({ version: "0.6.0" });
   assert.deepEqual(
     tools.map((t) => t.name),
-    EXPECTED_TOOL_NAMES,
+    readToolCatalog().map((t) => t.name),
   );
+});
+
+test("buildManifest gives every declared tool a non-empty description", () => {
+  const { tools } = buildManifest({ version: "0.6.0" });
+  assert.ok(tools.length > 0);
   for (const tool of tools) {
-    assert.equal(typeof tool.description, "string");
-    assert.ok(tool.description.length > 0);
+    assert.equal(typeof tool.description, "string", `${tool.name} description must be a string`);
+    assert.ok(tool.description.length > 0, `${tool.name} needs a non-empty description`);
   }
 });
 

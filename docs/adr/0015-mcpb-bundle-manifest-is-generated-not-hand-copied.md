@@ -53,16 +53,37 @@ arguments — every request goes through the single `run_lua` tool rather than b
 configuration — so the manifest declares no `user_config` section. Revisit if the server
 ever gains a genuine install-time setting.
 
-**Tool list is a static array, not introspected from `server/src/index.ts`.** The
-manifest's `tools` field (shown in Claude Desktop's install UI) lists all eight tools this
-server registers today (`run_lua`, `describe_project`, `author_fh_plugin`,
-`install_fh_plugin`, `search_fh_help`, `grep_fh_help`, `check_fh_help_updates`,
-`search_gedcom_knowledge`) by hand in `manifest.mjs`, cross-checked by
-`manifest.test.mjs` against that same fixed list. This is a real, if small, drift risk —
-same shape as the version-copy problem above — accepted for now since the tool set
-changes rarely and introspecting `index.ts`'s registrations at build time would need a
-real TypeScript AST walk (or importing and executing server code just to enumerate it) for
-a UI-only field. Worth automating if the tool list starts drifting in practice.
+**Tool list is generated from `server/src/toolNames.json`.** *(Superseded 2026-08-10 by
+issue #85 — the original decision is kept below, since the reasoning that made it wrong is
+the point.)*
+
+Originally the manifest's `tools` field (shown in Claude Desktop's install UI) listed all
+eight tools by hand in `manifest.mjs`, "cross-checked by `manifest.test.mjs` against that
+same fixed list" — accepted as a small drift risk since the tool set changes rarely, and
+introspecting `index.ts`'s registrations at build time looked like it would need a real
+TypeScript AST walk for a UI-only field.
+
+Two things were wrong with that. First, the cross-check was circular: `manifest.test.mjs`
+compared `buildManifest()`'s output to a literal array declared inside the test file, so it
+could only ever confirm that two hand-written lists in the installer agreed with each
+other — never that either matched the server. The test was nonetheless *named* "buildManifest
+lists every tool server/src/index.ts currently registers, and no others", which is worse
+than no test at all, because it reads like coverage during review. Second, there were by
+then four copies, not two: the `register*Tool` call sites, `manifest.mjs`,
+`manifest.test.mjs`, and `verify-dxt.mjs` (whose own comment called itself "a third copy of
+the same acknowledged drift").
+
+Now: `server/src/toolNames.json` holds the names (plus the one-line blurbs the manifest
+needs), and all three consumers read it — `manifest.mjs` generates its `tools` array from
+it, `manifest.test.mjs` asserts against it, `verify-dxt.mjs` compares a packed bundle's real
+`tools/list` to it. JSON rather than TypeScript so the installer's plain-Node scripts can
+read it with no build step and no dependency on the gitignored `server/dist`.
+
+The AST walk turned out to be unnecessary. `server/src/toolNames.test.ts` stands up a real
+`McpServer`, registers every tool the way `index.ts` does, connects a real MCP client over
+`InMemoryTransport`, and asserts the served `tools/list` is exactly the JSON's list — the
+server is asked what it registers rather than parsed for it. That is the check the old test
+claimed to be.
 
 **Verification splits into an automatable half and a hands-on half.** `installer/verify-
 dxt.mjs` extracts the packed `.mcpb` (it's just a zip — `unzip` on macOS/Linux, and
@@ -70,7 +91,7 @@ explicitly Windows' own `System32\tar.exe`/bsdtar rather than a bare `tar`, sinc
 shell's PATH can put GNU tar first and GNU tar can't read zip archives at all), then
 spawns the manifest's own `server.mcp_config.command`/`args` — substituting `${__dirname}`
 the same way Claude Desktop would — and connects a real MCP client over stdio to confirm
-`tools/list` returns exactly the expected eight tools. This proves the bundle's *contents*
+`tools/list` returns exactly the tools `server/src/toolNames.json` declares. This proves the bundle's *contents*
 are correct and the server starts and speaks MCP under its own bundled dependencies, all
 without a live FH instance (same "no live FH needed" boundary
 `server/scripts/smoke-test.mjs` already documents for its own checks) — but it cannot, and

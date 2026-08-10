@@ -1,7 +1,8 @@
 # server/ — TypeScript MCP server
 
-Node/TS, `"type": "module"` (ESM), package name `fh-mcp-bridge-server`, version tracked
-here is one of the 3 hand-bumped release copies (see `mem:core`).
+Node/TS, `"type": "module"` (ESM), package name `fh-mcp-bridge-server`. `package.json`'s
+version is the release source of truth; only the Bridge's `@Version:` header is still
+hand-copied from it (see `mem:core` and issue #89).
 
 Source layout (`server/src/`, one concern per file, `*.test.ts` siblings):
 - `bridgeClient.ts` — TCP client, frames requests (`LUA <n>` / `LUA_RO <n>` to force
@@ -17,7 +18,14 @@ Source layout (`server/src/`, one concern per file, `*.test.ts` siblings):
   `mem:corpora`).
 - `versionCheck.ts`, `serverVersion.ts` — Bridge/server version-mismatch handshake (ADR
   0013).
-- `index.ts` — entry point, registers tools/resources, connects over stdio.
+- `index.ts` — entry point, registers tools/resources, connects over stdio. Can't be
+  imported by tests: it registers and connects a stdio transport at module scope.
+- `toolNames.json` / `toolNames.ts` — single source of truth for the 8 MCP tool names
+  (issue #85), read by `installer/dxt/manifest.mjs` and `installer/verify-dxt.mjs` as well.
+  JSON so plain-Node installer scripts read it without a build or the gitignored `dist/`.
+  `toolNames.test.ts` stands up a real `McpServer`, registers everything the way `index.ts`
+  does, and asserts `tools/list` over `InMemoryTransport` matches the JSON exactly — add a
+  tool to the server and forget the JSON (or vice versa) and that test fails.
 
 Data: `server/data/fh-help-corpus.jsonl` (scraped FH help, source of truth is sibling
 `fh-help/fh8-help-site` project) and `server/data/gedcom-knowledge-corpus.jsonl` (own

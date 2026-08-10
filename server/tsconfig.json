@@ -6,6 +6,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
+    // src/toolNames.json is imported by src/toolNames.ts; tsc copies it into dist/ alongside
+    // the emitted JS, so the bundled server carries it too.
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

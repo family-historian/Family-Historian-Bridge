@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Single source of truth for the MCP tools this server registers -- issue #85.",
+    "Before this file there were four hand-synced copies of the tool list (the register*Tool",
+    "call sites, installer/dxt/manifest.mjs, installer/dxt/manifest.test.mjs and",
+    "installer/verify-dxt.mjs), and the test that claimed to catch drift between them compared",
+    "the manifest against its own local literal instead. See docs/adr/0015.",
+    "",
+    "JSON rather than TypeScript so the installer's plain-Node scripts can read it directly,",
+    "with no build step and no dependency on server/dist -- which is gitignored, so requiring",
+    "it would mean `npm run test:installer` failed on a fresh clone.",
+    "",
+    "bundleDescription is the one-line blurb shown in the .mcpb bundle's manifest, NOT the",
+    "tool's real MCP description (those are long, Claude-facing, and live at each register*Tool",
+    "call site).",
+    "",
+    "Adding a tool: add it here and register it in server/src/. Three tests then prove the",
+    "three consumers agree -- toolNames.test.ts (what the server really registers),",
+    "installer/dxt/manifest.test.mjs (what the manifest declares), and installer/verify-dxt.mjs",
+    "(what a packed .mcpb actually serves over stdio)."
+  ],
+  "tools": [
+    {
+      "name": "run_lua",
+      "bundleDescription": "Run a freshly-authored Lua script against the open FH project via the Bridge plugin."
+    },
+    {
+      "name": "describe_project",
+      "bundleDescription": "Fixed, built-in census of the open FH project (record counts, flag/tag breakdowns)."
+    },
+    {
+      "name": "author_fh_plugin",
+      "bundleDescription": "Scaffold a standalone FH Report/Query plugin for the user to save and install."
+    },
+    {
+      "name": "install_fh_plugin",
+      "bundleDescription": "Write a plugin author_fh_plugin generated into FH's own Plugins folder."
+    },
+    {
+      "name": "search_fh_help",
+      "bundleDescription": "Search FH's own help corpus."
+    },
+    {
+      "name": "grep_fh_help",
+      "bundleDescription": "Full-text search over FH's own help corpus."
+    },
+    {
+      "name": "check_fh_help_updates",
+      "bundleDescription": "Check for and pull down updated FH help content."
+    },
+    {
+      "name": "search_gedcom_knowledge",
+      "bundleDescription": "Search the GEDCOM/FH domain-knowledge corpus (FTF, Shared Facts, Source Templates, ...)."
+    }
+  ]
+}

@@ -25,21 +25,13 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readToolCatalog } from "./dxt/manifest.mjs";
 
-// Kept in sync by hand with the identical list in installer/dxt/manifest.mjs (its `tools`
-// array) and installer/dxt/manifest.test.mjs -- a third copy of the same acknowledged drift
-// risk ADR 0015 already flags for the other two. If server/src/index.ts registers a new
-// tool, update all three.
-const EXPECTED_TOOL_NAMES = [
-  "run_lua",
-  "describe_project",
-  "author_fh_plugin",
-  "install_fh_plugin",
-  "search_fh_help",
-  "grep_fh_help",
-  "check_fh_help_updates",
-  "search_gedcom_knowledge",
-];
+// Read from server/src/toolNames.json, the single source of truth (issue #85), instead of the
+// hand-synced third copy that used to sit here -- the drift risk ADR 0015 flagged. This is
+// the strongest of the three checks in that chain: it compares the JSON not to a manifest or
+// to source, but to the tool names a packed .mcpb's server really answers tools/list with.
+const EXPECTED_TOOL_NAMES = readToolCatalog().map((tool) => tool.name);
 
 const RUNNER_SOURCE = `
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
