@@ -33,6 +33,9 @@ npm run typecheck
 npm test
 ```
 
+`npm test` from the repo root runs this suite plus the bridge (Lua) and installer
+(`node --test`) suites — that is the one the release scripts gate on.
+
 `bridgeClient.test.ts` and `runLuaTool.test.ts` are fully automated — no FH dependency.
 `bridgeClient`'s tests use a fake TCP server that speaks the same `STOP`/`LUA <n>` framing
 as the real Bridge (see the spec's Testing Decisions); `runLuaTool`'s tests inject a fake

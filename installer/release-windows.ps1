@@ -27,6 +27,26 @@ if (-not $iscc) {
   throw "ISCC.exe (Inno Setup 6) not found. Install it first, e.g.:`n  winget install --id JRSoftware.InnoSetup -e"
 }
 
+$repoRoot = Split-Path -Parent $installerDir
+
+Write-Host "== Running all test suites =="
+# Aggregate target at the repo root: server (vitest) + bridge (lua) + installer
+# (node --test). Runs first so a release can't be built over a failing suite.
+# stage.ps1 knows where lua.exe lives on this machine; tell the bridge runner too.
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw "Node.js not found on PATH. Install it first (e.g. 'winget install --id OpenJS.NodeJS.LTS -e')."
+}
+Push-Location $repoRoot
+try {
+  & npm install --prefix server
+  if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
+  $env:LUA_BIN = 'C:\Utils\lua\lua.exe'
+  & npm test
+  if ($LASTEXITCODE -ne 0) { throw "test suites failed -- aborting release" }
+} finally {
+  Pop-Location
+}
+
 Write-Host "== Stage 2a: building server, bridge, and staging payload =="
 & (Join-Path $installerDir 'stage.ps1')
 

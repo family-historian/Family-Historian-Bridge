@@ -1,0 +1,12 @@
+{
+  "name": "fh-mcp-bridge",
+  "private": true,
+  "description": "Repo-root task runner. Deliberately has no \"version\" field: server/package.json is the single version source of truth (see issue #44) and this file must never become a second one.",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:server && npm run test:bridge && npm run test:installer",
+    "test:server": "npm --prefix server test",
+    "test:bridge": "node scripts/run-bridge-tests.mjs",
+    "test:installer": "node --test \"installer/**/*.test.mjs\""
+  }
+}

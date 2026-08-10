@@ -1,3 +1,9 @@
 .ua/
 .mcp.json
 .syncthing*
+
+# The root package.json is a dependency-free task runner (see its description field).
+# Anything npm leaves behind up here is incidental and shouldn't be committed --
+# server/package-lock.json is the one that matters.
+/node_modules/
+/package-lock.json

@@ -20,7 +20,9 @@ implements.
   write script made is reflected on FH's own screen right away (issue #33). Like the entry
   file before it, this has no automatable seam (needs `iup`/`luasocket`/FH's own globals
   regardless of which file it lives in) — no `bridgeSession.test.lua`, tested manually
-  inside FH instead (see "Manual test" below).
+  inside FH instead (see "Manual test" below). Issue #88 proposes a second split, on ADR
+  0018's reasoning, to get the policy logic (access mode, idle timeout, ADR 0020's
+  freshness-confirm rule) under test.
 - `requestFraming.lua` — parses a request's first line (`STOP` / `LUA <n>` / `LUA_RO <n>` /
   `VERSION <server-version>`) into a structured form; `LUA_RO` forces the Read-only sandbox
   regardless of the Session's own Access mode (issue #16 — used exclusively by
@@ -164,19 +166,19 @@ of this folder means every file directly in `bridge/`
 is exactly what `scripts/build.lua` bundles into the single installable file (see
 `docs/adr/0009-bundle-bridge-plugin-for-install.md`) — nothing to filter by name:
 
+Run all of them at once from the repo root:
+
 ```bash
-lua bridge/tests/jsonEncode.test.lua
+npm run test:bridge
+```
+
+That is `scripts/run-bridge-tests.mjs` — it discovers `bridge/tests/*.test.lua`, runs each
+through a Lua interpreter, and stops at the first failure. It finds the interpreter via
+`LUA_BIN`, then `lua` on `PATH`, then `C:\Utils\lua\lua.exe` (where `installer/stage.ps1`
+expects it on Windows). To run just one file while working on it:
+
+```bash
 lua bridge/tests/sandbox.test.lua
-lua bridge/tests/watchdog.test.lua
-lua bridge/tests/runScript.test.lua
-lua bridge/tests/requestFraming.test.lua
-lua bridge/tests/timeoutDisplay.test.lua
-lua bridge/tests/sourceHelper.test.lua
-lua bridge/tests/sessionLogHelper.test.lua
-lua bridge/tests/sessionSettings.test.lua
-lua bridge/tests/familyHelper.test.lua
-lua bridge/tests/versionCompare.test.lua
-lua bridge/tests/build.test.lua
 ```
 
 `scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those sibling modules into

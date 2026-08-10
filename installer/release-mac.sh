@@ -25,8 +25,14 @@ if ! command -v "$LUA_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "== Running all test suites =="
+# Aggregate target at the repo root: server (vitest) + bridge (lua) + installer
+# (node --test). Runs first so a release can't be built over a failing suite.
+(cd "$REPO_ROOT/server" && npm install)
+(cd "$REPO_ROOT" && LUA_BIN="$LUA_BIN" npm test)
+
 echo "== Building server =="
-(cd "$REPO_ROOT/server" && npm install && npm run build)
+(cd "$REPO_ROOT/server" && npm run build)
 
 echo "== Building bridge plugin =="
 (cd "$REPO_ROOT" && "$LUA_BIN" bridge/scripts/build.lua)
