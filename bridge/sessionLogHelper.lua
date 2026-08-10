@@ -57,11 +57,25 @@ end
 -- directly under the entry, with location appended in parentheses when one was mentioned.
 -- Strictly opt-in per call -- omitting media produces no sub-line, as before.
 --
--- Validates media.name up front, before touching the buffer, matching sourceHelper.lua's
--- own validate-before-mutate convention -- the buffer is module-level state that persists
--- across calls, so a bad call throwing partway through would otherwise leave a stray,
--- never-flushed entry for the next successful call to inherit.
+-- Validates ptrRecord/action/media.name up front, before touching the buffer or creating
+-- the _RNOT record, matching sourceHelper.lua's own validate-before-mutate convention (and
+-- familyHelper.lua's own "not ptr or ptr:IsNull()" idiom for the pointer check specifically,
+-- reused verbatim here rather than inventing a second phrasing) -- for two separate reasons:
+-- the buffer is module-level state that persists across calls, so a bad call throwing
+-- partway through would otherwise leave a stray, never-flushed entry for the next successful
+-- call to inherit; and, on this Session's first call specifically, a bad ptrRecord/action
+-- would otherwise reach fhCreateItem/AddRecordLink for real before failing, which flips
+-- sandbox.lua's write tracker and triggers ADR 0005's full write-mode-error rollback (ending
+-- the Session and prompting FH's own undo dialog) for what's actually just a caller mistake
+-- with nothing yet on the tree to undo (issue #95, from a live run_lua call that passed a
+-- nil ptrRecord and only found out via that whole rollback path).
 function M.logActivity(ptrRecord, action, media)
+  if not ptrRecord or ptrRecord:IsNull() then
+    error("logActivity: ptrRecord must point to the record this activity concerns")
+  end
+  if type(action) ~= "string" or action == "" then
+    error("logActivity: action must be a non-empty string describing what happened")
+  end
   if media and not media.name then
     error("media.name is required when a media detail is given")
   end

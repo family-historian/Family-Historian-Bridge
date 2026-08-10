@@ -66,6 +66,10 @@ fhCreateItem = function(tag)
   return ptr
 end
 
+function PtrMethods:IsNull()
+  return currentNode(self) == nil
+end
+
 function PtrMethods:MoveTo(otherPtr, dataRef)
   local node = currentNode(otherPtr)
   if dataRef == '~.TEXT' and node and node.textNode then
@@ -294,6 +298,37 @@ freshSessionLogHelper.logActivity(indiG, "created")
 local lastSaveAfterBadMedia = setValueCalls[#setValueCalls]
 check(#lastSaveAfterBadMedia.richText.segments == segmentCountBeforeBadMedia + 4,
   'the buffer is unaffected by the earlier failed call -- no stray entry was left behind')
+
+------------------------------------------------------------------
+-- ptrRecord/action are validated up front too, the same way media.name is (issue #95, from
+-- a live run_lua call that passed a nil ptrRecord and only found out via the AddRecordLink
+-- crash further down -- see sessionLogHelper.lua's own comment on M.logActivity for the full
+-- rollback/Session-death chain that a caught-early error here now avoids). Each case here
+-- must fail before fhCreateItem/the buffer are ever touched, not just fail eventually.
+------------------------------------------------------------------
+
+local rnotBeforeInvalid = #(recordsByTag["_RNOT"] or {})
+local setValueCallCountBeforeInvalid = #setValueCalls
+
+local okNilPtr, errNilPtr = pcall(freshSessionLogHelper.logActivity, nil, "created")
+check(okNilPtr == false, 'a nil ptrRecord raises an error rather than proceeding')
+check(contains(errNilPtr, "ptrRecord"), 'the nil-ptrRecord error names ptrRecord specifically')
+
+local nullPtr = fhNewItemPtr()
+local okNullPtr = pcall(freshSessionLogHelper.logActivity, nullPtr, "created")
+check(okNullPtr == false, 'a non-nil but IsNull() ptrRecord also raises an error rather than proceeding')
+
+local okNilAction, errNilAction = pcall(freshSessionLogHelper.logActivity, indiG, nil)
+check(okNilAction == false, 'a nil action raises an error rather than proceeding')
+check(contains(errNilAction, "action"), 'the nil-action error names action specifically')
+
+local okEmptyAction = pcall(freshSessionLogHelper.logActivity, indiG, "")
+check(okEmptyAction == false, 'an empty-string action also raises an error rather than proceeding')
+
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeInvalid,
+  'none of the four invalid calls above created a _RNOT record')
+check(#setValueCalls == setValueCallCountBeforeInvalid,
+  'none of the four invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
