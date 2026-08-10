@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Bridge `@Version:` header now generated, not hand-maintained (issue #89)
+- `bridge/scripts/build.lua` now reads `server/package.json`'s version and passes it into
+  `bundler.buildBundle`, which stamps the Bridge's `@Version:` header with it — the same
+  way it already stamps `@LastUpdated:` with the build date — instead of trusting whatever
+  version was last typed into the header by hand.
+- `server/package.json` is now the only hand-maintained version copy in the repo (see
+  `docs/release.md` step 4); the header was the last one.
+- `bridge/tests/build.test.lua` covers the new `extractPackageVersion` helper and asserts
+  the stamped header/injected `BRIDGE_VERSION` reflect the given package version even when
+  the source entry file's own header says something else.
+
 ### `docs/release.md` brought back in line with how releases are actually cut (issue #86)
 - The doc predated `installer/release-mac.sh`, `installer/release-windows.ps1` and
   `installer/build-dxt.mjs`, mentioned none of them, never mentioned the `.mcpb` flow at

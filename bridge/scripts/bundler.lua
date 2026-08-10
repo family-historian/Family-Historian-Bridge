@@ -58,17 +58,36 @@ local function replaceOnce(haystack, needle, replacement, label)
   return haystack:sub(1, startIdx - 1) .. replacement .. haystack:sub(endIdx + 1)
 end
 
--- The Bridge's version lives only in this comment header today, not anywhere its own
--- running code can read (issue #45) — extracted here at build time and injected as a
--- runtime constant below, so the header stays the single source of truth instead of a
--- hand-synced duplicate (see docs/release.md's version-drift note).
-local function extractVersion(entrySource)
-  local version = entrySource:match("@Version:%s*(%S+)")
+-- server/package.json is the single source of truth for the Bridge's version (issue #89;
+-- previously the @Version header itself was authoritative, per issue #45, which meant a
+-- release could silently ship BRIDGE_VERSION out of sync with server/package.json if
+-- whoever bumped the version forgot the header — see docs/release.md's version-drift
+-- note). Pulled out of the raw package.json text with a plain pattern match rather than a
+-- full JSON parser, matching this project's existing no-JSON-library stance (see
+-- jsonEncode.lua's header comment: FH's Lua ships no JSON library, so JSON handling here
+-- is hand-rolled rather than a dependency).
+function M.extractPackageVersion(packageJsonContent)
+  local version = packageJsonContent:match('"version"%s*:%s*"([^"]+)"')
   if not version then
-    error("could not find an @Version header in the entry source to inject as BRIDGE_VERSION — " ..
-      "the header changed or is missing; update bundler.lua or restore the header")
+    error("could not find a \"version\" field in server/package.json's content — " ..
+      "its format changed or the file is empty; update bundler.lua or restore the field")
   end
   return version
+end
+
+-- The @Version header is now a stamped mirror of server/package.json's version (issue
+-- #89), same pattern as stampLastUpdated below: fail loudly if the header is missing so a
+-- changed/removed header can't silently stop being stamped, rather than shipping a bundle
+-- whose header just goes stale.
+local function stampVersion(entrySource, version)
+  local existing = entrySource:match("@Version:%s*(%S+)")
+  if not existing then
+    error("could not find an @Version header in the entry source to stamp with the " ..
+      "server/package.json version — the header changed or is missing; update bundler.lua " ..
+      "or restore the header")
+  end
+  local stamped = entrySource:gsub("(@Version:%s*)%S+", "%1" .. version, 1)
+  return stamped
 end
 
 -- The header's @LastUpdated date is hand-maintained in the source entry file but should
@@ -88,11 +107,18 @@ end
 
 -- entrySource: raw text of bridge/Claude MCP Bridge.fh_lua.
 -- readModule(name): function(name) -> raw text of bridge/<name>.lua.
+-- packageVersion: server/package.json's version (see extractPackageVersion) — stamped into
+--   the @Version header and injected as BRIDGE_VERSION below. Required; buildBundle errors
+--   loudly rather than silently shipping an unversioned or stale-versioned bundle.
 -- todayDate: optional "YYYY-MM-DD" override for the @LastUpdated stamp (default: today).
 -- Returns the bundled source as a string.
-function M.buildBundle(entrySource, readModule, todayDate)
-  local version = extractVersion(entrySource)
-  local out = stampLastUpdated(entrySource, todayDate or os.date("%Y-%m-%d"))
+function M.buildBundle(entrySource, readModule, packageVersion, todayDate)
+  if not packageVersion or packageVersion == "" then
+    error("buildBundle requires packageVersion (see extractPackageVersion) — got " ..
+      tostring(packageVersion))
+  end
+  local out = stampVersion(entrySource, packageVersion)
+  out = stampLastUpdated(out, todayDate or os.date("%Y-%m-%d"))
   out = replaceOnce(out, INSTALL_COMMENT_SOURCE, INSTALL_COMMENT_BUNDLED, "Install comment")
 
   local splitIdx = out:find(FH_INITIALISE_LINE, 1, true)
@@ -105,7 +131,7 @@ function M.buildBundle(entrySource, readModule, todayDate)
   local after = out:sub(splitPoint)
 
   local pieces = { before, "\n-- Bundled sibling modules (generated — see bridge/scripts/build.lua)\n" }
-  table.insert(pieces, string.format("local BRIDGE_VERSION = %q -- injected from the @Version header above\n", version))
+  table.insert(pieces, string.format("local BRIDGE_VERSION = %q -- injected from server/package.json (issue #89)\n", packageVersion))
   for _, name in ipairs(M.MODULE_NAMES) do
     table.insert(pieces, string.format("package.preload[%q] = function()\n%s\nend\n", name, readModule(name)))
   end
