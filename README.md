@@ -112,6 +112,23 @@ for asking Claude to write you a standalone plugin instead (no Bridge Session ne
 
 ## Development
 
+Run every test suite — server (vitest), bridge (Lua) and installer (`node --test`) — with
+one command from the repo root:
+
+```bash
+npm test
+```
+
+There's no CI on this repo, so after cloning, enable the pre-push hook that runs it for you:
+
+```bash
+npm run setup:hooks
+```
+
+That points `core.hooksPath` at the committed `.githooks/` directory (a one-time,
+per-clone step — `.git/hooks/` isn't version controlled). The hook takes under two seconds;
+`git push --no-verify` skips it when you really mean to.
+
 - [bridge/README.md](bridge/README.md) — Bridge plugin internals and manual test steps.
 - [server/README.md](server/README.md) — MCP server internals, setup, and automated tests.
 - [docs/agents/domain.md](docs/agents/domain.md) and

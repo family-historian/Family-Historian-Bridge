@@ -1,0 +1,53 @@
+#!/bin/sh
+# Runs the repo-root aggregate test suite before every push -- issue #90.
+#
+# There's no CI here (no .github/, no .forgejo/), so this hook is the only thing standing
+# between a broken suite and main. It's cheap enough to be unobtrusive: the whole aggregate
+# -- server (vitest), bridge (lua), installer (node --test) -- runs in under two seconds.
+#
+# Enabled per clone by `npm run setup:hooks` at the repo root, which points core.hooksPath
+# here. That indirection is what lets the hook live in the repo at all; .git/hooks/ isn't
+# version controlled.
+#
+# Escape hatch: `git push --no-verify` skips this entirely. Use it for pushing a branch
+# you already know is red, not out of habit -- the suite is fast, and a red main is the
+# thing this exists to prevent.
+#
+# stdin gives one line per ref being pushed: <local ref> <local sha> <remote ref> <remote sha>
+
+set -e
+
+repo_root=$(git rev-parse --show-toplevel)
+
+# A push that only deletes remote refs (e.g. `git push origin :old-branch`) has nothing to
+# test -- no local commits are involved. Deletions come through with an all-zero local sha.
+only_deletions=1
+saw_ref=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  saw_ref=1
+  case "$local_sha" in
+    *[!0]*) only_deletions=0 ;;
+  esac
+done
+
+if [ "$saw_ref" -eq 1 ] && [ "$only_deletions" -eq 1 ]; then
+  echo "pre-push: ref deletion only, nothing to test."
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node not found on PATH, so the test suites can't run." >&2
+  echo "          Install Node, or push with --no-verify if you know what you're doing." >&2
+  exit 1
+fi
+
+echo "pre-push: running all test suites (npm test)..."
+
+if ! (cd "$repo_root" && npm test); then
+  echo "" >&2
+  echo "pre-push: tests failed -- push aborted." >&2
+  echo "          Fix them, or re-push with --no-verify to override." >&2
+  exit 1
+fi
+
+echo "pre-push: all suites passed."

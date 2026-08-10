@@ -5,6 +5,10 @@
   stopping at the first failure. This is what `installer/release-mac.sh` and
   `installer/release-windows.ps1` run before building anything (issue #84).
 - Individually: `npm run test:server` / `npm run test:bridge` / `npm run test:installer`.
+- `npm run setup:hooks` — one-time per clone; points `core.hooksPath` at the committed
+  `.githooks/`, enabling a pre-push hook that runs the aggregate suite (issue #90). Takes
+  ~2s; `git push --no-verify` bypasses it. There is still no CI — this hook is the only
+  automated gate on main.
 - The root `package.json` is a dependency-free task runner and deliberately has **no**
   `version` field — `server/package.json` is the single version source of truth (issue #44).
 
