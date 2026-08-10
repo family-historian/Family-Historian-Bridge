@@ -14,7 +14,9 @@ const EXCERPT_RADIUS = 100;
 export function buildExcerpt(text: string, query: string): string {
   const matchIndex = text.toLowerCase().indexOf(query.toLowerCase());
   if (matchIndex === -1) {
-    return text.slice(0, EXCERPT_RADIUS * 2).trim();
+    const slice = text.slice(0, EXCERPT_RADIUS * 2);
+    const suffix = slice.length < text.length ? "…" : "";
+    return `${slice.trim()}${suffix}`;
   }
   const start = Math.max(0, matchIndex - EXCERPT_RADIUS);
   const end = Math.min(text.length, matchIndex + query.length + EXCERPT_RADIUS);
