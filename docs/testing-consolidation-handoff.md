@@ -13,7 +13,7 @@ one place it turned out to be wrong (see the release.md note below).
 | Finding 2 — `corpusSearch` untested | [#87](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/87) | open |
 | Finding 3 — `bridgeSession.lua` split | [#88](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/88) | open (deferred by design) |
 | `@Version:` header injection | [#89](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/89) | open |
-| No CI | [#90](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/90) | open (blocked by #84, now unblocked) |
+| No CI | [#90](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/90) | **pre-push hook done; CI declined** (`wontfix`) |
 | No coverage | [#91](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/91) | open |
 | ESLint recheck | [#92](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/92) | open |
 | Stale `installer/` artifacts | [#93](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/93) | open |
@@ -216,6 +216,13 @@ until you're touching that file for another reason, then do it as part of that w
 - **No CI.** No `.github/`, no `.forgejo/`. Solo project, so this is a judgement call —
   but with three runners and no aggregate command, even a local `pre-push` hook running
   the new unified `test` target would be worth having.
+
+  *Resolved 2026-08-10:* the hook was built; CI was declined. A Forgejo Actions workflow
+  was written, pushed, and backed out on learning the infrastructure — Forgejo runs on a
+  small LXC, and all development happens on one Mac. CI's only advantage over the hook is
+  catching a `--no-verify` push or a clone that never ran `npm run setup:hooks`, neither of
+  which applies to a single developer on a single machine. Backing it out also stopped
+  every push queueing a workflow run that no runner would ever pick up.
 
 - **No coverage measurement.** vitest ships coverage; nothing is configured. Findings 2
   and 3 above are informed reading, not measurement — coverage would confirm or correct

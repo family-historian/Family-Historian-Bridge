@@ -8,10 +8,12 @@
 - `npm run setup:hooks` — one-time per clone; points `core.hooksPath` at the committed
   `.githooks/`, enabling a pre-push hook that runs the aggregate suite (issue #90). Takes
   ~2s; `git push --no-verify` bypasses it.
-- CI: `.forgejo/workflows/test.yml` runs the same suites on push/PR. **It only executes once
-  a forgejo-runner is registered on the instance** — there was none as of 2026-08-10, so
-  runs queue and never start until someone does the setup in `docs/ci.md`. Don't read a
-  green-looking Actions tab as proof the suites ran; check a run actually started.
+- **No CI, by decision** (issue #90, closed `wontfix` 2026-08-10). A Forgejo Actions
+  workflow was written and backed out: one developer, one machine, and the pre-push hook
+  already covers the only realistic gap. Forgejo runs on a small LXC, so a runner would have
+  meant Docker-in-LXC or a permanent Node + Lua install there. Don't re-propose CI without
+  new reasons — and check with the user first, since the infrastructure constraint isn't
+  visible from the repo.
 - The root `package.json` is a dependency-free task runner and deliberately has **no**
   `version` field — `server/package.json` is the single version source of truth (issue #44).
 

@@ -119,7 +119,8 @@ one command from the repo root:
 npm test
 ```
 
-After cloning, enable the pre-push hook that runs it for you:
+There's no CI on this repo — deliberately, see issue #90. After cloning, enable the
+pre-push hook that runs the suites for you instead:
 
 ```bash
 npm run setup:hooks
@@ -128,10 +129,6 @@ npm run setup:hooks
 That points `core.hooksPath` at the committed `.githooks/` directory (a one-time,
 per-clone step — `.git/hooks/` isn't version controlled). The hook takes under two seconds;
 `git push --no-verify` skips it when you really mean to.
-
-The same suites run in CI on push and pull request via `.forgejo/workflows/test.yml` — see
-[docs/ci.md](docs/ci.md), which also covers registering the Forgejo Actions runner that CI
-needs in order to execute at all.
 
 - [bridge/README.md](bridge/README.md) — Bridge plugin internals and manual test steps.
 - [server/README.md](server/README.md) — MCP server internals, setup, and automated tests.

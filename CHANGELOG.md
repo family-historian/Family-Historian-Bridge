@@ -41,19 +41,6 @@
 - No change to what the server serves or what the bundle declares — the eight tools are
   the same eight.
 
-### CI: Forgejo Actions workflow running all three suites (issue #90)
-- `.forgejo/workflows/test.yml` runs the server, bridge and installer suites (plus the
-  server typecheck) on push to `main`, on pull requests, and on manual dispatch — the
-  server-side counterpart to the pre-push hook below, which is bypassable by design.
-- The container image is pinned to `node:22-bookworm` rather than left to whatever the
-  runner maps `ubuntu-latest` to, so the CI environment doesn't depend on how the runner
-  was configured; only the label has to match. Lua 5.4 is installed via apt (bookworm's
-  package; the bridge needs nothing newer than 5.2).
-- `docs/ci.md` covers the part that isn't in the repo: the instance had **no registered
-  runner**, so until a `forgejo-runner` is set up, runs queue and never start. It documents
-  registration, the required `ubuntu-latest` label, and what the workflow deliberately
-  leaves out (no `.mcpb` build, no dependency caching).
-
 ### Pre-push hook runs the aggregate suite (issue #90)
 - With no CI on this repo (no `.github/`, no `.forgejo/`), nothing stood between a broken
   suite and `main`. `.githooks/pre-push` now runs the repo-root `npm test` before every
@@ -65,7 +52,10 @@
   `package.json` stays dependency-free rather than pulling in a hook manager.
 - Skips pushes that only delete remote refs (nothing local to test), fails with a clear
   message if Node isn't on PATH, and `git push --no-verify` bypasses it.
-- CI itself is still not set up; issue #90 stays open for that half.
+- No CI, deliberately. A Forgejo Actions workflow was tried and backed out: this is a
+  one-developer, one-machine project, the hook already covers the only realistic gap, and a
+  runner would have meant putting Docker (or a permanent Node + Lua install) inside the
+  small LXC that hosts Forgejo. Issue #90 is closed `wontfix` with the reasoning.
 
 ### One `npm test` runs every suite, and releases are gated on it (issue #84)
 - The repo had three test runners with three invocation styles and no command that ran them
