@@ -1,0 +1,52 @@
+# Runs all three test suites on the Forgejo instance -- issue #90.
+#
+# This is the server-side half of that issue. The .githooks/pre-push hook is the local
+# half, and it can be bypassed (`--no-verify`, or simply never running `npm run
+# setup:hooks` in a fresh clone); this can't.
+#
+# Requires a registered forgejo-runner on the instance -- see docs/ci.md. Without one, runs
+# queue and never start.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Pinned explicitly rather than relying on whatever image the runner maps its
+    # ubuntu-latest label to, so the CI environment is the same whoever registered the
+    # runner and however they configured it. Debian-based, which is what the Lua install
+    # step below assumes.
+    container:
+      image: node:22-bookworm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua
+        # The bridge suite runs on a plain interpreter with no FH dependency. 5.4 rather
+        # than the 5.5 used on the dev Mac: bookworm packages 5.4, and the bridge needs
+        # nothing newer than 5.2 (its highest requirement is load()'s 4-argument form with
+        # an explicit env table, in runScript.lua). scripts/run-bridge-tests.mjs finds the
+        # interpreter via `lua` on PATH, hence the symlink.
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends lua5.4
+          ln -sf /usr/bin/lua5.4 /usr/local/bin/lua
+          lua -v
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Run all test suites
+        # The repo-root aggregate: server (vitest) + bridge (lua) + installer (node --test).
+        run: npm test

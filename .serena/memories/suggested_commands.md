@@ -7,8 +7,11 @@
 - Individually: `npm run test:server` / `npm run test:bridge` / `npm run test:installer`.
 - `npm run setup:hooks` — one-time per clone; points `core.hooksPath` at the committed
   `.githooks/`, enabling a pre-push hook that runs the aggregate suite (issue #90). Takes
-  ~2s; `git push --no-verify` bypasses it. There is still no CI — this hook is the only
-  automated gate on main.
+  ~2s; `git push --no-verify` bypasses it.
+- CI: `.forgejo/workflows/test.yml` runs the same suites on push/PR. **It only executes once
+  a forgejo-runner is registered on the instance** — there was none as of 2026-08-10, so
+  runs queue and never start until someone does the setup in `docs/ci.md`. Don't read a
+  green-looking Actions tab as proof the suites ran; check a run actually started.
 - The root `package.json` is a dependency-free task runner and deliberately has **no**
   `version` field — `server/package.json` is the single version source of truth (issue #44).
 
