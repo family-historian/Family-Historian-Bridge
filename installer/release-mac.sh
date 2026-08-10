@@ -88,6 +88,11 @@ ZIP_PATH="$INSTALLER_DIR/output/FH-MCP-Bridge-mac-$VERSION.zip"
 rm -f "$ZIP_PATH"
 (cd "$STAGE_DIR" && zip -r -X "$ZIP_PATH" . -x ".*")
 
+# Prune mac zips left behind by earlier versions -- issue #93. Only this script's own
+# naming pattern is touched -- release-windows.ps1's .exe and build-dxt.mjs's .mcpb share
+# this same output/ dir (the two-stage release runs on separate machines) and are left alone.
+find "$INSTALLER_DIR/output" -maxdepth 1 -name 'FH-MCP-Bridge-mac-*.zip' ! -name "FH-MCP-Bridge-mac-$VERSION.zip" -print -delete
+
 echo "== Building .mcpb bundle (Claude Desktop Extension) =="
 NODE_BIN="${NODE_BIN:-node}"
 if ! command -v "$NODE_BIN" >/dev/null 2>&1; then

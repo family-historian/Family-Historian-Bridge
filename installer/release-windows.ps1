@@ -29,6 +29,10 @@ if (-not $iscc) {
 
 $repoRoot = Split-Path -Parent $installerDir
 
+$packageJson = Get-Content (Join-Path $repoRoot 'server\package.json') -Raw | ConvertFrom-Json
+$version = $packageJson.version
+if (-not $version) { throw "Could not read a version field from server/package.json" }
+
 Write-Host "== Running all test suites =="
 # Aggregate target at the repo root: server (vitest) + bridge (lua) + installer
 # (node --test). Runs first so a release can't be built over a failing suite.
@@ -49,6 +53,20 @@ try {
 
 Write-Host "== Stage 2a: building server, bridge, and staging payload =="
 & (Join-Path $installerDir 'stage.ps1')
+
+# Prune Setup.exe installers left behind by earlier versions -- issue #93. Only this
+# script's own naming pattern is touched -- release-mac.sh's .zip and build-dxt.mjs's
+# .mcpb share this same output/ dir (the two-stage release runs on separate machines)
+# and are left alone.
+$outputDir = Join-Path $installerDir 'output'
+if (Test-Path $outputDir) {
+  Get-ChildItem $outputDir -Filter 'FH-MCP-Bridge-Setup-*.exe' |
+    Where-Object { $_.Name -ne "FH-MCP-Bridge-Setup-$version.exe" } |
+    ForEach-Object {
+      Write-Host "== Pruning stale installer: $($_.Name) =="
+      Remove-Item $_.FullName -Force
+    }
+}
 
 Write-Host "== Stage 2b: compiling installer with $iscc =="
 & $iscc (Join-Path $installerDir 'fh-mcp-bridge.iss')

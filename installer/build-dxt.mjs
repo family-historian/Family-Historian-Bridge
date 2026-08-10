@@ -17,7 +17,7 @@
 // hands-on, see that ticket's HITL note.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { buildManifest } from "./dxt/manifest.mjs";
@@ -83,6 +83,17 @@ run("npx", ["--yes", "@anthropic-ai/mcpb", "validate", stagingDir]);
 mkdirSync(outputDir, { recursive: true });
 const outputPath = join(outputDir, `fh-mcp-bridge-${version}.mcpb`);
 if (existsSync(outputPath)) rmSync(outputPath);
+
+// Prune .mcpb bundles left behind by earlier versions -- issue #93. output/ isn't wiped
+// wholesale because release-mac.sh's zip and release-windows.ps1's .exe land here too
+// (the two-stage release runs on separate machines), so this only touches the .mcpb's own
+// naming pattern, never files from the other stage.
+for (const name of readdirSync(outputDir)) {
+  if (/^fh-mcp-bridge-.*\.mcpb$/.test(name) && name !== `fh-mcp-bridge-${version}.mcpb`) {
+    console.log(`== Pruning stale bundle: ${name} ==`);
+    rmSync(join(outputDir, name));
+  }
+}
 
 console.log("== Packing ==");
 run("npx", ["--yes", "@anthropic-ai/mcpb", "pack", stagingDir, outputPath]);
