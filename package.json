@@ -8,6 +8,7 @@
     "test": "npm run test:server && npm run test:bridge && npm run test:installer",
     "test:server": "npm --prefix server test",
     "test:bridge": "node scripts/run-bridge-tests.mjs",
-    "test:installer": "node --test \"installer/**/*.test.mjs\""
+    "test:installer": "node --test \"installer/**/*.test.mjs\"",
+    "lint": "npm --prefix server run lint"
   }
 }

@@ -1,9 +1,10 @@
 #!/bin/sh
-# Runs the repo-root aggregate test suite before every push -- issue #90.
+# Runs the repo-root aggregate test suite, plus lint, before every push -- issue #90, #92.
 #
 # There's no CI here (no .github/, no .forgejo/), so this hook is the only thing standing
 # between a broken suite and main. It's cheap enough to be unobtrusive: the whole aggregate
-# -- server (vitest), bridge (lua), installer (node --test) -- runs in under two seconds.
+# -- server (vitest), bridge (lua), installer (node --test) -- runs in under two seconds,
+# and oxlint (Rust-based) adds negligible time on top.
 #
 # Enabled per clone by `npm run setup:hooks` at the repo root, which points core.hooksPath
 # here. That indirection is what lets the hook live in the repo at all; .git/hooks/ isn't
@@ -46,6 +47,15 @@ echo "pre-push: running all test suites (npm test)..."
 if ! (cd "$repo_root" && npm test); then
   echo "" >&2
   echo "pre-push: tests failed -- push aborted." >&2
+  echo "          Fix them, or re-push with --no-verify to override." >&2
+  exit 1
+fi
+
+echo "pre-push: linting (npm run lint)..."
+
+if ! (cd "$repo_root" && npm run lint); then
+  echo "" >&2
+  echo "pre-push: lint failed -- push aborted." >&2
   echo "          Fix them, or re-push with --no-verify to override." >&2
   exit 1
 fi
