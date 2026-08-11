@@ -424,6 +424,7 @@ addFieldDef(civilReg, "District", "Place")
 addFieldDef(civilReg, "Informant_Address", "Address")
 addFieldDef(civilReg, "Held_At", "Repository")
 addFieldDef(civilReg, "Ref_URL", "URL")
+addFieldDef(civilReg, "CitationField", "Text", nil, true)  -- citation-level (CITN), issue #98
 
 local civilRegId = fhGetRecordId(civilReg)
 
@@ -560,6 +561,25 @@ check(#recordsByTag["SOUR"] == sourCountBeforeBadEnum, 'no SOUR record created w
 
 local ok3 = pcall(sourceHelper.createSourceFromTemplate, civilRegId, { Type = "Adoption" })
 check(not ok3, 'Enum value not among the declared options raises an error')
+
+------------------------------------------------------------------
+-- Citation-specific field code errors before any mutation (issue #98):
+-- fields is record-level only, so a code whose FDEF carries CITN="Yes" must be rejected,
+-- not silently no-op'd.
+------------------------------------------------------------------
+
+local sourCountBeforeCitationField = #recordsByTag["SOUR"]
+local okCitation, errCitation = pcall(sourceHelper.createSourceFromTemplate, civilRegId, { CitationField = "x" })
+check(not okCitation, 'citation-specific field code raises an error')
+check(contains(errCitation, 'CitationField'), 'error names the offending field code')
+check(contains(errCitation, 'citation-specific'), 'error explains the field is citation-specific')
+check(#recordsByTag["SOUR"] == sourCountBeforeCitationField, 'no SOUR record created when a citation-specific field is rejected')
+
+local sourCountBeforeMixed = #recordsByTag["SOUR"]
+local okMixed = pcall(sourceHelper.createSourceFromTemplate, civilRegId, { Reg_No = "1895/Q1/999", CitationField = "x" })
+check(not okMixed, 'rejection still fires when mixed with a valid record-level field')
+check(#recordsByTag["SOUR"] == sourCountBeforeMixed,
+  'no SOUR record created at all (not even the valid record-level field) -- validation runs fully before any mutation')
 
 ------------------------------------------------------------------
 -- Ambiguous / missing template name or id

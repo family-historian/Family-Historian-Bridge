@@ -180,6 +180,9 @@ end
 local function validateFields(fields, defs)
   for code, value in pairs(fields) do
     local def = requireFieldDef(defs, code)
+    if def.citation then
+      error("field '" .. code .. "' is citation-specific and can't be set when creating the record")
+    end
     if def.type == "Enum" then
       local ok = false
       for _, opt in ipairs(def.options or {}) do
