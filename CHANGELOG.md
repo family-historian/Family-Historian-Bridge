@@ -2,6 +2,147 @@
 
 ## Unreleased
 
+## 0.12.0
+
+### Teaching workspace: MCP Bridge course for end-user genealogy workflows
+- Five lessons covering Sessions/Access mode safety, asking trustworthy research questions,
+  a first Read-write edit routine, standalone plugins, and the regular
+  transcribe-create-cite source-entry workflow — kept in sync with issue #98/#99 as
+  `citeSource` gained field support.
+
+### `citeSource` supports standard citation fields and template CITN fields (issue #99)
+- `citeSource(ptrTarget, sourceNameOrId, fields)` now takes an optional `fields` argument,
+  mirroring `createSourceFromTemplate`, covering two families in one flat table: the 4
+  GEDCOM/FH generic citation fields (Page/Text/EntryDate/Assessment — always valid
+  regardless of whether the source is templated; Assessment is validated against FH's
+  fixed 4-axis QUAY vocabulary, Text/EntryDate nest under a shared DATA child per GEDCOM
+  5.5.1's SOURCE_CITATION structure), and a template's own citation-specific (CITN)
+  fields, valid only when the resolved source is templated — a record-level field code
+  passed here now errors clearly, symmetric with `createSourceFromTemplate`'s own #98 fix.
+- A reserved standard-field name always wins over a same-named template CITN field
+  (rejected as a clear collision); a record-level field sharing a reserved name isn't
+  flagged, since it was never reachable through `citeSource` regardless.
+- `citeSource` now returns the citation's own live item Pointer, not a `qualifiedId` — a
+  citation isn't a standalone record with one.
+- Fixed a pre-existing bug in `toDate()` found while live-testing this feature: FH's
+  `fhNewDate` binding rejects an explicit `nil` in its optional 4th (`strSubType`) slot
+  rather than treating it the same as the argument being omitted — `createSourceFromTemplate`'s
+  own Date fields shared `toDate()` and were equally exposed. The unit-test fake was
+  rewritten to use varargs so it can distinguish "called with 3 args" from "called with 4
+  args, the 4th explicitly nil," which would have caught this.
+
+### Reject citation-specific fields in `createSourceFromTemplate` (issue #98)
+- `validateFields` used to silently no-op a citation-specific field code (`CITN="Yes"`)
+  passed to `createSourceFromTemplate`'s record-level fields arg. Now it errors, naming the
+  offending field. The check runs before any `fhCreateItem` call, so a mix of valid and
+  invalid fields still creates nothing at all.
+
+### Lint gate: oxlint (server) and luacheck (bridge) (issue #92)
+- `typescript-eslint` is capped at `typescript <6.1.0` and has closed TS7 support as "not
+  planned" upstream, so it's incompatible with this repo's `typescript@^7` pin. Adopted
+  `oxlint`'s type-aware mode instead, which runs on `oxlint-tsgolint` — built directly on
+  typescript-go/TS7 and version-locked to match this repo's compiler version. `npm run
+  lint` (server/) runs `oxlint --type-aware src`, clean except one pre-existing
+  false-positive (`no-control-regex` on an intentional filename sanitizer), now suppressed
+  with a rationale comment rather than left to be re-noticed on every run.
+- Added `luacheck` for `bridge/`: `.luacheckrc` scoped to `bridge/`, declaring the
+  `fh*`/`fhu.*`/`iup`/`BRIDGE_VERSION` globals the FH host and build inject at runtime;
+  `self=false` for IUP's implicit-self callback idiom; `unused_args` relaxed only in
+  `bridge/tests/`, where mocks intentionally mirror real `fh*` signatures.
+  `scripts/run-bridge-lint.mjs` resolves `luacheck` the same way
+  `run-bridge-tests.mjs` resolves `lua` (`LUACHECK_BIN`, then `PATH`). The root `npm run
+  lint` now runs oxlint then luacheck; `.githooks/pre-push` runs lint as a second step
+  after the test suites (warnings exit 0 and don't block the push, only real lint errors
+  do).
+- Fixed what luacheck found before wiring it in: two missing `local`s in
+  `bridgeSession.lua`/`familyHelper.test.lua` that were leaking as real globals — the
+  exact bug class this exists to catch — plus assorted dead code left behind by issues
+  #88 and #97, an unused parameter in `sourceHelper.lua`, and unused `pcall` error
+  captures across `bridge/tests/*.lua`.
+
+### Split validate/mutate so the write tracker doesn't arm on a rejected call (issue #97)
+- `sandbox.lua` wrapped the entire `fhBridge.createSourceFromTemplate`/`citeSource`/
+  `logActivity` call with `trackedWrite`/`trackedLog`, which flip `tracker.wrote`
+  (and, for `logActivity`, `tracker.logged`) the instant the function is *entered* — before
+  any of the validation issues #95/#96 added ever runs. Confirmed live against Family
+  Historian Sample Project 8: a rejected `createSourceFromTemplate` call still ended the
+  Bridge Session with FH's own Plugin Error/undo dialog, even though nothing was ever
+  written and the caller's own `pcall` caught the error.
+- Each of the three composite functions is now split into a pure validate half
+  (`validateCreateSourceFromTemplate`/`validateCiteSource`/`validateLogActivity`) and the
+  existing mutate half, which each now calls first — preserving the existing single-call
+  contract for direct callers/tests. `sandbox.lua` gains two new wrapper builders,
+  `validatedTrackedWrite`/`validatedTrackedLog`, which call the validate function
+  untracked and only arm the tracker once validation has actually passed.
+
+### Validate `ptrTarget` up front in `sourceHelper.citeSource` (issue #96)
+- Follow-up audit after issue #95: `citeSource` validated `sourceNameOrId` but never
+  `ptrTarget`, which went straight into `fhCreateItem("SOUR", ptrTarget")`. Since
+  `sandbox.lua`'s `trackedWrite` flips the write tracker before the wrapped `fh*` call even
+  runs, an invalid `ptrTarget` armed ADR 0005's rollback/Session-death path for a caller
+  mistake that wrote nothing — same shape as the `logActivity` bug, via a different write
+  primitive. Now checked with the same `not ptr or ptr:IsNull()` idiom `familyHelper.lua`
+  uses throughout, before `fhCreateItem`.
+
+### Validate `ptrRecord`/`action` up front in `sessionLogHelper.logActivity` (issue #95)
+- Live-testing the Bridge against the sample project turned up a real gap: `logActivity`
+  already validated `media.name` before touching the buffer, but never applied the same
+  validate-before-mutate discipline to `ptrRecord`/`action` themselves. A bad `ptrRecord`
+  (nil, or any invalid pointer) sailed past into `fhCreateItem`/`AddRecordLink` for real,
+  flipping the write tracker and triggering ADR 0005's full write-mode-error rollback —
+  ending the Bridge Session and prompting FH's own Plugin Error/undo dialog — for what was
+  actually just a caller mistake with nothing legitimate on the tree to undo. Now checked
+  up front, so a bad call fails fast on a plain Lua error: no tree write, no rollback, no
+  dead Session.
+
+### Extract pure session-lifecycle decisions into `sessionPolicy.lua` (issue #88)
+- Pulled the pure decisions underneath `bridgeSession.lua`'s session-lifecycle logic out
+  as boolean/string functions over plain values, with no socket/IUP/FH dependency:
+  `statusColorForMode(accessMode)`, `shouldAutoStopForIdle(lastActivityTime,
+  idleTimeoutSeconds, now)` (issue #34's auto-Stop rule), and
+  `shouldConfirmBeforeExit(sessionRunning, lastRequestHandledTime, now,
+  confirmWindowSeconds)` (ADR 0020's freshness-confirm rule). `bridgeSession.lua`'s own
+  call sites are unchanged in behavior. The socket accept/receive/send loop and the real
+  IUP widget construction stay untested, same as before — still only exercised manually
+  inside FH.
+
+### Raised server test coverage on `fhHelp`, `fhHelpUpdate`, `runLuaTool` (issue #94)
+- Added tests for the previously-uncovered "MCP wiring" layer in each file — the
+  `register*Tool` functions and the handler closures passed to `server.registerTool` — via
+  a real `McpServer` + in-memory client connection: `runLuaTool.ts` (67% → 100% lines),
+  `fhHelpUpdate.ts` (61% → 100% lines, 100% branches), `fhHelp.ts` (66% → 100% lines, 96%
+  branches, including the empty-match, truncation, and invalid-regex-error paths). No
+  behavior change. Overall server coverage: 83.45% → 91.48% statements.
+
+### Pruned stale versioned artifacts from `installer/output/` before each build (issue #93)
+- Each of the three release outputs (mac `.zip`, Windows `.exe`, `.mcpb` bundle) now
+  deletes other-version files matching its own naming pattern right before writing the new
+  one, scoped per-artifact-type rather than a wholesale clear of `output/` (the two-stage
+  release runs `release-mac.sh` and `release-windows.ps1` against the same `output/` dir,
+  so a broad wipe on either side would destroy the other stage's just-built file).
+
+### Added coverage measurement to the server test suite (issue #91)
+- `@vitest/coverage-v8` + a `vitest.config.ts` turning it on. `npm run test:coverage`
+  (server/) runs the suite with a text+html report; plain `npm test` is unaffected.
+  `coverage/` is gitignored as build output.
+
+### Added direct tests for `corpusSearch.ts` and `bridgeResponse.ts` (issue #87)
+- Neither had a test file of its own before — only exercised indirectly through other
+  suites — so a search-ranking regression (a changed weight, an added stopword) could pass
+  every existing test while making results worse. `corpusSearch.test.ts` covers
+  `tokenize`, `tokenMatchScore`, `buildExcerpt`, `searchEntries`; `bridgeResponse.test.ts`
+  covers `textResult`, `describeBridgeConnectionError`, `interpretBridgeResponse`. Found and
+  fixed while writing the excerpt tests: `buildExcerpt`'s no-match fallback silently
+  truncated long text with no "…" indicator, inconsistent with the match-found branch.
+
+### FH help corpus sync and Function Index discoverability
+- Synced the bundled fh-help corpus (995 → 999 topics), adding `fhu.createTextFromSource`.
+- A grilling session concluded a new MCP resource/tool for function discovery was
+  unwarranted: `sandbox.lua`'s known-name allowlist exactly matches the corpus's "Function
+  Index" page, already fetchable in one `grep_fh_help` call. The real gap was that nothing
+  told a session this page exists — fixed in the lookup-order doc and both help tool
+  descriptions.
+
 ### Bridge `@Version:` header now generated, not hand-maintained (issue #89)
 - `bridge/scripts/build.lua` now reads `server/package.json`'s version and passes it into
   `bundler.buildBundle`, which stamps the Bridge's `@Version:` header with it — the same
