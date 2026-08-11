@@ -292,8 +292,21 @@ end
 -- a table here would collapse that distinction and defeat the test below. A coroutine
 -- (type 'thread') is a free, dependency-free stand-in for opaque host userdata; its fields
 -- live in this side table, keyed weakly so they don't outlive the coroutine.
+-- Uses varargs (not named y/m/d/subtype params) so this fake can distinguish "called with
+-- 3 args" from "called with 4 args, the 4th explicitly nil" -- real FH's fhNewDate binding
+-- rejects the latter ("bad argument #4 to 'fhNewDate' (string expected, got nil)",
+-- live-confirmed issue #99) even though its own doc marks strSubType optional; a named-
+-- param fake can't tell the two calls apart and would have let sourceHelper.lua's original
+-- toDate() bug (always passing value.subtype, nil or not) through undetected, which is
+-- exactly what happened -- this bug shipped past every existing unit test and was only
+-- caught live.
 dateObjFields = setmetatable({}, { __mode = 'k' })
-fhNewDate = function(y, m, d, subtype)
+fhNewDate = function(...)
+  local argCount = select('#', ...)
+  local y, m, d, subtype = ...
+  if argCount >= 4 and subtype == nil then
+    error("bad argument #4 to 'fhNewDate' (string expected, got nil)")
+  end
   local co = coroutine.create(function() end)
   dateObjFields[co] = { kind = 'date', year = y, month = m, day = d, subtype = subtype }
   return co

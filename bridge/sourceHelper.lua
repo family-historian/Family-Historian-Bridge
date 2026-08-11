@@ -241,7 +241,20 @@ end
 -- [,subtype=]} table shorthand — only the latter is a plain Lua table.
 local function toDate(value)
   if type(value) == "table" then
-    return fhNewDate(value.year, value.month, value.day, value.subtype)
+    -- fhNewDate's strSubType is documented optional (fhNewDate.htm:
+    -- "fhNewDate([iYear[, iMonth [, iDay [, strSubType]]]])"), but live-confirmed
+    -- (issue #99, discovered via live testing) that FH's binding rejects an explicit nil
+    -- in that 4th slot ("bad argument #4 to 'fhNewDate' (string expected, got nil)")
+    -- rather than treating it the same as the argument being omitted entirely -- so
+    -- value.subtype being nil (the common case: no subtype in the table shorthand) must
+    -- drop the argument, not pass it through as nil. Pre-existing bug, not new to issue
+    -- #99's own EntryDate field -- createSourceFromTemplate's own Date fields share this
+    -- same function and were equally exposed; the unit-test fake didn't catch it because
+    -- its own fhNewDate stub tolerated a nil 4th argument where real FH's doesn't.
+    if value.subtype then
+      return fhNewDate(value.year, value.month, value.day, value.subtype)
+    end
+    return fhNewDate(value.year, value.month, value.day)
   end
   return value
 end
