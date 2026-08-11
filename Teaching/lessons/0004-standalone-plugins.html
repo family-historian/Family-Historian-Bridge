@@ -1,0 +1,135 @@
+<meta charset="utf-8">
+<title>Lesson 4 — Getting a standalone plugin written for you</title>
+<link rel="stylesheet" href="../assets/style.css">
+
+<p class="lesson-kicker">FH MCP Bridge · Lesson 4 of the course</p>
+<h1>When to stop asking live questions and get a plugin instead</h1>
+
+<p>
+Lessons 1–3 covered the live Q&amp;A path: a Session running, a question or edit answered
+in the moment. There's a second, separate path — asking Claude to hand you back a complete,
+installable FH plugin instead. Different tool for a different job: reach for it when you'd
+run the same question or edit <em>again</em>.
+</p>
+
+<h2>Live question vs. standalone plugin</h2>
+
+<table>
+  <tr><th></th><th>Live question (Lessons 1–3)</th><th>Standalone plugin</th></tr>
+  <tr>
+    <td>Needs a Bridge Session?</td>
+    <td>Yes, running throughout</td>
+    <td>No — Claude just hands you text, nothing touches your project until you install
+    and run it yourself</td>
+  </tr>
+  <tr>
+    <td>Bound by Access mode?</td>
+    <td>Yes — Read-only/Read-write as chosen at Start</td>
+    <td>No — not bound by either mode at all</td>
+  </tr>
+  <tr>
+    <td>Who runs it?</td>
+    <td>Claude, immediately, against your live project</td>
+    <td>You do, under FH's own permission model, whenever you choose</td>
+  </tr>
+  <tr>
+    <td>Best for</td>
+    <td>A one-off question or edit, answered now</td>
+    <td>Something you'll want to run again — "list everyone's occupation next to their
+    name", "count how many people have each surname"</td>
+  </tr>
+</table>
+
+<p>
+Say what you want plainly: <em>"Write me a Report plugin that lists everyone's occupation
+next to their name"</em> or <em>"Write me a Query plugin that counts how many people have
+each surname."</em> A <strong>Report</strong> plugin shows in FH's Report Window; a
+<strong>Query</strong> plugin shows a list in the Query Window. Tell Claude which you want.
+</p>
+
+<h2>Why it's not bound by Access mode — and what that means for you</h2>
+
+<div class="box warn">
+  <span class="box-title">The trade-off, stated plainly</span>
+  <p>
+  Because you're the one reviewing and running a generated plugin, it can do things a live
+  question never can — even in a Read-write Session — such as showing a message box or
+  reading/writing a file directly. This is intentional, not a gap in the sandbox from
+  Lesson 1: the safety boundary moves from "the sandbox restricts what the script can do"
+  to "you read it before you run it." <strong>That review step is now doing the work the
+  sandbox was doing before</strong> — don't skip it because "an AI wrote it."
+  </p>
+</div>
+
+<div class="box safety">
+  <span class="box-title">FLAGGED comments: read these before installing</span>
+  <p>
+  Any line using one of those otherwise-off-limits functions is marked with a
+  <code>-- FLAGGED</code> comment directly above it in the text Claude returns. That's the
+  entire purpose of the flag — a place your eye should stop before you install. Scan for
+  it specifically; don't just skim the whole script and hope you'd notice.
+  </p>
+</div>
+
+<h2>Installing it</h2>
+
+<p>Two ways, once you've reviewed it:</p>
+
+<ul>
+  <li><strong>Manual</strong> — save the returned text yourself as a <code>.fh_lua</code>
+  file, then <strong>Tools -&gt; Plugins -&gt; New</strong> (or <strong>Import</strong>) in FH, the
+  same way you'd install any plugin.</li>
+  <li><strong>Ask Claude to install it</strong> — "install it" / "add it to my plugins" and
+  Claude writes it straight into FH's Plugins folder for you (needs an active Bridge
+  Session, only to look up where that folder is — no Session running, Claude will ask you
+  to confirm the location instead). It never overwrites an existing file: asking again
+  after a tweak adds "V2", "V3", and so on, to both the filename and the plugin's own
+  title.</li>
+</ul>
+
+<p>
+One FH quirk either way: FH doesn't rescan its Plugins folder while the Plugins Dialog is
+open — close and reopen <strong>Tools -&gt; Plugins</strong> afterwards if you had it open, then
+select the new entry and click <strong>Run</strong>.
+</p>
+
+<h2>Quick check</h2>
+
+<div class="quiz" data-correct="1" data-right="Right — a generated plugin runs under FH's own permission model when you run it, so the review is doing the safety job the Session sandbox does for live questions."
+     data-wrong="Not quite. Re-read &quot;Why it's not bound by Access mode&quot; above.">
+  <div class="q">A generated Report plugin can read and write a file directly — something a live Read-write question never can. Why is that safe?</div>
+  <div class="choices">
+    <button class="choice">It isn't fully safe — this is a known gap that will be fixed in a future version</button>
+    <button class="choice">Because you review the FLAGGED lines and choose to run it yourself, under FH's own permissions, instead of it running unattended</button>
+    <button class="choice">Because standalone plugins are always run in a stricter sandbox than live Sessions</button>
+  </div>
+  <div class="feedback"></div>
+</div>
+
+<h2>Try it now</h2>
+
+<ol>
+  <li>Think of a question or edit you've asked live more than once (or expect to).</li>
+  <li>Ask Claude for a Report or Query plugin that does it instead.</li>
+  <li>Before installing, scan specifically for <code>-- FLAGGED</code> comments and read
+  each one.</li>
+  <li>Install it (manually or by asking Claude), then run it from Tools -&gt; Plugins.</li>
+</ol>
+
+<p class="primary-source">
+Primary source for this lesson: <a href="../../docs/user-guide.md">docs/user-guide.md</a>
+— "Getting a standalone plugin written for you".
+</p>
+
+<p class="ask-agent">
+Have a repeat question in mind? Describe it and we can figure out together whether it's
+better as a live question, a Report plugin, or a Query plugin.
+</p>
+
+<nav class="lesson-links">
+  <a href="0003-first-read-write-session.html">&larr; Lesson 3: First Read-write session</a>
+  <a href="../MISSION.md">Mission</a>
+  <a href="../RESOURCES.md">Resources</a>
+</nav>
+
+<script src="../assets/quiz.js"></script>

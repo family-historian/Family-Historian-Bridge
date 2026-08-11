@@ -1,0 +1,94 @@
+<meta charset="utf-8">
+<title>Lesson 3 — Your first Read-write session</title>
+<link rel="stylesheet" href="../assets/style.css">
+
+<p class="lesson-kicker">FH MCP Bridge · Lesson 3 of the course</p>
+<h1>Your first Read-write session: a routine, not a leap of faith</h1>
+
+<p>
+Lessons 1 and 2 gave you the theory: Read-write is safe because every change goes through
+FH's own undo, and a bad answer is usually a scripting slip you can ask Claude to explain.
+This lesson turns that into a routine — four small steps, every time, until it's muscle
+memory and you don't need the checklist any more.
+</p>
+
+<h2>The routine</h2>
+
+<ol>
+  <li><strong>Back up first.</strong> Same discipline you'd already use before any manual
+  editing session in FH — this isn't a Bridge-specific step, it's your existing habit,
+  applied here too. Read-only sessions don't need this; skip it there.</li>
+  <li><strong>State the edit precisely.</strong> Not "tidy up John's dates" — say exactly
+  what you want changed and to what: "set John Smith's birth date to 12 Mar 1841, per the
+  1841 census." A precise instruction is also easier to verify afterwards.</li>
+  <li><strong>Watch it happen, then look yourself.</strong> The edit happens live in FH
+  while the Session's running — the record you asked about is right there. Open it and
+  confirm what actually changed, don't just take Claude's word for its own summary.</li>
+  <li><strong>Test the escape hatch once, on purpose.</strong> Press Ctrl-Z and confirm the
+  edit reverts, then redo it (Ctrl-Y / Ctrl-Shift-Z) if you're keeping it. The first time
+  you do this deliberately, on an edit you don't care about either way, is a better time to
+  learn it than the first time you actually need it under pressure.</li>
+</ol>
+
+<div class="box safety">
+  <span class="box-title">One more thing working in your favour</span>
+  <p>
+  If a write script hits an error partway through, FH's auto-undo reverts it on its own —
+  the project's error-handling deliberately lets that error surface rather than quietly
+  swallowing it, precisely so this safety net gets the chance to fire. You don't have to
+  trigger this yourself or even notice it happening; it's there whether or not the routine
+  above catches something first.
+  </p>
+</div>
+
+<h2>What "state the edit precisely" buys you</h2>
+
+<p>
+You already know from Lesson 2 that a vague research <em>question</em> gets a clarifying
+question back rather than a guess. The same is true for a write instruction — but the
+stakes are higher, so don't rely on Claude to catch every ambiguity for you. "Fix his death
+date" invites Claude to decide what "fix" means; "set his death date to 4 Jul 1916, the
+CWGC-recorded date" doesn't. Precision here is doing double duty: it's both a good research
+practice you already have, and your first line of defence against an unwanted edit.
+</p>
+
+<h2>Quick check</h2>
+
+<div class="quiz" data-correct="0" data-right="Right — the whole point of doing this once deliberately, on a low-stakes edit, is that it's no longer a leap of faith the first time you actually need it."
+     data-wrong="Not quite. Re-read step 4 of the routine above.">
+  <div class="q">Why does the routine have you press Ctrl-Z on purpose, even on an edit you're happy with?</div>
+  <div class="choices">
+    <button class="choice">So the escape hatch is proven and familiar before you ever need it under pressure</button>
+    <button class="choice">Because FH requires every Bridge edit to be manually confirmed with Ctrl-Z before it's saved</button>
+    <button class="choice">To reset the Session's Access mode back to Read-only</button>
+  </div>
+  <div class="feedback"></div>
+</div>
+
+<h2>Try it now</h2>
+
+<ol>
+  <li>Back up your project file.</li>
+  <li>Start a Read-write Session.</li>
+  <li>Ask Claude to make one precise, low-stakes edit — something you can undo without a
+  second thought.</li>
+  <li>Open the record in FH and confirm the change yourself, then Ctrl-Z it, then redo it.</li>
+</ol>
+
+<p class="primary-source">
+Primary source for this lesson: <a href="../../docs/user-guide.md">docs/user-guide.md</a>
+— "What it can do right now" (Read-write section).
+</p>
+
+<p class="ask-agent">
+Have a real edit in mind you're nervous about trying first? Describe it to me and we can
+work out precise wording together before you run it for real.
+</p>
+
+<nav class="lesson-links">
+  <a href="0002-asking-trustworthy-questions.html">&larr; Lesson 2: Trustworthy questions</a>
+  <a href="../MISSION.md">Mission</a>
+  <a href="../RESOURCES.md">Resources</a>
+</nav>
+
+<script src="../assets/quiz.js"></script>

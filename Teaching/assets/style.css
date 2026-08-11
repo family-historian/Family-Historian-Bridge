@@ -1,0 +1,205 @@
+/* Shared stylesheet for FH MCP Bridge teaching workspace.
+   Tufte-ish: serif body text, generous margins, restrained color, print-friendly. */
+
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #444;
+  --paper: #fdfcf9;
+  --paper-alt: #f4f1e8;
+  --rule: #d8d2c2;
+  --accent: #7a3b2e;   /* muted brick red, evokes old ledger ink */
+  --accent-soft: #b06a55;
+  --good: #2f5d3a;
+  --warn: #8a5a12;
+  --danger: #8a2e2e;
+  --code-bg: #f0ede1;
+  --max-width: 720px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eae6da;
+    --ink-soft: #b9b3a2;
+    --paper: #1c1a16;
+    --paper-alt: #242019;
+    --rule: #3a352a;
+    --accent: #d98f78;
+    --accent-soft: #e0ab98;
+    --good: #7fbf8f;
+    --warn: #d9a94f;
+    --danger: #e08080;
+    --code-bg: #2a261e;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--paper); }
+
+body {
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+  max-width: var(--max-width);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+
+h1, h2, h3 {
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: 1.9rem;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.lesson-kicker {
+  font-family: "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  margin: 0 0 1.2rem;
+}
+
+h2 {
+  font-size: 1.3rem;
+  margin-top: 2.4rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 1.4rem;
+}
+
+h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+
+p { margin: 0.9rem 0; }
+
+a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 2px; }
+a:hover { text-decoration-color: var(--accent); }
+
+code, pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--code-bg);
+  border-radius: 4px;
+}
+
+code { padding: 0.1em 0.35em; }
+
+pre {
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  line-height: 1.5;
+  border-left: 3px solid var(--accent-soft);
+}
+pre code { background: none; padding: 0; }
+
+blockquote {
+  margin: 1.2rem 0;
+  padding: 0.2rem 1.1rem;
+  border-left: 3px solid var(--rule);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+ul, ol { padding-left: 1.4rem; }
+li { margin: 0.35rem 0; }
+
+/* Callout boxes */
+.box {
+  margin: 1.4rem 0;
+  padding: 1rem 1.2rem;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper-alt);
+}
+.box-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+.box.safety { border-color: var(--good); }
+.box.safety .box-title { color: var(--good); }
+.box.warn { border-color: var(--warn); }
+.box.warn .box-title { color: var(--warn); }
+.box.danger { border-color: var(--danger); }
+.box.danger .box-title { color: var(--danger); }
+
+/* Definition list / glossary-style pairs */
+.term { font-weight: 700; color: var(--accent); }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.2rem 0;
+  font-size: 0.95rem;
+}
+th, td {
+  border: 1px solid var(--rule);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--paper-alt); font-weight: 700; }
+
+/* Quiz widget */
+.quiz {
+  margin: 1.6rem 0;
+  padding: 1.2rem 1.3rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper-alt);
+}
+.quiz .q { font-weight: 600; margin-bottom: 0.7rem; }
+.quiz .choices { display: flex; flex-direction: column; gap: 0.5rem; }
+.quiz button.choice {
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.98rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.quiz button.choice:hover { border-color: var(--accent-soft); }
+.quiz button.choice.correct { border-color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--paper)); }
+.quiz button.choice.incorrect { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--paper)); }
+.quiz .feedback { margin-top: 0.7rem; font-size: 0.95rem; min-height: 1.2em; }
+
+.ask-agent {
+  margin: 2rem 0 0;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  border-top: 1px dashed var(--rule);
+  padding-top: 1rem;
+}
+
+nav.lesson-links {
+  margin-top: 2.6rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+nav.lesson-links a { margin-right: 1.2rem; }
+
+.primary-source {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+@media print {
+  body { max-width: none; padding: 0; }
+  .quiz, .ask-agent { display: none; }
+}

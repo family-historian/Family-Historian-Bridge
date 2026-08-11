@@ -1,0 +1,155 @@
+<meta charset="utf-8">
+<title>Lesson 5 — The source-entry workflow</title>
+<link rel="stylesheet" href="../assets/style.css">
+
+<p class="lesson-kicker">FH MCP Bridge · Lesson 5 of the course</p>
+<h1>Your regular task: transcribe, create, cite, verify</h1>
+
+<p>
+Transcribing a source, creating the Source record, adding or updating the people and
+facts it supports, and citing it against them — this is squarely what the Bridge is built
+for. This lesson walks the four steps end to end.
+</p>
+
+<h2>Step 1 — Create the source, transcription included</h2>
+
+<p>
+Ask for the Source record and hand over the transcription in the same request:
+</p>
+
+<blockquote>
+"Create a Source record from the Birth Certificate template for GRO ref 1895 Q1 Anytown
+412, and here's the transcription: [paste text]."
+</blockquote>
+
+<p>
+Claude stores the transcription as rich text directly on the Source record and populates
+whichever record-level template fields you gave it (repository, reference number, that
+kind of thing) — one request, not two.
+</p>
+
+<h2>Step 2 — Add or update the people and facts</h2>
+
+<p>
+This is ordinary Read-write editing, same mechanics as <a href="0003-first-read-write-session.html">Lesson 3</a>
+— state each addition or correction precisely, rather than "enter what's on the
+certificate":
+</p>
+
+<blockquote>
+"Add John Smith's birth on 12 Mar 1841 at Anytown, and add his father Thomas Smith's
+occupation as 'Blacksmith', per this certificate."
+</blockquote>
+
+<h2>Step 3 — Cite it against everything it actually supports</h2>
+
+<div class="box safety">
+  <span class="box-title">Built-in good practice, not just a feature</span>
+  <p>
+  When you ask Claude to cite a source, it's steered to compare the transcription against
+  what's already in your tree and tell you what the source supports that isn't yet
+  entered — a father's occupation, a mother's maiden name, a residence — rather than
+  citing only the one fact you originally asked about and leaving the rest unrecorded.
+  It will <strong>list these and wait for your go-ahead</strong> before adding anything
+  beyond your original request. This mirrors sound citation practice you already know —
+  cite every fact a document actually supports — and Claude won't act on the extras
+  silently.
+  </p>
+</div>
+
+<p>
+A citation can attach to one specific Fact, or to the record as a whole (a "whole-record"
+citation — FH's own term for when a source establishes the record itself, e.g. a birth
+certificate naming both parents makes it a source for the parent-child relationship, not
+just the birth date). Say which you mean if it isn't obvious from context.
+</p>
+
+<h2>Step 4 — Set the citation's own fields, including per-citation ones</h2>
+
+<div class="box safety">
+  <span class="box-title">Citation-specific fields: now fully supported</span>
+  <p>
+  A citation can carry its own field values in the same request that creates it — two
+  families at once:
+  </p>
+  <ul>
+    <li><strong>The 4 standard citation fields</strong> FH itself always offers, templated
+    source or not: <em>Page</em> ("where within source" — a page/entry number), <em>Text</em>
+    (a transcription-like excerpt scoped to this specific citation), <em>EntryDate</em>, and
+    <em>Assessment</em> (FH's 4-axis reliability rating — Reliable/Questionable,
+    Direct/Indirect, Primary/Secondary, Original/Derivative).</li>
+    <li><strong>A template's own citation-specific fields</strong> — the ones that vary
+    <em>per citation</em> even though the Source record itself is shared, like a GRO Index
+    template's Registration District: the source ("GRO Birth Index") stays one record, but
+    that field changes with each entry you cite from it. These are only settable here, on
+    the citation — never on the Source record itself.</li>
+  </ul>
+  <p>
+  So the full request can be one ask: <em>"Cite this GRO Birth Index source against John's
+  birth, Page 412, District Anytown, Assessment Direct and Primary."</em> If a field name
+  collides between the two families, Claude will flag it rather than guess which one you
+  meant.
+  </p>
+</div>
+
+<p>
+If you're not sure whether a given template has its own citation-specific fields, ask
+Claude — "does the GRO Birth Index template have any citation-specific fields?" is a fair,
+answerable question before you start.
+</p>
+
+<h2>Bonus: your session gets logged automatically</h2>
+
+<p>
+A source-entry session tends to be several small creates and edits in a row — exactly the
+kind of session where you'd want a record afterwards of what happened. You get one for
+free: every Read-write Session writes a running log into a Research Note as it goes (this
+is enforced by the Bridge itself, so it can't quietly be skipped). After a busy session,
+open that note in FH as your review trail — a second, independent check alongside opening
+each record yourself, from Lesson 3's routine.
+</p>
+
+<h2>Quick check</h2>
+
+<div class="quiz" data-correct="1" data-right="Right — citeSource takes both the 4 standard citation fields and a template's own citation-specific fields in the same call."
+     data-wrong="Not quite. Re-read Step 4 above.">
+  <div class="q">You ask Claude to cite a GRO Index source whose District field is citation-specific, giving the District value in the same request. What happens?</div>
+  <div class="choices">
+    <button class="choice">Claude has to create the citation first, then a second request sets District afterwards</button>
+    <button class="choice">Claude sets District on the citation itself, in the same call that creates it</button>
+    <button class="choice">District is rejected — only the 4 standard citation fields can be set this way</button>
+  </div>
+  <div class="feedback"></div>
+</div>
+
+<h2>Try it now</h2>
+
+<ol>
+  <li>Pick a real, low-stakes source you have transcribed (or transcribe one now).</li>
+  <li>Back up, start a Read-write Session, and run Steps 1–3 above on it.</li>
+  <li>Check whether Claude flagged anything the source supports that you hadn't
+  mentioned — decide whether to add it.</li>
+  <li>If the template has citation-specific fields, include their values in the citation
+  request itself rather than as an afterthought.</li>
+  <li>Open the Research Note Claude logged to and review it against what you actually did.</li>
+</ol>
+
+<p class="primary-source">
+Grounded directly in this project's own source-handling code
+(<code>bridge/sourceHelper.lua</code>) and its design record
+(<code>docs/adr/0006-cite-every-fact-a-source-supports.md</code>) — the workflow described
+here reflects what the Bridge actually does today, not just its docs.
+</p>
+
+<p class="ask-agent">
+Have a real source in hand right now? Bring the transcription and we can work through it
+together, live.
+</p>
+
+<nav class="lesson-links">
+  <a href="0004-standalone-plugins.html">&larr; Lesson 4: Standalone plugins</a>
+  <a href="../MISSION.md">Mission</a>
+  <a href="../RESOURCES.md">Resources</a>
+</nav>
+
+<script src="../assets/quiz.js"></script>

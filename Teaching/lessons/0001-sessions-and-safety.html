@@ -1,0 +1,139 @@
+<meta charset="utf-8">
+<title>Lesson 1 — Sessions &amp; the safety model</title>
+<link rel="stylesheet" href="../assets/style.css">
+
+<p class="lesson-kicker">FH MCP Bridge · Lesson 1 of the course</p>
+<h1>Sessions, Access mode, and why you can't permanently break anything</h1>
+
+<p>
+You already know Family Historian cold. What's new here is one extra layer sitting on
+top of it: the <strong>Bridge</strong>. This lesson gives you the one thing you need before
+you ask Claude a single question — how a Bridge <span class="term">Session</span> works,
+and exactly what stops a mistake (yours or Claude's) from becoming permanent.
+</p>
+
+<h2>The Session: FH is locked while Claude can reach it</h2>
+
+<p>
+In FH, open the <strong>Claude MCP Bridge</strong> plugin dialog and click <strong>Start</strong>.
+That begins a <span class="term">Session</span> — the window in which Claude can send it
+queries. Three things to know about a Session:
+</p>
+
+<ul>
+  <li><strong>FH's main window locks for the whole Session.</strong> This is deliberate,
+  not a bug — it stops you and Claude editing the same project at once. You get it back
+  the moment the Session ends.</li>
+  <li><strong>A Session ends</strong> when you click <strong>Stop</strong>, after 5 minutes
+  idle, or when you close the dialog entirely (<strong>Exit</strong>).</li>
+  <li><strong>Access mode is chosen once, at Start</strong>, and holds for the whole
+  Session. To change it, Stop and Start again.</li>
+</ul>
+
+<h2>Access mode: the one choice that matters most</h2>
+
+<table>
+  <tr><th></th><th>Read-only <em>(default)</em></th><th>Read-write</th></tr>
+  <tr>
+    <td>What Claude can do</td>
+    <td>Look up, count, cross-reference, narrate</td>
+    <td>Everything Read-only can, <em>plus</em> create, edit, and delete records, facts,
+    citations, and notes</td>
+  </tr>
+  <tr>
+    <td>Can it touch your data?</td>
+    <td>No — the write API isn't even exposed to the script it writes</td>
+    <td>Yes, live, while answering your question</td>
+  </tr>
+  <tr>
+    <td>Right mode for...</td>
+    <td>Research questions: "who died in France 1914–18", "how many Munros are in the
+    tree", relationship lookups</td>
+    <td>Actually recording something you've found: adding a fact, fixing a date, filing a
+    source citation</td>
+  </tr>
+</table>
+
+<div class="box safety">
+  <span class="box-title">Why this is safe</span>
+  <p>
+  In Read-only mode, the write functions aren't a locked door Claude could pick —
+  they're not in the room. The script it writes literally has no way to call
+  <code>fhCreateItem</code>, <code>fhDeleteItem</code>, or any <code>fhSetValueAs*</code>
+  setter. There's no "oops, it wrote anyway" failure mode to worry about here.
+  </p>
+</div>
+
+<h2>Read-write, and why a bad edit still isn't permanent</h2>
+
+<p>
+Read-write is where your "without damaging my database" worry actually lives, so here's
+the real mechanism — not just reassurance:
+</p>
+
+<div class="box safety">
+  <span class="box-title">FH's own undo, not the Bridge's</span>
+  <p>
+  The Bridge implements <strong>no undo logic of its own</strong>. It doesn't need to —
+  every change it makes goes through FH's own native undo system, the same one that backs
+  every edit you make by hand. That means:
+  </p>
+  <ul>
+    <li><strong>Ctrl-Z always reverts the last change</strong>, exactly as if you'd made it
+    yourself in the FH UI.</li>
+    <li><strong>If a write script errors partway through, FH automatically undoes it</strong> —
+    a half-applied change doesn't get left sitting in your tree.</li>
+  </ul>
+</div>
+
+<div class="box warn">
+  <span class="box-title">What Ctrl-Z doesn't cover</span>
+  <p>
+  Undo protects you <em>within</em> a session of work, same as it always has in FH — it's
+  not a substitute for your own backup discipline. If you don't notice a bad edit until
+  three Sessions later, Ctrl-Z won't reach back that far. Treat a Read-write Bridge Session
+  exactly like any other editing session in FH: back up first if you'd be upset to lose the
+  file, same as you already would before a big manual edit.
+  </p>
+</div>
+
+<h2>Quick check</h2>
+
+<div class="quiz" data-correct="2" data-right="Right — Ctrl-Z is FH's own undo, working exactly as it would for a manual edit; the Bridge adds no separate undo layer of its own."
+     data-wrong="Not quite. Re-read the &quot;FH's own undo, not the Bridge's&quot; box above.">
+  <div class="q">Claude, in a Read-write Session, edits a birth date incorrectly. What actually reverts it?</div>
+  <div class="choices">
+    <button class="choice">The Bridge has its own separate undo log you'd open from its dialog</button>
+    <button class="choice">Nothing — Read-write changes are final the moment they're made</button>
+    <button class="choice">FH's own Ctrl-Z, the same undo you'd use after any manual edit</button>
+  </div>
+  <div class="feedback"></div>
+</div>
+
+<h2>Try it now</h2>
+
+<ol>
+  <li>Open your FH project and start a Session — pick <strong>Read-only</strong> first.</li>
+  <li>Ask Claude a research question you already know the answer to (a good way to
+  calibrate trust in its output before you lean on it for the unknown).</li>
+  <li>When you're ready to try Read-write, back up the project file first, then ask Claude
+  to make one small, low-stakes edit and watch it happen live in FH.</li>
+</ol>
+
+<p class="primary-source">
+Primary source for this lesson: <a href="../../docs/user-guide.md">docs/user-guide.md</a>
+(sections "Access mode" and the Session walkthrough) — go straight there for anything this
+lesson simplified.
+</p>
+
+<p class="ask-agent">
+Something here unclear, or want to poke a hole in the safety model before you trust it?
+Ask me directly — I'm your teacher for this, not just the author of this page.
+</p>
+
+<nav class="lesson-links">
+  <a href="../MISSION.md">Mission</a>
+  <a href="../RESOURCES.md">Resources</a>
+</nav>
+
+<script src="../assets/quiz.js"></script>

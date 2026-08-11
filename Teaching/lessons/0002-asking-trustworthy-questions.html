@@ -1,0 +1,118 @@
+<meta charset="utf-8">
+<title>Lesson 2 — Asking trustworthy research questions</title>
+<link rel="stylesheet" href="../assets/style.css">
+
+<p class="lesson-kicker">FH MCP Bridge · Lesson 2 of the course</p>
+<h1>Orienting Claude, then asking a question you can trust the answer to</h1>
+
+<p>
+Lesson 1 covered when it's safe to ask. This one covers how to ask well — so the answer
+you get back is actually grounded in your tree, not a plausible-sounding guess, and so you
+have a habit for catching it when it isn't.
+</p>
+
+<h2>There's no command list — and that's the point</h2>
+
+<p>
+Every question you ask becomes a fresh, purpose-written script against FH's own API. There
+is nothing to memorise — ask however you'd ask a research colleague: <em>"who died between
+1914 and 1918 in France or Belgium"</em>, <em>"how many Munros are in the tree"</em>,
+<em>"who are so-and-so's grandparents"</em>. If a question is genuinely ambiguous — an
+unclear place-name spelling, an unspecified number of generations — Claude will ask you to
+clarify rather than guess.
+</p>
+
+<div class="box safety">
+  <span class="box-title">Why this matters for you specifically</span>
+  <p>
+  Because the script is written fresh each time against your project's own schema, it
+  reads your project's own custom Fact types by their real, resolved tags — not as a raw
+  GEDCOM <code>FACT</code>/<code>EVEN</code> plus a <code>TYPE</code> subtag the way
+  they'd sit in an export. A military-history project's own
+  <code>_ATTR-REGIMENT</code> or <code>EVEN-ENLISTED</code> facts are first-class here. No
+  fixed command set could have anticipated your project's specific customisations — this
+  is what makes "who died while serving in the armed forces" answerable at all, for a
+  project set up that way.
+  </p>
+</div>
+
+<h2>Orient first: start with the census</h2>
+
+<p>
+Before asking a substantive question of a project Claude hasn't seen yet, ask for an
+overview — <em>"give me an overview of this project"</em>. That runs a fixed, built-in
+census (record counts per type, plus how often each tag and custom fact appears) — cheap,
+always Read-only regardless of your Session's Access mode, and it gives Claude the same
+lay of the land you already have in your head. Skipping it doesn't break anything, but a
+fresh Session with no orientation is more likely to mis-guess an ambiguous tag name on a
+project it hasn't touched before.
+</p>
+
+<h2>The verification habit</h2>
+
+<p>
+An answer that "looks wrong" is more often a scripting slip than a data problem — Claude
+runs a fresh script per question, so an unusual question can occasionally expose a bug in
+that script rather than tell you something true about your tree. The fix is always
+available and costs nothing extra:
+</p>
+
+<blockquote>
+"Can you double-check that?" / "Explain how you got that number."
+</blockquote>
+
+<p>
+Claude has full context on the exact script it just ran and can walk through its logic —
+or re-run it a different way — on request. Treat an unverified surprising answer the way
+you'd treat a suspiciously convenient GEDCOM import: plausible, not yet trusted.
+</p>
+
+<h2>A separate, no-Session tool: FH's own help</h2>
+
+<p>
+Claude can also search Family Historian 8's bundled official help — menus, features,
+dialogs, plugin authoring — <strong>without any Bridge Session running</strong>, since it
+doesn't touch your tree at all. Useful for "how do I get FH to do X" questions that have
+nothing to do with your live data.
+</p>
+
+<h2>Quick check</h2>
+
+<div class="quiz" data-correct="1" data-right="Right — a bad-looking answer is more often a scripting slip in that particular fresh script than a real data problem; asking Claude to explain or re-run it is free and immediate."
+     data-wrong="Not quite. Re-read &quot;The verification habit&quot; above.">
+  <div class="q">Claude gives you a count that looks too low. What's the right first move?</div>
+  <div class="choices">
+    <button class="choice">Assume the data is wrong and go audit the tree by hand</button>
+    <button class="choice">Ask Claude to double-check or explain how it got that number</button>
+    <button class="choice">Start a new Session with Read-write to let it "fix" the count</button>
+  </div>
+  <div class="feedback"></div>
+</div>
+
+<h2>Try it now</h2>
+
+<ol>
+  <li>Start a Read-only Session and ask for a project overview first.</li>
+  <li>Ask one real research question, phrased naturally, using a custom Fact type you know
+  is specific to this project.</li>
+  <li>Pick one answer and ask Claude to explain how it got it — even if it looks right —
+  just to build the habit before you need it for one that looks wrong.</li>
+</ol>
+
+<p class="primary-source">
+Primary source for this lesson: <a href="../../docs/user-guide.md">docs/user-guide.md</a>
+— "Using it" and "What it can do right now" sections.
+</p>
+
+<p class="ask-agent">
+Want to try phrasing a real question together, or dig into what "custom fact types" means
+for your specific project's setup? Ask me directly.
+</p>
+
+<nav class="lesson-links">
+  <a href="0001-sessions-and-safety.html">&larr; Lesson 1: Sessions &amp; safety</a>
+  <a href="../MISSION.md">Mission</a>
+  <a href="../RESOURCES.md">Resources</a>
+</nav>
+
+<script src="../assets/quiz.js"></script>
