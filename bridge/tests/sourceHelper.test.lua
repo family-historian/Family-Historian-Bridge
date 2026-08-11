@@ -630,10 +630,12 @@ local certSource = buildSource("Birth certificate of Nellie Record, 15 November 
 local certSourceId = fhGetRecordId(certSource)
 
 local indiTarget = fhCreateItem("INDI")
-sourceHelper.citeSource(indiTarget, certSourceId)
+local indiCiteReturn = sourceHelper.citeSource(indiTarget, certSourceId)
 local indiCite = findChild(currentNode(indiTarget), "SOUR")
 check(indiCite ~= nil, 'citeSource creates a SOUR child on an INDI record (whole-record citation), resolved by id')
 check(indiCite and indiCite.value == currentNode(certSource), 'whole-record SOUR child links (fhSetValueAsLink) to the resolved source')
+check(indiCiteReturn ~= nil and currentNode(indiCiteReturn) == indiCite,
+  'citeSource returns the created citation\'s own item pointer even with no fields argument (issue #99)')
 
 local factTarget = fhCreateItem("BIRT", indiTarget)
 sourceHelper.citeSource(factTarget, "Birth certificate of Nellie Record, 15 November 1895")
@@ -703,6 +705,167 @@ check(sourCountOnTarget(badIdTarget) == 0, 'validateCiteSource never creates a c
 local okValidateNilTarget, errValidateNilTarget = pcall(sourceHelper.validateCiteSource, nil, certSourceId)
 check(not okValidateNilTarget, 'validateCiteSource rejects a nil ptrTarget, same as citeSource')
 check(contains(errValidateNilTarget, 'ptrTarget'), 'the rejection names ptrTarget specifically')
+
+------------------------------------------------------------------
+-- citeSource fields (issue #99, follow-up to #98's own closing comment): standard
+-- citation fields (Page/Text/EntryDate/Assessment) apply regardless of whether the source
+-- is templated; a template's own citation-specific (CITN) fields only apply when it is.
+------------------------------------------------------------------
+
+local function dataChild(citationNode)
+  return findChild(citationNode, "DATA")
+end
+
+do
+  local target = fhCreateItem("INDI")
+  local returned = sourceHelper.citeSource(target, certSourceId, {
+    Page = "p. 12",
+    Text = "Transcribed citation text",
+    EntryDate = { year = 2026, month = 8, day = 11 },
+    Assessment = "Direct Primary",
+  })
+
+  check(returned ~= nil, 'citeSource returns a value')
+  check(fhGetTag(returned) == "SOUR", 'citeSource returns the citation\'s own item pointer (tag SOUR)')
+
+  local citationNode = currentNode(returned)
+  check(citationNode == findChild(currentNode(target), "SOUR"), 'the returned pointer really is the created citation, not some other item')
+
+  local pageChild = findChild(citationNode, "PAGE")
+  check(pageChild ~= nil and pageChild.value == "p. 12", 'Page sets a PAGE child directly on the citation')
+
+  local data = dataChild(citationNode)
+  check(data ~= nil, 'Text/EntryDate share one DATA child on the citation')
+
+  local citationTextChild = findChild(data, "TEXT")
+  check(citationTextChild ~= nil and type(citationTextChild.value) == 'table' and citationTextChild.value.text == "Transcribed citation text" and citationTextChild.value.rich == false,
+    'Text sets DATA.TEXT as plain (non-FTF) richtext, same fhNewRichText(text, false) convention as createSourceFromTemplate\'s transcription')
+
+  local dateChild = findChild(data, "DATE")
+  local df = dateChild and dateObjFields[dateChild.value]
+  check(df ~= nil and df.year == 2026 and df.month == 8 and df.day == 11,
+    'EntryDate sets DATA.DATE via fhNewDate, table shorthand converted the same way as a template Date field')
+
+  local quayChild = findChild(citationNode, "QUAY")
+  check(quayChild ~= nil and quayChild.value == "Direct Primary", 'Assessment sets a QUAY child directly on the citation')
+end
+
+------------------------------------------------------------------
+-- Assessment (QUAY) vocabulary validation
+------------------------------------------------------------------
+
+do
+  local target = fhCreateItem("INDI")
+  local before = sourCountOnTarget(target)
+
+  local okBadWord, errBadWord = pcall(sourceHelper.citeSource, target, certSourceId, { Assessment = "Maybe" })
+  check(not okBadWord, 'an unrecognized Assessment word raises an error')
+  check(contains(errBadWord, "Maybe"), 'the error names the offending word')
+  check(sourCountOnTarget(target) == before, 'no citation created when Assessment is rejected')
+
+  local okSameRow, errSameRow = pcall(sourceHelper.citeSource, target, certSourceId, { Assessment = "Unreliable Questionable" })
+  check(not okSameRow, 'two words from the same Assessment row raises an error')
+  check(contains(errSameRow, "row"), 'the error explains it\'s a same-row conflict')
+  check(sourCountOnTarget(target) == before, 'no citation created when a same-row Assessment conflict is rejected')
+
+  local okAllFour = pcall(sourceHelper.citeSource, target, certSourceId, { Assessment = "Unreliable Direct Secondary Derivative" })
+  check(okAllFour, 'all four Assessment rows, one word each, is valid')
+
+  local okEmpty = pcall(sourceHelper.citeSource, target, certSourceId, { Assessment = "" })
+  check(okEmpty, 'an empty Assessment string is valid (no assessment picked)')
+end
+
+------------------------------------------------------------------
+-- Template citation-specific (CITN) fields via citeSource, on a templated source
+------------------------------------------------------------------
+
+do
+  local templated = sourceHelper.createSourceFromTemplate(civilRegId, { Reg_No = "1895/Q1/1" })
+  local target = fhCreateItem("INDI")
+
+  local returned = sourceHelper.citeSource(target, templated.id, { CitationField = "citation value" })
+  local citationNode = currentNode(returned)
+  local fieldChild = findChild(citationNode, "~TX-CitationField")
+  check(fieldChild ~= nil and fieldChild.value == "citation value",
+    'a template citation-specific (CITN) field code sets the metafield on the citation itself')
+
+  -- Same field code must never land on the SOUR record too -- CITN fields are
+  -- citation-level only (issue #98's own point, still true from the citing side).
+  local templatedSourNode
+  for _, n in ipairs(recordsByTag["SOUR"]) do
+    if n.id == templated.id then templatedSourNode = n end
+  end
+  check(findChild(templatedSourNode, "~TX-CitationField") == nil,
+    'the citation-specific field is not also created on the SOUR record')
+end
+
+------------------------------------------------------------------
+-- Rejections: record-level template field via citeSource, untemplated source + template
+-- field, reserved-name collision -- all validate-before-mutate.
+------------------------------------------------------------------
+
+do
+  local templated = sourceHelper.createSourceFromTemplate(civilRegId, {})
+  local target = fhCreateItem("INDI")
+  local before = sourCountOnTarget(target)
+
+  local okRecordLevel, errRecordLevel = pcall(sourceHelper.citeSource, target, templated.id, { Reg_No = "x" })
+  check(not okRecordLevel, 'a record-level template field code passed to citeSource raises an error')
+  check(contains(errRecordLevel, "Reg_No"), 'the error names the offending field code')
+  check(contains(errRecordLevel, "record-level"), 'the error explains the field is record-level')
+  check(sourCountOnTarget(target) == before, 'no citation created when a record-level field is rejected')
+
+  local target2 = fhCreateItem("INDI")
+  local okUntemplated, errUntemplated = pcall(sourceHelper.citeSource, target2, certSourceId, { CitationField = "x" })
+  check(not okUntemplated, 'a template field code passed for an untemplated source raises an error')
+  check(contains(errUntemplated, "template"), 'the error explains the source has no template')
+  check(sourCountOnTarget(target2) == 0, 'no citation created when a template field is rejected on an untemplated source')
+end
+
+do
+  -- A template that happens to define a citation-specific field literally coded "Page" --
+  -- the reserved standard-field name always wins, so this must be a clear rejection, not
+  -- a silent misroute of the caller's intent (issue #99 design decision).
+  local collidingTemplate = buildTemplate("Colliding Template")
+  addFieldDef(collidingTemplate, "Page", "Text", nil, true)
+  local collidingSource = sourceHelper.createSourceFromTemplate(fhGetRecordId(collidingTemplate), {})
+  local target = fhCreateItem("INDI")
+
+  local okCollide, errCollide = pcall(sourceHelper.citeSource, target, collidingSource.id, { Page = "12" })
+  check(not okCollide, 'a template field code colliding with a reserved standard-field name raises an error')
+  check(contains(errCollide, "Page"), 'the collision error names the colliding field')
+  check(sourCountOnTarget(target) == 0, 'no citation created when a reserved-name collision is rejected')
+end
+
+do
+  -- A record-level (non-CITN) template field sharing a reserved name is NOT a real
+  -- collision -- it was never reachable through citeSource's fields regardless of naming
+  -- (citeSource only ever accepts CITN fields), so the reserved standard field just wins
+  -- silently rather than being treated as an ambiguous conflict.
+  local recordLevelCollidingTemplate = buildTemplate("Record-Level Colliding Template")
+  addFieldDef(recordLevelCollidingTemplate, "Text", "Text", nil, false)
+  local source = sourceHelper.createSourceFromTemplate(fhGetRecordId(recordLevelCollidingTemplate), {})
+  local target = fhCreateItem("INDI")
+
+  local returned = sourceHelper.citeSource(target, source.id, { Text = "citation text, not the record-level field" })
+  local data = findChild(currentNode(returned), "DATA")
+  local citationTextChild = data and findChild(data, "TEXT")
+  check(citationTextChild ~= nil and citationTextChild.value.text == "citation text, not the record-level field",
+    'a record-level template field sharing a reserved name does not block the standard field -- no collision, no error')
+end
+
+------------------------------------------------------------------
+-- validateCiteSource with fields (issue #99): same pure-validation contract, extended.
+------------------------------------------------------------------
+
+do
+  local target = fhCreateItem("INDI")
+  local before = sourCountOnTarget(target)
+  local validatedSourceF, standardFields = sourceHelper.validateCiteSource(target, certSourceId, { Page = "p. 1" })
+  check(validatedSourceF ~= nil, 'validateCiteSource returns the resolved source on success, fields supplied')
+  check(standardFields.Page == "p. 1", 'validateCiteSource returns the split standard-fields table')
+  check(sourCountOnTarget(target) == before, 'validateCiteSource never creates a citation, even with fields supplied')
+end
 
 ------------------------------------------------------------------
 -- findSources (issue #65): matches record-level fields on the SOUR record itself,

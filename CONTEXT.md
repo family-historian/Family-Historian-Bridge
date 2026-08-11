@@ -269,9 +269,41 @@ item — an `INDI`/`FAM` record (a Whole-record citation) or a specific Fact ite
 Source record resolved the same by-id-or-by-title way `createSourceFromTemplate` resolves
 a template. See docs/adr/0006-cite-every-fact-a-source-supports.md for why this exists as
 a shared helper instead of each script hand-rolling `fhCreateItem("SOUR", ...)` +
-`fhSetValueAsLink`.
+`fhSetValueAsLink`. Takes an optional third `fields` argument (issue #99, follow-up to
+#98's own closing comment, which left this deliberately untracked until a real need
+materialized) mirroring `createSourceFromTemplate`'s own `fields`, covering two families in
+one flat table: the 4 reserved **standard citation fields** below (always valid, templated
+or not) and a template's own **Citation-specific field** codes (only valid when the
+resolved source is actually templated — a record-level template field code is rejected the
+same way `createSourceFromTemplate` rejects a citation-specific one, just the mirror image).
+A reserved standard-field name always wins over a same-named template field code, which is
+rejected outright as a collision rather than silently misrouted. Returns the created
+citation's own live item Pointer (not a `qualifiedId` — a citation is a child item nested
+under a record/Fact, not a standalone record with one of its own), so a script can keep
+working on it directly within the same `run_lua` call.
 _Avoid_: Add source, link source (this project's own name for the operation is
 `citeSource`, matching the domain term "citation")
+
+**Standard citation field**:
+One of the 4 generic citation-specific fields FH's own help documents as available on
+every `SOUR` citation, templated source or not (`sourcesandsourcetemplates.html`): Entry
+date (GEDCOM `DATA.DATE`), Assessment (`QUAY`), Where within Source (`PAGE`), Text from
+Source (`DATA.TEXT`). `citeSource`'s `fields` argument exposes these under the reserved
+keys `EntryDate`/`Assessment`/`Page`/`Text` respectively — `Page`/`Text` named after their
+GEDCOM tag directly, `EntryDate`/`Assessment` after FH's own dialog label since
+`DATA.DATE`/`QUAY` have no single-word tag a caller would recognize unaided. `Text` and
+`EntryDate` both nest under one shared `DATA` child of the citation, per GEDCOM 5.5.1's own
+`SOURCE_CITATION` structure — cross-confirmed against the separate `fhUtils.createTextFromSource`
+helper's own doc ("attaches...to a source or citation DATA"), a different Lua API surface
+than this bridge uses but the same live data model underneath. `Page`/`Assessment` are
+direct citation children instead (`PAGE`/`QUAY`, GEDCOM siblings of `DATA`, not nested under
+it). Assessment is validated against FH's fixed 4-axis vocabulary — see **Citation quality
+assessment (QUAY)** in the gedcom-knowledge corpus. Distinct from a **Source Template
+field**: a standard citation field exists independent of any template; a template's own
+**Citation-specific field** only exists when the source is linked to one.
+_Avoid_: Generic citation field (FH's own help uses this phrase for the same 4 fields, but
+this project already reserves "generic" for a **Source template**'s own generic/free-form/
+templated 3-way distinction — "standard" avoids that collision)
 
 **findSources**:
 The `fhBridge` helper (`sourceHelper.lua`) that finds every `SOUR` record linked to a given

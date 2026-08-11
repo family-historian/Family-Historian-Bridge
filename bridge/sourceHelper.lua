@@ -3,6 +3,9 @@
 -- field definitions, then creates the SOUR record, its _SRCT link, each metafield, an
 -- optional transcription, and refreshes its auto-title. See
 -- docs/superpowers/specs/2026-07-30-createSourceFromTemplate-design.md for the full design.
+-- Also creates a SOUR citation on any target item (citeSource), optionally populating its
+-- own standard citation fields (Page/Text/EntryDate/Assessment) and/or a template's
+-- citation-specific (CITN) fields in the same call (issue #99).
 --
 -- Calls the real fh* globals directly (not a sandboxed copy), the same way fhUtils does —
 -- sandbox.lua must only ever wire createSourceFromTemplate/citeSource through during a
@@ -162,6 +165,32 @@ local function requireFieldDef(defs, code)
   return def
 end
 
+-- Returns parentPtr's first direct child tagged wantedTag (a live Clone()'d pointer), or
+-- nil if it has none -- shared by linkedTemplate (below, a link-valued child) and
+-- citationDataItem (issue #99, a complex/record-valued child), the same "walk children,
+-- match by tag" loop both used to hand-roll separately.
+local function findChildItem(parentPtr, wantedTag)
+  local child = fhNewItemPtr()
+  child:MoveToFirstChildItem(parentPtr)
+  while child:IsNotNull() do
+    if fhGetTag(child) == wantedTag then
+      return child:Clone()
+    end
+    child:MoveNext()
+  end
+  return nil
+end
+
+-- Finds the template a SOUR record is linked to (its own _SRCT child's link target), or
+-- nil if it isn't a templated source at all. Moved above validateFields/validateCiteSource
+-- (issue #99) so citeSource's own validation can resolve a source's template without a
+-- forward reference -- findSources/getTemplateFieldCensus further down still use it the
+-- same way.
+local function linkedTemplate(sourPtr)
+  local link = findChildItem(sourPtr, "_SRCT")
+  return link and fhGetValueAsLink(link)
+end
+
 -- The ~PREFIX-CODE shortcut fhCreateItem expects for a metafield (setField below, to
 -- populate one) or a Data Reference expects to resolve one back (resolvedFieldValue
 -- below, both for record-level and citation-level matching, and getPopulatedTemplateFields)
@@ -177,10 +206,20 @@ local function shortcutFor(def)
   return fhGetMetafieldShortcut(def.fdefPtr)
 end
 
-local function validateFields(fields, defs)
+-- expectCitation (issue #99) flips which side of the record-vs-citation distinction is
+-- rejected: false/nil (createSourceFromTemplate's own record-level fields, the original
+-- issue #98 behavior) rejects a citation-specific (CITN) code; true (citeSource's own
+-- template fields) rejects a record-level (non-CITN) code instead, with a matching
+-- clear-error message rather than createSourceFromTemplate's. Enum-option validation is
+-- identical either way, so it isn't duplicated per caller.
+local function validateFields(fields, defs, expectCitation)
   for code, value in pairs(fields) do
     local def = requireFieldDef(defs, code)
-    if def.citation then
+    if expectCitation then
+      if not def.citation then
+        error("field '" .. code .. "' is record-level and can't be set on a citation - set it when creating the source record instead")
+      end
+    elseif def.citation then
       error("field '" .. code .. "' is citation-specific and can't be set when creating the record")
     end
     if def.type == "Enum" then
@@ -205,6 +244,115 @@ local function toDate(value)
     return fhNewDate(value.year, value.month, value.day, value.subtype)
   end
   return value
+end
+
+-- The 4 generic citation-specific fields FH's own help documents (sourcesandsourcetemplates
+-- .html: "generic citation-specific fields... Entry date / Assessment / Where within Source
+-- / Text from Source") -- issue #99, the follow-up #98's own closing comment deliberately
+-- left untracked. Reserved citeSource.fields keys, always valid regardless of whether the
+-- resolved source is templated at all (unlike a template's own CITN fields, below, which
+-- only exist when it is). Names chosen to mirror the underlying GEDCOM tag directly where
+-- there is one short enough to read on sight (Page/Text, matching GEDCOM's own PAGE/TEXT --
+-- see this file's other GEDCOM-tag-named fields QUAY/AUTH/TITL in CONTEXT.md), and FH's own
+-- dialog label otherwise (EntryDate/Assessment, since DATA.DATE/QUAY have no single-word
+-- GEDCOM tag a caller would recognize unaided).
+local STANDARD_CITATION_FIELDS = { Page = true, Text = true, EntryDate = true, Assessment = true }
+
+-- QUAY's real GEDCOM tag is a single certainty digit 0-3, but FH's plugin API exposes and
+-- stores it as a human-readable, space-separated string built from up to 4 independent
+-- yes/no axes -- live-confirmed, FH developer response, issue #32 (see
+-- citation-quality-assessment-quay in the gedcom-knowledge corpus). Each row is
+-- either/or/neither, never both words from the same row.
+local ASSESSMENT_ROWS = {
+  { "Unreliable", "Questionable" },
+  { "Indirect", "Direct" },
+  { "Secondary", "Primary" },
+  { "Derivative", "Original" },
+}
+
+-- Rejects an Assessment string containing a word outside the fixed vocabulary, or two
+-- words from the same row -- same rigor this file already applies to a template's own
+-- closed Enum option lists (validateFields above), rather than passing an unvalidated
+-- string through to fhSetValueAsText, which doesn't reject bad input on its own.
+local function validateAssessment(value)
+  if value == nil or value == "" then
+    return
+  end
+  if type(value) ~= "string" then
+    error("Assessment must be a string")
+  end
+  local seenRow = {}
+  for word in value:gmatch("%S+") do
+    local rowIndex = nil
+    for i, row in ipairs(ASSESSMENT_ROWS) do
+      if word == row[1] or word == row[2] then
+        rowIndex = i
+        break
+      end
+    end
+    if not rowIndex then
+      error("invalid Assessment word '" .. word .. "' - must be one of: Unreliable/Questionable, Indirect/Direct, Secondary/Primary, Derivative/Original")
+    end
+    if seenRow[rowIndex] then
+      error("Assessment can't include both words from the same row (row " .. rowIndex .. ")")
+    end
+    seenRow[rowIndex] = true
+  end
+end
+
+-- Page/Text minimal type checks -- Enum-grade closed-vocabulary validation only applies to
+-- Assessment (above); EntryDate is left to toDate/fhNewDate to reject a genuinely malformed
+-- value, same as a template Date field already does.
+local function validateStandardFields(fields)
+  if fields.Page ~= nil and type(fields.Page) ~= "string" then
+    error("Page must be a string")
+  end
+  if fields.Text ~= nil and type(fields.Text) ~= "string" then
+    error("Text must be a string")
+  end
+  validateAssessment(fields.Assessment)
+end
+
+-- Splits a citeSource fields table into its two families (issue #99): reserved standard-
+-- field keys always win over a same-named template field code (see the collision check in
+-- M.validateCiteSource below) -- a flat merged table matches createSourceFromTemplate's own
+-- convention rather than introducing a namespaced shape just for the rare collision case.
+local function splitCitationFields(fields)
+  local standard, template = {}, {}
+  for code, value in pairs(fields) do
+    if STANDARD_CITATION_FIELDS[code] then
+      standard[code] = value
+    else
+      template[code] = value
+    end
+  end
+  return standard, template
+end
+
+-- Text and EntryDate both nest under one shared DATA child of the citation, per GEDCOM
+-- 5.5.1's own SOURCE_CITATION structure (SOUR > DATA > {DATE, TEXT}) -- cross-confirmed
+-- against fhUtils.createTextFromSource's own doc ("Creates or updates a TEXT item from
+-- rich text and attaches it to a source or citation DATA"), a different Lua API surface
+-- than this file uses but the same live data model underneath. PAGE and QUAY are direct
+-- citation children instead (GEDCOM SOUR > PAGE, SOUR > QUAY, siblings of DATA). Reuses an
+-- existing DATA child rather than creating a second one if Text and EntryDate are both
+-- supplied in the same call.
+local function citationDataItem(citation)
+  return findChildItem(citation, "DATA") or fhCreateItem("DATA", citation)
+end
+
+local function setStandardField(citation, code, value)
+  if code == "Page" then
+    fhSetValueAsText(fhCreateItem("PAGE", citation), value)
+  elseif code == "Assessment" then
+    fhSetValueAsText(fhCreateItem("QUAY", citation), value)
+  elseif code == "Text" then
+    local data = citationDataItem(citation)
+    fhSetValueAsRichText(fhCreateItem("TEXT", data), fhNewRichText(value, false))
+  elseif code == "EntryDate" then
+    local data = citationDataItem(citation)
+    fhSetValueAsDate(fhCreateItem("DATE", data), toDate(value))
+  end
 end
 
 local function setField(sour, value, def)
@@ -267,37 +415,91 @@ function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
   }
 end
 
--- sourceHelper.validateCiteSource(ptrTarget, sourceNameOrId)
+-- sourceHelper.validateCiteSource(ptrTarget, sourceNameOrId, fields)
 -- The pure validation half of M.citeSource below, extracted (issue #97) so sandbox.lua can
 -- call it on its own, untracked, before arming the write tracker -- same rationale as
 -- validateCreateSourceFromTemplate above: flipping tracker.wrote purely from entering the
 -- wrapped fhBridge.citeSource call armed ADR 0005's rollback path even for a ptrTarget/
 -- sourceNameOrId rejected right here, before fhCreateItem ever ran. Returns the resolved
--- source pointer, which M.citeSource itself needs -- so it also calls this first (rather
--- than duplicating the ptrTarget check and resolveSource call), keeping today's single-
--- call, validate-then-mutate contract unchanged for direct callers/tests. The ptrTarget
--- check itself (same "not ptr or ptr:IsNull()" idiom familyHelper.lua uses throughout) was
--- added in issue #96, the same audit that found the sessionLogHelper.logActivity gap fixed
--- in issue #95.
-function M.validateCiteSource(ptrTarget, sourceNameOrId)
+-- source pointer, the split standard/template field tables, and (only when the source is
+-- templated) its field-def map -- everything M.citeSource itself needs, so it also calls
+-- this first rather than duplicating any of it, keeping today's single-call,
+-- validate-then-mutate contract unchanged for direct callers/tests. The ptrTarget check
+-- itself (same "not ptr or ptr:IsNull()" idiom familyHelper.lua uses throughout) was added
+-- in issue #96, the same audit that found the sessionLogHelper.logActivity gap fixed in
+-- issue #95.
+--
+-- fields (issue #99, follow-up to #98's own closing comment) is optional, covering two
+-- families in one flat table: the 4 reserved standard citation fields (Page/Text/
+-- EntryDate/Assessment, STANDARD_CITATION_FIELDS above -- always valid, templated or not)
+-- and a template's own citation-specific (CITN) field codes (only valid when the resolved
+-- source is actually templated). A reserved standard-field key always wins over a
+-- same-named template CITN field code -- if the resolved template happens to define one,
+-- that template field becomes unreachable through this table, so it's rejected outright
+-- with a clear error naming the collision, rather than silently routing the caller's value
+-- to the standard field instead of the template field they may have meant. A record-level
+-- (non-CITN) template field sharing a reserved name isn't a real collision and isn't
+-- flagged -- it was never reachable through citeSource's fields regardless of naming,
+-- since citeSource only ever accepts CITN fields (see validateFields's expectCitation
+-- branch below), so there's no caller intent this could actually be misrouting.
+function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   if not ptrTarget or ptrTarget:IsNull() then
     error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to")
   end
-  return resolveSource(sourceNameOrId)
+  local source = resolveSource(sourceNameOrId)
+  fields = fields or {}
+
+  local standardFields, templateFields = splitCitationFields(fields)
+  validateStandardFields(standardFields)
+
+  local defs = nil
+  if next(fields) ~= nil then
+    local template = linkedTemplate(source)
+    if template and not template:IsNull() then
+      defs = fieldDefs(template)
+      for code in pairs(standardFields) do
+        if defs[code] and defs[code].citation then
+          error("field '" .. code .. "' is defined by this source's template as a citation-specific field, which collides with the reserved standard citation field of the same name - rename the template field, or omit '" .. code .. "' from this call's fields and set the template field manually (fhGetMetafieldShortcut + fhCreateItem + fhSetValueAsText) on the citation pointer a fields-less citeSource call returns")
+        end
+      end
+    end
+    if next(templateFields) ~= nil then
+      if not defs then
+        error("citeSource: source '" .. currentText(source) .. "' has no template - can't set citation-specific template fields on an untemplated source")
+      end
+      validateFields(templateFields, defs, true)
+    end
+  end
+
+  return source, standardFields, templateFields, defs
 end
 
--- sourceHelper.citeSource(ptrTarget, sourceNameOrId)
+-- sourceHelper.citeSource(ptrTarget, sourceNameOrId, fields)
 -- Attaches a SOUR citation to ptrTarget, resolving the source the same by-id-or-by-title
 -- way createSourceFromTemplate resolves a template. ptrTarget may be an INDI/FAM record
 -- (a Whole-record citation, per FH's own "citation for the record as a whole" concept —
 -- see docs/adr/0006-cite-every-fact-a-source-supports.md) or any Fact item already
--- positioned by the caller (a Fact-level citation). Errors on an unresolvable source or an
--- invalid ptrTarget (delegated to validateCiteSource above) before creating anything, so a
--- bad call never leaves a stray citation behind.
-function M.citeSource(ptrTarget, sourceNameOrId)
-  local source = M.validateCiteSource(ptrTarget, sourceNameOrId)
+-- positioned by the caller (a Fact-level citation). Errors on an unresolvable source, an
+-- invalid ptrTarget, or an invalid fields entry (all delegated to validateCiteSource above)
+-- before creating anything, so a bad call never leaves a stray citation behind.
+--
+-- Returns the created citation's own live item Pointer (issue #99) -- not a qualifiedId,
+-- since a citation is a child item nested under a record/Fact, not a standalone record
+-- with one of its own -- so a caller can keep working on it directly (e.g. an FTF-authored
+-- Text beyond what fields' plain-string Text supports) within the same run_lua call.
+function M.citeSource(ptrTarget, sourceNameOrId, fields)
+  local source, standardFields, templateFields, defs = M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   local citation = fhCreateItem("SOUR", ptrTarget)
   fhSetValueAsLink(citation, source)
+
+  for code, value in pairs(standardFields) do
+    setStandardField(citation, code, value)
+  end
+  for code, value in pairs(templateFields) do
+    setField(citation, value, defs[code])
+  end
+
+  return citation
 end
 
 -- Field types whose fieldFilters value is matched exactly, not as a substring -- Enum
@@ -317,20 +519,6 @@ local function valueMatches(value, wantedValue, fieldType)
     return value == wantedValue
   end
   return tostring(value):lower():find(tostring(wantedValue):lower(), 1, true) ~= nil
-end
-
--- Finds the template a SOUR record is linked to (its own _SRCT child's link target), or
--- nil if it isn't a templated source at all.
-local function linkedTemplate(sourPtr)
-  local child = fhNewItemPtr()
-  child:MoveToFirstChildItem(sourPtr)
-  while child:IsNotNull() do
-    if fhGetTag(child) == "_SRCT" then
-      return fhGetValueAsLink(child)
-    end
-    child:MoveNext()
-  end
-  return nil
 end
 
 -- Resolves one field's value directly off ptr via its own ~PREFIX-CODE shortcut Data
