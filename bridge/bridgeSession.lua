@@ -46,7 +46,7 @@
 -- (issue #22) — that block is about keeping filesystem access out of Claude-authored
 -- scripts, not about this file's own dialog code, which calls fhUtils directly.
 
-socket = require("socket")
+local socket = require("socket")
 require("iuplua")
 iup.SetGlobal("CUSTOMQUITMESSAGE", "YES") -- avoids known FH/IUP interaction issue on quit
 
@@ -82,8 +82,6 @@ local RECENT_ACTIVITY_CONFIRM_SECONDS = 10
 -- read the same as before this issue #88 extraction. Set on the dialog itself (dlg.bgcolor),
 -- not lblStatus -- IUP native labels don't reliably honour BGCOLOR, confirmed not working live.
 local STATUS_COLOR_STOPPED   = sessionPolicy.STATUS_COLOR_STOPPED
-local STATUS_COLOR_READONLY  = sessionPolicy.STATUS_COLOR_READONLY
-local STATUS_COLOR_READWRITE = sessionPolicy.STATUS_COLOR_READWRITE
 local STATUS_COLOR_ERROR     = sessionPolicy.STATUS_COLOR_ERROR
 local server = nil
 local lastActivityTime = nil

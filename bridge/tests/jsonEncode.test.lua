@@ -39,10 +39,10 @@ local hasCount = multiKey:find('"count":3', 1, true) ~= nil
 local looksLikeObject = multiKey:match('^{.*}$') ~= nil
 assertEqual(hasName and hasCount and looksLikeObject, true, 'multi-key object contains both fields')
 
-local ok, err = pcall(json.encode, 0 / 0)
+local ok = pcall(json.encode, 0 / 0)
 assertEqual(ok, false, 'NaN raises an error rather than emitting invalid JSON')
 
-local ok2, err2 = pcall(json.encode, 1 / 0)
+local ok2 = pcall(json.encode, 1 / 0)
 assertEqual(ok2, false, 'Infinity raises an error rather than emitting invalid JSON')
 
 if failures > 0 then

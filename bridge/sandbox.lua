@@ -250,28 +250,20 @@ function M.build(accessMode)
     end
   end
 
-  -- logActivity really does mutate the tree (creates/updates a _RNOT record), so it must
-  -- still flip tracker.wrote exactly like every other write primitive -- a script that
-  -- calls only logActivity and then errors must stay eligible for ADR 0005's existing
-  -- rollback path. Composes trackedWrite rather than reimplementing its wrote-flip, and
-  -- additionally flips tracker.logged, which trackedWrite alone can't do, since that flag
-  -- needs to mean "logActivity specifically was called," not "some write happened" (issue
-  -- #43, docs/adr/0012).
-  local function trackedLog(fn)
-    local write = trackedWrite(fn)
-    return function(...)
-      tracker.logged = true
-      return write(...)
-    end
-  end
+  -- logActivity really does mutate the tree (creates/updates a _RNOT record), so a call to
+  -- it must still flip tracker.wrote exactly like every other write primitive -- a script
+  -- that calls only logActivity and then errors must stay eligible for ADR 0005's existing
+  -- rollback path. Was previously wrapped in a plain trackedLog(fn) built the same way as
+  -- trackedWrite above (issue #43, docs/adr/0012); superseded below by validatedTrackedLog
+  -- once logActivity grew its own pure validation phase (issue #97).
 
   -- validatedTrackedWrite(validateFn, fn) / validatedTrackedLog(validateFn, fn) (issue #97):
   -- for the three fhBridge.* composite functions (createSourceFromTemplate/citeSource/
   -- logActivity) that each now expose their own pure validation half -- calls validateFn(...)
   -- first, untracked, so a call it rejects never arms tracker.wrote/tracker.logged at all,
   -- and only calls the real fn(...) (which re-validates internally too, harmlessly -- see
-  -- each validateFn's own comment) once validation has actually passed. Plain trackedWrite/
-  -- trackedLog above flip the tracker purely from being entered, before fn(...) even runs --
+  -- each validateFn's own comment) once validation has actually passed. Plain trackedWrite
+  -- above flips the tracker purely from being entered, before fn(...) even runs --
   -- correct for a raw fh* write primitive (the call itself IS the mutation, so there's
   -- nothing to validate first), but wrong for these three: each has a genuine, separate,
   -- pure validation phase (resolveTemplate/resolveSource/the ptrRecord-action checks), and

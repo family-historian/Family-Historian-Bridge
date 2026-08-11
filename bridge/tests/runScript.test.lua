@@ -146,7 +146,7 @@ do
 end
 
 do
-  local response, rethrow = runScript.run("error('boom')")
+  local _, rethrow = runScript.run("error('boom')")
   check(rethrow == nil, 'a runtime error with no accessMode argument (defaults read-only) returns no second value')
 end
 

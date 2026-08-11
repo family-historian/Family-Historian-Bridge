@@ -4,7 +4,7 @@
 # There's no CI here (no .github/, no .forgejo/), so this hook is the only thing standing
 # between a broken suite and main. It's cheap enough to be unobtrusive: the whole aggregate
 # -- server (vitest), bridge (lua), installer (node --test) -- runs in under two seconds,
-# and oxlint (Rust-based) adds negligible time on top.
+# and lint (oxlint for server/, luacheck for bridge/) adds negligible time on top.
 #
 # Enabled per clone by `npm run setup:hooks` at the repo root, which points core.hooksPath
 # here. That indirection is what lets the hook live in the repo at all; .git/hooks/ isn't

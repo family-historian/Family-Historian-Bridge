@@ -239,7 +239,7 @@ end
 -- can assert the right builtin name and the right two pointers were passed) and returns
 -- a fixed, simple "matches" rule (Dad Plugin and Self Plugin only) that's just enough to
 -- prove getDescendants actually filters its results by the call's return value.
-dnaCallLog = {}
+local dnaCallLog = {}
 fhCallBuiltInFunction = function(strFunctionName, ptrA, ptrB)
   table.insert(dnaCallLog, { fn = strFunctionName, a = ptrA.node, b = ptrB.node })
   return ptrB.node.name == "Dad Plugin" or ptrB.node.name == "Self Plugin"
@@ -474,7 +474,7 @@ do
   end
 
   dnaCallLog = {}
-  local yLine = familyHelper.getAncestors(selfPtr, nil, "y-chrom")
+  familyHelper.getAncestors(selfPtr, nil, "y-chrom")
   check(#dnaCallLog == 4 and dnaCallLog[1].fn == "DnaShareYChrom", 'dnaLine="y-chrom" also works on getAncestors, via the same shared map')
 
   local okBad, errBad = pcall(familyHelper.getAncestors, selfPtr, nil, "x-chrom")
@@ -562,7 +562,7 @@ do
   end
 
   dnaCallLog = {}
-  local mtLine = familyHelper.getDescendants(grandpaPtr, nil, "mtdna")
+  familyHelper.getDescendants(grandpaPtr, nil, "mtdna")
   check(#dnaCallLog == 4 and dnaCallLog[1].fn == "DnaShareMtDna", 'dnaLine="mtdna" calls the DnaShareMtDna built-in instead')
 
   dnaCallLog = {}
@@ -828,9 +828,11 @@ do
 
   local okBadEntry, errBadEntry = pcall(familyHelper.getFactsByTag, ptrFor(indi), { "CENS", 123 })
   check(not okBadEntry, 'getFactsByTag with a non-string entry in the tags array raises an error')
+  check(contains(errBadEntry, "getFactsByTag"), 'the error names the function')
 
   local okBadType, errBadType = pcall(familyHelper.getFactsByTag, ptrFor(indi), 123)
   check(not okBadType, 'getFactsByTag with a non-string, non-table tags argument raises an error')
+  check(contains(errBadType, "getFactsByTag"), 'the error names the function')
 end
 
 ------------------------------------------------------------------
@@ -872,6 +874,7 @@ do
 
   local okBadPrefix, errBadPrefix = pcall(familyHelper.getAllDetails, "H1")
   check(not okBadPrefix, 'a qualified id with an unresolvable prefix (Header) raises an error')
+  check(contains(errBadPrefix, "H1"), 'the error names the malformed id given')
 
   local okMissing, errMissing = pcall(familyHelper.getAllDetails, "I999999")
   check(not okMissing, 'a qualified id for a record that does not exist raises an error')
@@ -913,9 +916,11 @@ do
 
   local okNumber2, errNumber2 = pcall(familyHelper.getFactsByTag, self_.id, "FAMS")
   check(not okNumber2, 'getFactsByTag also rejects a bare number')
+  check(contains(errNumber2, "qualified id string"), 'the error explains what was expected')
 
   local okNumber3, errNumber3 = pcall(familyHelper.getFamilyGroup, self_.id, "parents")
   check(not okNumber3, 'getFamilyGroup also rejects a bare number (Individual-only functions are not exempted)')
+  check(contains(errNumber3, "qualified id string"), 'the error explains what was expected')
 
   local okNumber4 = pcall(familyHelper.getAncestors, self_.id)
   check(not okNumber4, 'getAncestors also rejects a bare number')

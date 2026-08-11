@@ -204,7 +204,7 @@ local function toDate(value)
   return value
 end
 
-local function setField(sour, code, value, def)
+local function setField(sour, value, def)
   local item = fhCreateItem(shortcutFor(def), sour)
   if def.type == "Date" then
     fhSetValueAsDate(item, toDate(value))
@@ -248,7 +248,7 @@ function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
   fhSetValueAsLink(link, template)
 
   for code, value in pairs(fields) do
-    setField(sour, code, value, defs[code])
+    setField(sour, value, defs[code])
   end
 
   if transcription then

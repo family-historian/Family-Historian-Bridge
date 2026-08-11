@@ -565,7 +565,7 @@ check(not ok3, 'Enum value not among the declared options raises an error')
 -- Ambiguous / missing template name or id
 ------------------------------------------------------------------
 
-local dupe = buildTemplate("Civil Registration Certificate")
+buildTemplate("Civil Registration Certificate")
 local okDupe, errDupe = pcall(sourceHelper.createSourceFromTemplate, "Civil Registration Certificate", {})
 check(not okDupe, 'ambiguous template name (two templates, same name) raises an error')
 check(contains(errDupe, '2'), 'ambiguous-name error mentions the match count')
@@ -649,7 +649,7 @@ check(not okBadTitle, 'unknown source title raises an error')
 check(contains(errBadTitle, 'No Such Source'), 'missing-title error names the title that was looked for')
 check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source title is not found')
 
-local dupeSource = buildSource("Birth certificate of Nellie Record, 15 November 1895")
+buildSource("Birth certificate of Nellie Record, 15 November 1895")
 local okDupeCite, errDupeCite = pcall(sourceHelper.citeSource, badIdTarget, "Birth certificate of Nellie Record, 15 November 1895")
 check(not okDupeCite, 'ambiguous source title (two sources, same title) raises an error')
 check(contains(errDupeCite, '2'), 'ambiguous-title error mentions the match count')
