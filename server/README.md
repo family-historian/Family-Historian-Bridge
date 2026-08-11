@@ -31,7 +31,14 @@ npm run build
 ```bash
 npm run typecheck
 npm test
+npm run lint
 ```
+
+`npm run lint` runs oxlint (with `--type-aware`, via `oxlint-tsgolint`) against `src/`.
+typescript-eslint is not usable here — its peer dependency range
+(`typescript >=4.8.4 <6.1.0`) excludes this repo's `typescript@^7` pin, and TS7 support was
+closed as "not planned" upstream. `oxlint-tsgolint` is built directly on typescript-go/TS7
+instead, so its type-aware rules work against this repo's compiler version.
 
 `npm test` from the repo root runs this suite plus the bridge (Lua) and installer
 (`node --test`) suites — that is the one the release scripts gate on.
