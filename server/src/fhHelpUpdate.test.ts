@@ -147,8 +147,7 @@ describe("checkFhHelpUpdates", () => {
   it("reports 'error' using String(err) when the fetch throws something that isn't an Error", async () => {
     const deps = fakeDeps({
       fetchCorpus: async () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- deliberately a
-        // non-Error throw, to exercise the String(err) fallback branch.
+        // deliberately a non-Error throw, to exercise the String(err) fallback branch.
         throw "connection reset";
       },
     });
