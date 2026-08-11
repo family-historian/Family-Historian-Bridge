@@ -115,6 +115,7 @@ const BLANK_TITLE_FALLBACK = "plugin";
 function sanitizeFilenameBase(title: string): string {
   const trimmed = title.trim();
   const base = trimmed.length > 0 ? trimmed : BLANK_TITLE_FALLBACK;
+  // oxlint-disable-next-line no-control-regex -- intentional: stripping control chars is the point.
   return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
 }
 
