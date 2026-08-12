@@ -14,7 +14,7 @@
 -- HUSB/WIFE/CHIL, an INDI's NAME/SEX/BIRT/FAMC/FAMS, a BIRT's DATE/PLAC), so the fake
 -- MoveNext must actually honor "SAME_TAG" vs the default "ANY", not just advance an index.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 
 local failures = 0
 

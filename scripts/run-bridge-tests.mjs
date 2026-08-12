@@ -51,15 +51,34 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+// Bounds any single test file (issue: a Lua interpreter with a broken debug.sethook
+// count-hook lets runScript.test.lua's runaway-loop check spin forever instead of
+// aborting in ~10s as it expects -- reproduced 2026-08-12 against a Windows Lua 5.1.5
+// build, which sat at 100% CPU for 28 minutes before being killed by hand. Without this
+// timeout that hang is silent: spawnSync has no default bound and just blocks the whole
+// release script. See docs/release.md's "Risks" section for the full story and why Lua
+// 5.3.x (matching FH's own embedded runtime) is what actually fixed it.
+const TEST_TIMEOUT_MS = 30_000;
+
 let ran = 0;
 let failure = null;
 for (const file of files) {
   const result = spawnSync(lua, [join(testsDir, file)], {
     cwd: repoRoot,
     stdio: "inherit",
+    timeout: TEST_TIMEOUT_MS,
   });
   ran += 1;
-  const ok = !result.error && result.status === 0;
+  const timedOut = result.signal !== null;
+  const ok = !result.error && !timedOut && result.status === 0;
+  if (timedOut) {
+    console.error(
+      `\n${file} did not finish within ${TEST_TIMEOUT_MS}ms and was killed. This usually ` +
+        `means the Lua interpreter's debug.sethook count-hook isn't firing correctly ` +
+        `(seen with Lua 5.1.5 on Windows) -- check 'lua -v' reports 5.3.x, matching FH's ` +
+        `own embedded runtime, not an older/different build.`,
+    );
+  }
   console.log(`${ok ? "ok" : "FAIL"} ${file}`);
   if (!ok) {
     failure = file;

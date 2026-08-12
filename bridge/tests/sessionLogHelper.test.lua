@@ -6,7 +6,7 @@
 -- fhSetValueAsRichText -- same style as sourceHelper.test.lua's fake tree, not reused
 -- directly since sessionLogHelper.lua only ever creates records, never walks existing ones.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 
 local failures = 0
 

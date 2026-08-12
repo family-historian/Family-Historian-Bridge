@@ -25,6 +25,21 @@ if ! command -v "$LUA_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
+# Version matters, not just presence (docs/release.md "Risks" section, 2026-08-12): Lua
+# 5.1.5's debug.sethook count-hook was found badly broken on a Windows build, silently
+# defeating bridge/watchdog.lua's runaway-script protection and hanging the test suite for
+# 28 minutes with no diagnostic. `brew install lua` isn't pinned to any version -- as of
+# writing it tracks 5.4.x, not the 5.3.x FH itself actually embeds (confirmed in
+# docs/research/fhu-introspection-feasibility.md). This only warns rather than blocking,
+# since 5.4 hasn't actually been confirmed broken here the way 5.1.5 was -- but don't take
+# that as a pass; check against FH's real Lua version if this ever needs re-verifying.
+LUA_VERSION="$("$LUA_BIN" -v 2>&1 || true)"
+if [[ "$LUA_VERSION" != *"Lua 5.3"* ]]; then
+  echo "Warning: '$LUA_BIN' reports '$LUA_VERSION', not Lua 5.3.x." >&2
+  echo "FH's own embedded Lua runtime is 5.3.5 -- a different major/minor version is exactly" >&2
+  echo "the kind of mismatch that silently broke debug.sethook on Windows (see docs/release.md)." >&2
+fi
+
 echo "== Running all test suites =="
 # Aggregate target at the repo root: server (vitest) + bridge (lua) + installer
 # (node --test). Runs first so a release can't be built over a failing suite.

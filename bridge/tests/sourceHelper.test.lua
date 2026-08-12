@@ -18,7 +18,7 @@
 -- touches, matching what fhGetValueType needs to tell a text/date/link/richtext field
 -- apart from a complex/record item (valueType "").
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 
 local failures = 0
 

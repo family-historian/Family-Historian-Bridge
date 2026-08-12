@@ -1,7 +1,7 @@
 -- Standalone tests for timeoutDisplay.lua. Run with: lua bridge/tests/timeoutDisplay.test.lua
 -- Pure formatting — no FH/socket/iup dependency.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 local timeoutDisplay = require('timeoutDisplay')
 
 local failures = 0

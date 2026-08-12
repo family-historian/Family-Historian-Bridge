@@ -1,7 +1,7 @@
 -- Standalone tests for requestFraming.lua. Run with: lua bridge/tests/requestFraming.test.lua
 -- Pure string parsing — no FH/socket/iup dependency.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 local requestFraming = require('requestFraming')
 
 local failures = 0

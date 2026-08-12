@@ -1,7 +1,7 @@
 -- Standalone tests for bridge/scripts/bundler.lua. Run with: lua bridge/tests/build.test.lua
 -- No FH/socket/iup dependency, same as the rest of bridge/tests/.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../scripts/?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../scripts/?.lua'
 local bundler = require('bundler')
 
 local failures = 0
@@ -29,7 +29,7 @@ end
 -- Real entry file, so the splice-point and install-comment anchors are exercised against
 -- the actual text they have to match in production — but with fake, easy-to-assert module
 -- bodies standing in for the real (large) module files.
-local realEntryPath = arg[0]:match("(.*/)") .. '../Claude MCP Bridge.fh_lua'
+local realEntryPath = arg[0]:match("(.*[/\\])") .. '../Claude MCP Bridge.fh_lua'
 local realEntrySource = readFile(realEntryPath)
 
 local function fakeReadModule(name)
@@ -175,7 +175,7 @@ assertEqual(ok, false, 'a changed Install comment makes buildBundle fail loudly,
 -- Full integration: bundle the real modules from disk (same as build.lua's CLI) and check
 -- the result is syntactically valid Lua.
 local function realReadModule(name)
-  return readFile(arg[0]:match("(.*/)") .. '../' .. name .. '.lua')
+  return readFile(arg[0]:match("(.*[/\\])") .. '../' .. name .. '.lua')
 end
 local realBundled = bundler.buildBundle(realEntrySource, realReadModule, TEST_PACKAGE_VERSION)
 local chunk, loadErr = load(realBundled)

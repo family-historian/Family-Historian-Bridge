@@ -2,7 +2,7 @@
 -- Pure table inspection — no FH/socket/iup dependency. Verifies both halves of the
 -- allowlist: the basics are present, and nothing dangerous leaked in by accident.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 local sandbox = require('sandbox')
 
 local failures = 0

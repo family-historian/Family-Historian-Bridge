@@ -3,7 +3,7 @@
 -- run_lua request goes through, minus the socket framing (covered manually — see the
 -- spec's Testing Decisions).
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 local runScript = require('runScript')
 
 local failures = 0

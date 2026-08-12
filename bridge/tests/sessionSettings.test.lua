@@ -3,7 +3,7 @@
 -- process; stub it via package.loaded the same way runScript.test.lua/sandbox.test.lua do,
 -- so require('fhUtils') inside sessionSettings.load()/save() resolves to the stub instead.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 
 local failures = 0
 

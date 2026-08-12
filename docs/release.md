@@ -234,3 +234,22 @@ platform installer/zip from `installer/output/` too if this release is publishin
   artifacts the `installer/` scripts already build — the current split, where the scripted
   path and the released path are different artifacts, is the thing most likely to confuse
   the next person cutting a release.
+- **The Lua interpreter's version matters, not just its presence.** Discovered 2026-08-12:
+  a Windows machine had `lua.exe` resolving to Lua 5.1.5, whose `debug.sethook` count-mode
+  hook dramatically undercounts VM instructions (reproduced: ~333k hook calls expected for
+  a bounded loop, ~12 actually fired). `bridge/watchdog.lua`'s runaway-script protection
+  relies on that hook firing reliably — under 5.1.5 it effectively never aborted, so
+  `runScript.test.lua`'s own watchdog check (deliberately runs `while true do end`) spun at
+  100% CPU for 28 minutes before being killed by hand, silently hanging the whole release
+  script with no diagnostic. Fixed by building Lua **5.3.5** from the official source at
+  lua.org and installing it as `C:\Utils\lua\lua.exe` — 5.3.5 also matches FH's own embedded
+  Lua runtime (confirmed in `docs/research/fhu-introspection-feasibility.md`), which is the
+  version that actually matters here, not just "some Lua 5.x on PATH". `release-mac.sh`'s
+  `brew install lua` is not pinned to any version and may install something newer (Homebrew
+  currently tracks 5.4.x) — check `lua -v` reports 5.3.x before relying on it for a release;
+  a mismatched interpreter version is exactly the kind of thing this bug shows can pass
+  silently until something happens to depend on `debug.sethook` behaving correctly.
+  `scripts/run-bridge-tests.mjs` now bounds every test file to 30s and prints a diagnostic
+  pointing at this if one hangs, so a future recurrence fails fast instead of hanging
+  silently — but the underlying version mismatch is still worth fixing at the source
+  wherever it's found, not just relying on the timeout to catch it after the fact.

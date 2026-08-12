@@ -1,7 +1,7 @@
 -- Standalone tests for versionCompare.lua. Run with: lua bridge/tests/versionCompare.test.lua
 -- Pure string/number comparison — no FH/socket/iup dependency.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 local versionCompare = require('versionCompare')
 
 local failures = 0

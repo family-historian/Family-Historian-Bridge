@@ -1,7 +1,7 @@
 -- Standalone tests for sessionPolicy.lua. Run with: lua bridge/tests/sessionPolicy.test.lua
 -- Pure decisions -- no FH/socket/iup dependency.
 
-package.path = package.path .. ';' .. arg[0]:match("(.*/)") .. '../?.lua'
+package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
 local sessionPolicy = require('sessionPolicy')
 
 local failures = 0
