@@ -46,11 +46,11 @@ export function buildManifest({ version }) {
   return {
     manifest_version: "0.4",
     name: "fh-mcp-bridge",
-    display_name: "FH MCP Bridge",
+    display_name: "Family Historian Bridge",
     version,
     description:
       "Lets Claude query and edit your open Family Historian project via a companion FH plugin.",
-    author: { name: "Jane" },
+    author: { name: "Jane Taubman" },
     server: {
       type: "node",
       // Relative to the bundle root -- build-dxt.mjs stages the built server here.

@@ -25,9 +25,14 @@
 
 [Setup]
 AppId={{B6C6C6D1-6F0E-4B3F-9C7B-2A6D6C6F5E10}
-AppName=FH MCP Bridge
+AppName=Family Historian Bridge
 AppVersion={#AppVersion}
-AppPublisher=Jane
+AppPublisher=Jane Taubman
+; DefaultDirName deliberately still says "FH MCP Bridge", not "Family Historian Bridge" --
+; changing the install path would make a future build treat any existing install as a
+; separate app (a fresh copy at a new path, not an upgrade), orphaning it rather than
+; updating it in place. AppName/the Start Menu entry are user-visible text and change freely;
+; the folder path is a stable identifier and doesn't follow.
 DefaultDirName={localappdata}\Programs\FH MCP Bridge
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest

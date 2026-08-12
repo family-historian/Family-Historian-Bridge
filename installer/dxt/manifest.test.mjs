@@ -64,7 +64,7 @@ test("buildManifest sets the required fields the v0.4 schema demands", () => {
   assert.equal(manifest.version, "0.6.0");
   assert.equal(typeof manifest.description, "string");
   assert.ok(manifest.description.length > 0);
-  assert.equal(manifest.author.name, "Jane");
+  assert.equal(manifest.author.name, "Jane Taubman");
   assert.ok(manifest.server);
 });
 

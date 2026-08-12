@@ -114,6 +114,19 @@ restart Claude Desktop) after adding the config, not before.
      expected.
 2. **Ask Claude your question**, in plain English, in your normal conversation. No fixed
    command list — ask however you'd ask a person.
+
+   For the first question of a conversation, it helps to say explicitly that Claude should
+   use the Bridge, so it doesn't default to general knowledge or skip a step it should take
+   first:
+
+   > Use the FH MCP Bridge. Call `describe_project` first to see this project's actual
+   > shape, then `search_gedcom_knowledge('run_lua guidance')` before writing any `run_lua`
+   > script — search `search_fh_help`/`search_gedcom_knowledge` for anything you're not
+   > already certain of, don't guess at fh\*/fhu names.
+
+   This isn't required — Claude can usually work it out on its own — but some MCP clients
+   truncate a tool's own description before Claude ever sees it, so spelling this out
+   yourself is a cheap way to make sure nothing gets missed.
 3. If your question is genuinely ambiguous (an unclear place-name spelling, an unspecified
    number of generations), Claude will ask you to clarify rather than guess.
 4. **Click Stop** when you're done to get FH back. If you forget, the Session
