@@ -691,6 +691,42 @@ check(contains(errDupeCite, '2'), 'ambiguous-title error mentions the match coun
 check(sourCountOnTarget(badIdTarget) == 0, 'no SOUR citation created when the source title is ambiguous')
 
 ------------------------------------------------------------------
+-- citeSource/createSourceFromTemplate: a qualified id string (e.g. "S1186") resolves by
+-- id, the same as a bare number -- issue #100. Precedence: an id-shaped string always
+-- resolves as an id, never attempted against Title, even if it happens to be shaped like
+-- a DIFFERENT record type's qualified id -- that falls through to the ordinary Title
+-- match instead of cross-resolving to the wrong tag.
+------------------------------------------------------------------
+
+do
+  local qualifiedIdTarget = fhCreateItem("INDI")
+  local certSourceQualifiedId = fhGetQualifiedRecordId(certSource)
+  sourceHelper.citeSource(qualifiedIdTarget, certSourceQualifiedId)
+  local qualifiedIdCite = findChild(currentNode(qualifiedIdTarget), "SOUR")
+  check(qualifiedIdCite ~= nil and qualifiedIdCite.value == currentNode(certSource),
+    'citeSource resolves a qualified id string (e.g. "S' .. certSourceId .. '") the same as the equivalent bare number')
+
+  local templatedByQualifiedId = sourceHelper.createSourceFromTemplate(fhGetQualifiedRecordId(civilReg), { Reg_No = "1895/Q1/9" })
+  local templatedSourNode
+  for _, n in ipairs(recordsByTag["SOUR"]) do
+    if n.id == templatedByQualifiedId.id then templatedSourNode = n end
+  end
+  local srctLinkByQualifiedId = findChild(templatedSourNode, "_SRCT")
+  check(srctLinkByQualifiedId ~= nil and srctLinkByQualifiedId.value == currentNode(civilReg),
+    'createSourceFromTemplate resolves a qualified id string (e.g. "T' .. civilRegId .. '") the same as the equivalent bare number')
+
+  local okNotFoundQualifiedId, errNotFoundQualifiedId = pcall(sourceHelper.citeSource, qualifiedIdTarget, "S999999")
+  check(not okNotFoundQualifiedId, 'a well-shaped but nonexistent qualified id string raises an error')
+  check(contains(errNotFoundQualifiedId, '999999'), 'the error names the id that was looked for')
+  check(not contains(errNotFoundQualifiedId, 'named'), 'the error is the id-not-found error, not a Title-lookup fallback (no fallback is ever attempted)')
+
+  local wrongTagTarget = fhCreateItem("INDI")
+  local okWrongTag, errWrongTag = pcall(sourceHelper.citeSource, wrongTagTarget, "T4")
+  check(not okWrongTag, 'a string shaped like a DIFFERENT tag\'s qualified id (T4 is a _SRCT shape, not SOUR) is not treated as an id at all')
+  check(contains(errWrongTag, 'named') and contains(errWrongTag, 'T4'), 'it falls through to the ordinary Title match instead, and fails as an unknown title')
+end
+
+------------------------------------------------------------------
 -- citeSource: an invalid ptrTarget errors before any mutation too (issue #96) -- the same
 -- validate-before-mutate coverage as the unknown/ambiguous-source cases above, just for the
 -- other argument. Both cases must fail before fhCreateItem("SOUR", ptrTarget) is ever

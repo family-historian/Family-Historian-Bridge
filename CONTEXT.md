@@ -281,8 +281,11 @@ Fact-level citation is also, informally, "a citation on the record")
 **citeSource**:
 The `fhBridge` helper (`sourceHelper.lua`) that attaches a `SOUR` citation to any target
 item — an `INDI`/`FAM` record (a Whole-record citation) or a specific Fact item — given a
-Source record resolved the same by-id-or-by-title way `createSourceFromTemplate` resolves
-a template. See docs/adr/0006-cite-every-fact-a-source-supports.md for why this exists as
+Source record resolved the same by-id, by-qualified-id-string, or by-title way
+`createSourceFromTemplate` resolves a template (issue #100: a qualified id string like
+"S1186" always resolves as an id, never attempted against Title, even on the coincidence
+of a Title reading the same way). See docs/adr/0006-cite-every-fact-a-source-supports.md
+for why this exists as
 a shared helper instead of each script hand-rolling `fhCreateItem("SOUR", ...)` +
 `fhSetValueAsLink`. Takes an optional third `fields` argument (issue #99, follow-up to
 #98's own closing comment, which left this deliberately untracked until a real need

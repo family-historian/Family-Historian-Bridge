@@ -929,6 +929,29 @@ do
   check(not okNumber5, 'getDescendants also rejects a bare number')
 end
 
+------------------------------------------------------------------
+-- parseQualifiedId (issue #100): tag-scoped id-shape parsing, shared by
+-- sourceHelper.lua's resolveByNameOrId so a caller passing a qualified id string like
+-- "S1186" resolves by id instead of being treated as a Title/NAME lookup. Pure string
+-- parsing against the same QUALIFIED_ID_PREFIX_TAG resolveQualifiedId already uses --
+-- no fixture records needed.
+------------------------------------------------------------------
+
+do
+  check(familyHelper.parseQualifiedId("SOUR", "S1186") == 1186,
+    'parseQualifiedId parses a qualified id string matching the given tag\'s own prefix')
+  check(familyHelper.parseQualifiedId("_SRCT", "T4") == 4,
+    'parseQualifiedId works for a different tag/prefix pair (_SRCT -> T)')
+  check(familyHelper.parseQualifiedId("SOUR", "T4") == nil,
+    'parseQualifiedId returns nil for a shape matching a DIFFERENT tag\'s prefix (T is _SRCT, not SOUR) -- never cross-resolves')
+  check(familyHelper.parseQualifiedId("SOUR", "s1186") == nil,
+    'parseQualifiedId is case-sensitive on the prefix -- lowercase does not match, same as resolveQualifiedId elsewhere')
+  check(familyHelper.parseQualifiedId("SOUR", "S1186x") == nil,
+    'parseQualifiedId rejects a malformed id shape (trailing non-digit)')
+  check(familyHelper.parseQualifiedId("SOUR", "Not a title, just prose") == nil,
+    'parseQualifiedId returns nil (not an error) for an ordinary Title-shaped string')
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

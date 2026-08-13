@@ -104,24 +104,46 @@ local function fieldDefs(srctPtr)
 end
 
 -- Resolves nameOrId to the one record: tag whose readChildText(ptr, nameFieldTag) matches
--- nameOrId case-insensitively (string form), or whose fhGetRecordId matches exactly
--- (number form). Errors on zero or multiple matches. Deliberately walks records by tag
--- rather than using MoveToRecordById, since a number here means "match this id among
+-- nameOrId case-insensitively (string form, not shaped like this tag's own qualified id),
+-- or whose fhGetRecordId matches exactly (number form, or a qualified-id-shaped string
+-- form -- issue #100, e.g. "S1186" for a SOUR lookup). Errors on zero or multiple Title/
+-- NAME matches, or on an id (either form) that doesn't exist. Deliberately walks records
+-- by tag rather than using MoveToRecordById, since an id here means "match this id among
 -- tag records specifically", not "any record with this id". label names the record kind
 -- in error messages (e.g. "_SRCT template", "SOUR source").
+--
+-- Precedence (issue #100): a string shaped like THIS tag's own qualified id
+-- (familyHelper.parseQualifiedId(tag, nameOrId) returning non-nil) always resolves as an
+-- id -- it is never also attempted against Title/NAME, even if some record's Title
+-- literally reads the same way (e.g. a SOUR titled "S78" is not reachable via the string
+-- "S78" once a real id 78 exists) -- matching familyHelper.resolvePointer's own
+-- "any qualified id string is always an id, never a name" precedent, the closest existing
+-- rule in this codebase. A string shaped like a DIFFERENT tag's qualified id (e.g. "T4"
+-- passed to a SOUR lookup) is not recognized as an id at all here -- parseQualifiedId is
+-- tag-scoped and returns nil -- so it falls through to the Title/NAME match below the
+-- same as any other non-matching string, rather than silently resolving the wrong tag.
+local function resolveById(tag, label, id)
+  local match = findRecord(tag, function(ptr)
+    return fhGetRecordId(ptr) == id
+  end)
+  if not match then
+    error("no " .. label .. " record with id " .. tostring(id))
+  end
+  return match
+end
+
 local function resolveByNameOrId(tag, nameFieldTag, label, nameOrId)
   if type(nameOrId) == "number" then
-    local match = findRecord(tag, function(ptr)
-      return fhGetRecordId(ptr) == nameOrId
-    end)
-    if not match then
-      error("no " .. label .. " record with id " .. tostring(nameOrId))
-    end
-    return match
+    return resolveById(tag, label, nameOrId)
   end
 
   if type(nameOrId) ~= "string" then
     error(label .. " lookup must be a string (name/title) or number (record id)")
+  end
+
+  local qualifiedId = familyHelper.parseQualifiedId(tag, nameOrId)
+  if qualifiedId then
+    return resolveById(tag, label, qualifiedId)
   end
 
   local wanted = nameOrId:lower()

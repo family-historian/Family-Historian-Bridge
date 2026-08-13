@@ -36,11 +36,20 @@ local QUALIFIED_ID_PREFIX_TAG = {
   U = "SUBM", B = "SUBN", P = "_PLAC", E = "_RNOT", T = "_SRCT",
 }
 
+-- Splits a string into its qualified-id-shaped prefix letter and numeric text (e.g.
+-- "I219" -> "I", "219"), or nil if it isn't shaped like one at all -- the one place this
+-- pattern is written, shared by resolveQualifiedId (any tag, error on mismatch) and
+-- parseQualifiedId (one specific tag, nil on mismatch) below so the shape itself can't
+-- drift between the two.
+local function qualifiedIdShape(value)
+  return value:match("^(%a)(%d+)$")
+end
+
 -- Resolves a qualified id string (e.g. "I219") to a live Item Pointer via
 -- MoveToRecordById, or raises a clear error if the prefix isn't a resolvable record
 -- type or no such record exists.
 local function resolveQualifiedId(qualifiedId)
-  local prefix, numText = qualifiedId:match("^(%a)(%d+)$")
+  local prefix, numText = qualifiedIdShape(qualifiedId)
   local tag = prefix and QUALIFIED_ID_PREFIX_TAG[prefix]
   if not tag then
     error("could not resolve qualified id '" .. tostring(qualifiedId) .. "' -- expected a " ..
@@ -52,6 +61,24 @@ local function resolveQualifiedId(qualifiedId)
     error("no " .. tag .. " record found for qualified id '" .. qualifiedId .. "'")
   end
   return ptr
+end
+
+-- Tag-scoped counterpart to resolveQualifiedId above: returns the parsed numeric id if
+-- value has the id shape this specific tag's own qualified id uses (e.g. "S1186" for
+-- SOUR, via the same QUALIFIED_ID_PREFIX_TAG resolveQualifiedId reads) --
+-- or nil (never an error) if it doesn't, so a caller can fall through to a different
+-- interpretation of the same string (issue #100: sourceHelper.lua's resolveByNameOrId
+-- uses this to recognize a qualified id string like "S1186" before falling into its own
+-- Title/NAME text-match branch). Deliberately tag-scoped rather than reusing
+-- resolveQualifiedId's own global prefix lookup: a string shaped like a DIFFERENT tag's
+-- qualified id (e.g. "T4", a _SRCT template id, passed to a SOUR lookup) must not resolve
+-- here at all -- it means "not this tag's id", not "some other record entirely" -- so it
+-- falls through the same as any other non-matching string would.
+local function parseQualifiedId(tag, value)
+  if type(value) ~= "string" then return nil end
+  local prefix, numText = qualifiedIdShape(value)
+  if not prefix or QUALIFIED_ID_PREFIX_TAG[prefix] ~= tag then return nil end
+  return tonumber(numText)
 end
 
 -- Every public function's pointer argument goes through this first: a string is
@@ -86,6 +113,11 @@ end
 -- require()s this module (for getAllDetails), so this just reuses the one resolution
 -- rule instead of a second copy.
 M.resolvePointer = resolvePointer
+
+-- Exported for the same reason as resolvePointer above: sourceHelper.lua's
+-- resolveByNameOrId (issue #100) reuses this rather than hand-rolling a second,
+-- independently maintained prefix regex per tag.
+M.parseQualifiedId = parseQualifiedId
 
 -- Individual record summary -- every getFamilyGroup/getAncestors entry carries one of
 -- these instead of a pointer, see the module comment above.
