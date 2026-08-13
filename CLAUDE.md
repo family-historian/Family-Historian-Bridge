@@ -3,6 +3,7 @@ query a user's own open FH project directly (no GEDCOM export) by sending Lua sc
 companion FH plugin over a local socket.
 
 ## Agent skills
+Be extremely concise. Sacrifice grammar for the sake of concision.
 
 ### Issue tracker
 

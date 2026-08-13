@@ -224,14 +224,6 @@ question sent (the idle auto-Stop). Just click Start again.
 open, most likely an earlier copy of the plugin still running in FH's Plugin Editor. Close
 any other running instance and try again.
 
-**Claude reports "the old bridge_prototype_v2 plugin is answering, not the current
-Bridge"** — an earlier prototype plugin (title bar: "FH Bridge (prototype)", Start/Stop
-only, no Read-only/Read-write toggle) is still running and holding port 8734. Its dialog
-is **modal**, so while it's up you can't reach Tools -> Plugins to load the real
-`Claude MCP Bridge.fh_lua` — Stop *and close* its window first, then load and Run `Claude MCP Bridge.fh_lua`.
-The current Bridge's dialog is titled plainly "Claude MCP Bridge" and has the Read-only/Read-write
-selector.
-
 **Claude's answer looks wrong** — Claude runs a fresh Lua script per question, so an
 unusual question can occasionally expose a scripting bug rather than a data problem. Ask
 it to double-check or explain how it got the number; it has full context on the script it

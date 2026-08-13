@@ -18,7 +18,22 @@ from this repo) — a user who never updated their FH Plugins folder past that o
 a specific error telling them to switch, rather than a generic connection failure; see
 **run_lua**'s "stale plugin" handshake check in `bridgeResponse.ts`.
 _Avoid_: Plugin (alone, when the bridge specifically is meant), server (reserve "server"
-for the MCP server)
+for the MCP server), Family Historian Bridge (that's the product's install-time/user-facing
+display name — see **Family Historian Bridge** below — not this specific Lua component)
+
+**Family Historian Bridge**:
+The product's user-facing display name — the Claude Desktop extension list entry and the
+Windows Start Menu entry (`installer/dxt/manifest.mjs`'s `display_name`,
+`installer/fh-mcp-bridge.iss`'s `AppName`) — and the name a user may reasonably say or write
+when referring to the installed product as a whole. Distinct from **FH MCP Bridge** (this
+repo/package's own dev-facing name, the title of this file) and from **Claude MCP Bridge**
+(the FH-side plugin's own `@Title`, shown inside FH's Plugins dialog — see **Bridge
+plugin**). Deliberately narrow in scope when introduced: the rename touched only these two
+install-time surfaces, not the repo/package name, docs prose, or the FH-side plugin's
+`@Title`. The Windows installer's `DefaultDirName` deliberately stayed `FH MCP Bridge` so a
+future build upgrades an existing install in place rather than orphaning it at a new path.
+_Avoid_: FH MCP Bridge, Claude MCP Bridge (interchangeably with this — three related names
+now exist for three different surfaces; keep them distinct)
 
 **Session**:
 The period between a user clicking Start and clicking Stop (or an idle timeout, a
