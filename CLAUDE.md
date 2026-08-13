@@ -20,3 +20,7 @@ Before writing or calling any `fh*`/`fhu.*` function whose exact signature you'r
 ### Codebase navigation
 
 Activate Serena for this project at the start of a session (general Serena/code-review-graph/understand-anything selection is in `~/CLAUDE.md`). `.fh_lua` files aren't recognized by Serena's Lua language server — fall back to grep/Read for those. See `docs/agents/codebase-navigation.md`.
+
+### Manual testing against a live FH install
+
+After rebuilding `bridge/dist/Claude MCP Bridge.fh_lua`, ask the user to load it and confirm — don't go hunting for FH's Plugins folder or install state yourself. See `docs/agents/manual-testing.md`.
