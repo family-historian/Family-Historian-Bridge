@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## 0.13.0
+
+### GEDCOM knowledge corpus: typed getter dispatch, Source duplicate detection, corrected save/rollback mechanics, unsolved mid-document RichText edit (issue #107)
+- `run-lua-guidance-call-shape-gotchas` gains a bullet on `fhGetValueType`/`fhGetDataClass`-
+  driven dispatch across the 7 typed `fhGetValueAs*` getters — `fhGetValueAsText` is not
+  universal and silently returns `""` on a Date-class item rather than erroring;
+  `fhGetDisplayText` is a display-formatting helper, not a raw-value substitute.
+- `run-lua-guidance-write-session-rolled-back` corrects the save-cadence mitigation added
+  for #105: stopping the Session (`btnStop`) leaves the Bridge dialog open and does not
+  unlock Family Historian's main window or reset the rollback boundary — confirmed against
+  `bridge/bridgeSession.lua` (Stop only unbinds the listener; `fhInitialise`'s
+  save-required gate only fires at plugin load). Only closing the plugin window
+  (Exit/window X) and reopening it does either.
+- `duplicate-individual-detection-no-builtin-api` generalized to cover Source-record
+  duplicates too (real case: S28/S351, two records for one certificate), with the
+  title-substring scan that found it.
+- New entry `run-lua-guidance-mid-document-richtext-edit-unconfirmed` (confidence:
+  Likely, i.e. unverified live): documents that editing inside an existing large RichText
+  field is unsolved — `SetText`/`tblRecLinks` and `Add*`-append are both known
+  insufficient — and records the untested `Empty()`+full-rebuild-via-`Add*` hypothesis for
+  a future session to verify before relying on it.
+
+### GEDCOM knowledge corpus: writeSessionRolledBack blast radius, SetText/tblRecLinks limitation, full Item Pointer nav method list (issues #104, #105, #106)
+- `run-lua-guidance-write-session-rolled-back` clarifies that a `writeSessionRolledBack`
+  undo is FH's own document-level Undo, discarding every unsaved write in the Session (not
+  just the failing script's own), plus a save-cadence mitigation (issue #105; corrected by
+  the #107 entry above).
+- New entry `run-lua-guidance-settext-reclinks-cannot-add-new-links`:
+  `RichText:SetText`'s `tblRecLinks` parameter only works as an exact passthrough of
+  `GetText()`'s own result; a brand-new or extended table returns false silently.
+  `AddRecordLink` on a live RichText object (per `bridge/sessionLogHelper.lua`'s own
+  working pattern) is the actual way to add a new record link (issue #106).
+- `run-lua-guidance-call-shape-gotchas` gains the full Item Pointer navigation method list
+  (`MoveToFirstChildItem`, `MoveToParentItem`, `MoveNext`/`MovePrev`, `MoveToRecordItem`,
+  `MoveTo`, `MoveToRecordById`, `MoveToFirstRecord`, `MoveNextSpecial`) so sibling/parent/
+  record moves don't get guessed by analogy (issue #104).
+
 ### fhBridge/fhu discoverability: no index/catalog of helper functions in the corpus (issue #102)
 - `fhBridge.*` (12 functions across `familyHelper.lua`/`sourceHelper.lua`/
   `sessionLogHelper.lua`) had zero corpus entries anywhere, unlike raw `fh*` globals
