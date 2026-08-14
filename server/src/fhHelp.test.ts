@@ -11,6 +11,7 @@ import {
   registerFhHelpTools,
   resourceUriForUrl,
   searchFhHelp,
+  SEARCH_FH_HELP_DESCRIPTION,
 } from "./fhHelp.js";
 import type { FhHelpCorpusStore } from "./fhHelp.js";
 
@@ -146,6 +147,25 @@ describe("resourceUriForUrl", () => {
     expect(resourceUriForUrl("/help/fh8/mapwindow.html")).toBe(
       "fh-help:/help/fh8/mapwindow.html",
     );
+  });
+});
+
+describe("SEARCH_FH_HELP_DESCRIPTION byte budget (issue #101 follow-up)", () => {
+  // Same failure class ADR 0011 found for RUN_LUA_DESCRIPTION: MCP clients that load tool
+  // descriptions via deferred/lazy schema-loading truncate around ~2048 bytes. This
+  // description had grown past that point with no safe-zoning of its own -- re-zoned here
+  // while adding the grep_fh_help fallback mention below, rather than growing it further.
+  it("stays under the observed ~2048-byte truncation point", () => {
+    expect(Buffer.byteLength(SEARCH_FH_HELP_DESCRIPTION, "utf8")).toBeLessThan(2000);
+  });
+
+  it("still tells Claude to use grep_fh_help when an excerpt or narrower query isn't enough", () => {
+    expect(SEARCH_FH_HELP_DESCRIPTION).toMatch(/grep_fh_help/);
+  });
+
+  it("still tells Claude to search before writing a run_lua script when uncertain of an API shape", () => {
+    const lower = SEARCH_FH_HELP_DESCRIPTION.toLowerCase();
+    expect(lower).toMatch(/before writing a run_lua script/);
   });
 });
 

@@ -51,6 +51,10 @@
     {
       "name": "search_gedcom_knowledge",
       "bundleDescription": "Search the GEDCOM/FH domain-knowledge corpus (FTF, Shared Facts, Source Templates, ...)."
+    },
+    {
+      "name": "grep_gedcom_knowledge",
+      "bundleDescription": "Full-text search over the GEDCOM/FH domain-knowledge corpus."
     }
   ]
 }

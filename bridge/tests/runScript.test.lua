@@ -276,6 +276,58 @@ do
     'a script tripping both pre-scans in the same run reports both violations, not just the first')
 end
 
+-- Bare-leading-dot Data Reference pre-scan (issue #103, docs/adr/0023): rejects a script
+-- passing a literal Data Reference string starting with a bare '.' (neither the '~'-relative
+-- form nor a full record-level-tag path) to any of the four call shapes that accept one --
+-- MoveTo doesn't error on this, it silently leaves the pointer Null (same for
+-- fhGetItemPtr); fhGetItemText/fhGetDisplayText silently return "" instead. The real
+-- incident: child:MoveTo(otherPtr, '.DATE') (missing the leading '~') never errored, just
+-- left datePtr Null forever, so the loop that checked datePtr:IsNotNull() never matched.
+do
+  local response, rethrow = runScript.run("child:MoveTo(otherPtr, '.DATE')", 'read-only')
+  check(contains(response, '"error"') and contains(response, 'MoveTo') and contains(response, 'leading dot'),
+    'a literal bare-leading-dot MoveTo data reference is rejected before execution')
+  check(rethrow == nil, 'a bare-leading-dot pre-scan rejection returns no second value (nothing executed)')
+end
+
+check(contains(runScript.run("return fhGetItemText(ptr, '.DATE')"), 'leading dot'),
+  'fhGetItemText with a literal bare-leading-dot data reference is rejected')
+check(contains(runScript.run("return fhGetDisplayText(ptr, '.BIRT')"), 'leading dot'),
+  'fhGetDisplayText with a literal bare-leading-dot data reference is rejected')
+check(contains(runScript.run("return fhGetItemPtr(ptr, '.TEXT')"), 'leading dot'),
+  'fhGetItemPtr with a literal bare-leading-dot data reference is rejected')
+
+-- A '~'-relative reference (the correct form) never trips the check -- reaches execution
+-- and fails only because this plain-lua test process has no real MoveTo/fhNewItemPtr
+-- stubbed, same "reaches execution" proof style as the known-good-fh*-name test above.
+check(not contains(runScript.run("child:MoveTo(otherPtr, '~.DATE')"), 'leading dot'),
+  'a correct ~-relative MoveTo data reference does not trip the leading-dot check')
+
+-- A full record-level-tag path (no '~', no leading dot) is the other valid form and must
+-- not trip the check either.
+check(not contains(runScript.run("return fhGetItemText(ptr, 'INDI.BIRT.DATE')"), 'leading dot'),
+  'a full record-level-tag path data reference does not trip the leading-dot check')
+
+-- MoveToFirstChildItem/MoveToFirstRecord/etc. share the "MoveTo" prefix but are entirely
+-- different methods with no Data Reference argument at all -- the pattern requires "MoveTo"
+-- immediately followed by "(", so these never match.
+check(not contains(runScript.run("child:MoveToFirstChildItem(parentPtr, '.FLGS')"), 'leading dot'),
+  'MoveToFirstChildItem is not mistaken for MoveTo by the leading-dot check')
+
+-- Known text-heuristic limitation, same as every other pre-scan here: a data reference
+-- built into a variable first, rather than passed as a literal, isn't caught.
+check(not contains(runScript.run("local ref = '.DATE'; child:MoveTo(otherPtr, ref)"), 'leading dot'),
+  'a bare-leading-dot data reference built into a variable first does not false-positive (known limitation)')
+
+-- Report-both: a script tripping both the leading-dot check and the unrecognized-fh*-call
+-- pre-scan in the same run gets both messages, same "report everything at once" policy as
+-- every other pre-scan pairing.
+do
+  local response = runScript.run("fhGetItemText(ptr, '.DATE'); return fhGetQualifiedId(newest)", 'read-only')
+  check(contains(response, 'leading dot') and contains(response, 'unrecognized') and contains(response, 'fhGetQualifiedId'),
+    'a script tripping both the leading-dot check and the unrecognized-fh*-call pre-scan reports both violations')
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

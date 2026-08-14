@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+### `grep_gedcom_knowledge` tool, mirroring `grep_fh_help` (issue #101)
+- New MCP tool: literal-substring-by-default full-text search over the GEDCOM/FH
+  domain-knowledge corpus, with a `regex: true` option, returning complete matching
+  entries — the same shape `search_gedcom_knowledge` already returns, just without that
+  tool's natural-language token-overlap ranking, which can bury an exact match (e.g. a
+  literal function name) under unrelated entries sharing common words. Default/max match
+  limit is 25 (not `grep_fh_help`'s 10/25) since this corpus is ~40 entries totaling well
+  under 100KB, versus fh-help's ~1000 entries/2.7MB — no real risk of dumping "most of the
+  corpus" the low default guards against there.
+- The shared literal/regex matcher and capped-collection loop behind both grep tools moved
+  into `corpusSearch.ts` (`buildGrepMatcher`/`grepEntries`), generic over either corpus's
+  entry shape — `grep_fh_help` now delegates to the same shared function instead of a
+  second, parallel implementation.
+- `SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION` and `SEARCH_FH_HELP_DESCRIPTION` now point Claude
+  at the matching grep tool when natural-language ranking doesn't surface what's needed.
+
+### Re-safe-zoned `search_fh_help`/`search_gedcom_knowledge` tool descriptions
+- Both descriptions had grown past the ~2048-byte deferred-tool-loading truncation point
+  some MCP clients enforce (the same failure class docs/adr/0011 found and fixed for
+  `RUN_LUA_DESCRIPTION` alone) — `search_gedcom_knowledge`'s had reached 3001 bytes,
+  `search_fh_help`'s 2419, with no safe-zoning of their own. Both trimmed back under the
+  observed cutoff while adding the new grep-tool fallback mention above, rather than
+  growing either further unchecked.
+
+### `RUN_LUA_DESCRIPTION` names `fhBridge` alongside `fhu` as a purpose-built helper to check before hand-rolling (issue #101 follow-up)
+- The existing "before hand-rolling a tree walk, check for a helper" mandate only ever
+  named `fhu`'s helpers — `fhBridge`'s own read-only family/detail query helpers
+  (`getFamilyGroup`/`getAncestors`/etc.) were reachable only via the `"run_lua guidance"`
+  corpus call, not this inline nudge. Widened within the existing ~2KB safe-zone budget.
+
+### GEDCOM knowledge corpus: `MoveTo`'s bare-leading-dot Data Reference gotcha (issue #103)
+- New bullet on `run-lua-guidance-call-shape-gotchas`: a Data Reference passed to `MoveTo`
+  (or `fhGetItemPtr`/`fhGetItemText`/`fhGetDisplayText`) that starts with a bare `.` instead
+  of `~` is neither valid form and silently resolves to "not found" (a Null pointer or an
+  empty string, per call) rather than erroring — cross-references
+  `run-lua-guidance-write-session-rolled-back` for what happens when this surfaces after an
+  earlier write in the same script. Root-caused against a real incident: a birth-certificate
+  transcription session's `child:MoveTo(otherPtr, '.DATE')` (missing the `~`) left a
+  Null-forever pointer, and the resulting "not found" error after an earlier successful
+  write triggered a full write-session rollback the user had to manually confirm past.
+
+### Static pre-scan rejects a literal bare-leading-dot Data Reference (issue #103, docs/adr/0023)
+- `runScript.lua` gains a third pre-scan (alongside the existing write-without-log and
+  unrecognized-fh*-call checks, docs/adr/0012/0022), rejecting a `run_lua` script before
+  execution if it passes a literal Data Reference string starting with a bare `.` to any of
+  `MoveTo`/`fhGetItemPtr`/`fhGetItemText`/`fhGetDisplayText` — the four call shapes FH's
+  plugin API accepts one on, none of which error on this input. Same literal-argument-only
+  heuristic limitation as the existing pre-scans (a reference built into a variable first
+  isn't caught); all three pre-scans' violations are still reported together in one
+  response, not first-match-wins.
+
 ## 0.12.0
 
 ### Teaching workspace: MCP Bridge course for end-user genealogy workflows

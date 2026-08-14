@@ -117,3 +117,67 @@ export function searchEntries<T extends SearchableEntry>(
     excerpt: buildExcerpt(entry.text, query),
   }));
 }
+
+/** Shared by grepFhHelp/grepGedcomKnowledge: a case-insensitive literal-substring matcher
+ * by default, or a case-insensitive regex matcher when isRegex is true. */
+export function buildGrepMatcher(pattern: string, isRegex: boolean): (haystack: string) => boolean {
+  if (isRegex) {
+    const re = new RegExp(pattern, "i");
+    return (haystack) => re.test(haystack);
+  }
+  const needle = pattern.toLowerCase();
+  return (haystack) => haystack.toLowerCase().includes(needle);
+}
+
+export interface GrepResult<T> {
+  matches: T[];
+  totalMatches: number;
+  truncated: boolean;
+}
+
+/** Per-caller tuning: fh-help's corpus (~1000 topics, up to ~50KB each) needs a low
+ * default match count to avoid dumping most of it in one response; gedcom-knowledge's
+ * corpus (~40 entries, a few KB each) can default much higher without ever approaching
+ * maxTotalBytes. Kept as an explicit argument rather than a shared constant so each
+ * caller's own module documents its own reasoning next to its own numbers. */
+export interface GrepLimits {
+  defaultLimit: number;
+  maxLimit: number;
+  maxTotalBytes: number;
+}
+
+/** Full-text grep across a corpus's title/breadcrumb/text (not a truncated excerpt
+ * window like searchEntries) — for when the caller knows a fragment of what they're
+ * looking for but not which entry holds it. Shared by grepFhHelp and
+ * grepGedcomKnowledge; each maps the returned entries into its own result shape. */
+export function grepEntries<T extends SearchableEntry>(
+  corpus: T[],
+  pattern: string,
+  options: { regex?: boolean; limit?: number },
+  limits: GrepLimits,
+): GrepResult<T> {
+  const limit = Math.min(options.limit ?? limits.defaultLimit, limits.maxLimit);
+  const matcher = buildGrepMatcher(pattern, options.regex ?? false);
+
+  const allMatches = corpus.filter(
+    (entry) => matcher(entry.title) || matcher(entry.breadcrumb.join(" ")) || matcher(entry.text),
+  );
+
+  const matches: T[] = [];
+  let totalBytes = 0;
+  for (const entry of allMatches) {
+    if (matches.length >= limit) break;
+    const bytes = Buffer.byteLength(entry.text, "utf8");
+    // The `matches.length > 0` guard lets a single entry through even if it alone
+    // exceeds the byte cap, so one oversized entry can't turn a real match into "no results".
+    if (matches.length > 0 && totalBytes + bytes > limits.maxTotalBytes) break;
+    totalBytes += bytes;
+    matches.push(entry);
+  }
+
+  return {
+    matches,
+    totalMatches: allMatches.length,
+    truncated: matches.length < allMatches.length,
+  };
+}

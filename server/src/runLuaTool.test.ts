@@ -283,6 +283,13 @@ describe("RUN_LUA_DESCRIPTION", () => {
     expect(safeZone).not.toMatch(/matters most for a read-write session/);
   });
 
+  it("names fhBridge alongside fhu as a purpose-built helper to check before hand-rolling a tree walk, within the safe zone (issue #101 follow-up)", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET);
+    expect(safeZone).toMatch(/fhBridge/);
+    expect(safeZone).toMatch(/fhBridge\.getFamilyGroup/);
+  });
+
   it("doesn't tell Claude to call require('fhUtils') for fhu — it's already a global in this sandbox (issue #46/#48)", () => {
     const SAFE_ZONE_BUDGET = 2000;
     const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET).toLowerCase();

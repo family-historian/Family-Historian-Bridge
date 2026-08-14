@@ -23,7 +23,7 @@ Requires an active Bridge Session (user clicks Start in the Bridge dialog). If n
 
 Resolve ambiguity in the user's question before calling this tool — an unspecified generation depth, ambiguous place-name spelling, or unclear date boundary gets confirmed with the user first, not guessed at.
 
-Search first, not optional — call search_fh_help/search_gedcom_knowledge for any FH function, item-pointer method, or fhUtils call not yet confirmed this conversation, for reads and writes alike. Before hand-rolling MoveToFirstRecord/MoveNext or fhCreateItem/fhSetValueAsLink/fhDeleteItem, check whether fhu (already a global here — never require('fhUtils')) has a purpose-built helper: fhu.records/fhu.allItems for iteration, fhu.createIndi/createFact/addFamilyAsChild/addFamilyAsSpouse for mutation.
+Search first, not optional — call search_fh_help/search_gedcom_knowledge for any FH function, item-pointer method, or fhUtils call not yet confirmed this conversation, for reads and writes alike. Before hand-rolling MoveToFirstRecord/MoveNext or fhCreateItem/fhSetValueAsLink/fhDeleteItem, check whether fhu (already a global here — never require('fhUtils')) or fhBridge has a purpose-built helper: fhu.records/fhu.allItems for iteration, fhu.createIndi for mutation, fhBridge.getFamilyGroup/getAncestors for tree walks.
 
 This description may be truncated by your MCP client around 2KB. On your first run_lua call this conversation, call search_gedcom_knowledge("run_lua guidance") once regardless — it returns the gotchas, citeSource, writeSessionRolledBack, fhu-global, logActivity/session-log, and family-query-helper guidance living past this point.
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildExcerpt,
+  buildGrepMatcher,
+  grepEntries,
   searchEntries,
   tokenize,
   tokenMatchScore,
@@ -191,5 +193,98 @@ describe("searchEntries", () => {
   it("attaches a matching excerpt to each result", () => {
     const results = searchEntries(corpus, "map window", 5);
     expect(results[0]?.excerpt).toContain("Map Window");
+  });
+});
+
+describe("buildGrepMatcher", () => {
+  it("matches a literal substring case-insensitively by default", () => {
+    const matcher = buildGrepMatcher("Map Window", false);
+    expect(matcher("the map window shows places")).toBe(true);
+    expect(matcher("no match here")).toBe(false);
+  });
+
+  it("treats the pattern literally, not as regex, unless isRegex is true", () => {
+    const matcher = buildGrepMatcher("Map.Window", false);
+    expect(matcher("Map Window")).toBe(false);
+    expect(matcher("Map.Window")).toBe(true);
+  });
+
+  it("matches as a case-insensitive regex when isRegex is true", () => {
+    const matcher = buildGrepMatcher("select (both|all) records", true);
+    expect(matcher("please SELECT BOTH RECORDS now")).toBe(true);
+  });
+
+  it("throws a descriptive error for an invalid regex pattern", () => {
+    expect(() => buildGrepMatcher("(unclosed", true)).toThrow();
+  });
+});
+
+const GREP_LIMITS = { defaultLimit: 10, maxLimit: 25, maxTotalBytes: 200_000 };
+
+function grepFixture(count: number, text = "Contains the word needle in every entry."): SearchableEntry[] {
+  return Array.from({ length: count }, (_, i) => entry({ title: `Topic ${i}`, breadcrumb: ["Topics"], text }));
+}
+
+describe("grepEntries", () => {
+  it("matches a literal substring in the body even when the title doesn't contain it", () => {
+    const corpus = [entry({ title: "Unrelated", text: "select both records to merge" })];
+    const result = grepEntries(corpus, "select both records", {}, GREP_LIMITS);
+    expect(result.matches).toEqual(corpus);
+  });
+
+  it("returns no matches and totalMatches 0 for a pattern found nowhere", () => {
+    const corpus = [entry({ title: "Unrelated", text: "nothing relevant" })];
+    const result = grepEntries(corpus, "xyzzy nonsense query", {}, GREP_LIMITS);
+    expect(result.matches).toEqual([]);
+    expect(result.totalMatches).toBe(0);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("caps the number of returned matches at the given limit and reports truncation", () => {
+    const corpus = grepFixture(30);
+    const result = grepEntries(corpus, "needle", { limit: 5 }, GREP_LIMITS);
+    expect(result.matches).toHaveLength(5);
+    expect(result.totalMatches).toBe(30);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("defaults to the configured defaultLimit when no limit is given", () => {
+    const corpus = grepFixture(30);
+    const result = grepEntries(corpus, "needle", {}, GREP_LIMITS);
+    expect(result.matches).toHaveLength(10);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("clamps a caller-supplied limit above maxLimit down to maxLimit", () => {
+    const corpus = grepFixture(30);
+    const result = grepEntries(corpus, "needle", { limit: 1000 }, GREP_LIMITS);
+    expect(result.matches).toHaveLength(25);
+  });
+
+  it("caps total returned bytes so a broad pattern can't dump the whole corpus", () => {
+    const bigText = "needle ".repeat(50_000); // ~350KB in one entry
+    const corpus = grepFixture(10, bigText);
+    const result = grepEntries(corpus, "needle", { limit: 10 }, GREP_LIMITS);
+    expect(result.matches.length).toBeLessThan(10);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("still returns at least one match even if that single entry alone exceeds the byte cap", () => {
+    const hugeText = "needle ".repeat(200_000); // ~1.4MB, larger than the byte cap alone
+    const corpus = [entry({ title: "Huge", text: hugeText })];
+    const result = grepEntries(corpus, "needle", {}, GREP_LIMITS);
+    expect(result.matches).toHaveLength(1);
+  });
+
+  it("supports a regex pattern via options.regex", () => {
+    const corpus = [entry({ title: "Unrelated", text: "select both records to merge" })];
+    const result = grepEntries(corpus, "select (both|all) records", { regex: true }, GREP_LIMITS);
+    expect(result.matches).toEqual(corpus);
+  });
+
+  it("respects independently configured limits per caller (e.g. a smaller corpus wanting a higher default)", () => {
+    const corpus = grepFixture(30);
+    const result = grepEntries(corpus, "needle", {}, { defaultLimit: 25, maxLimit: 25, maxTotalBytes: 200_000 });
+    expect(result.matches).toHaveLength(25);
   });
 });

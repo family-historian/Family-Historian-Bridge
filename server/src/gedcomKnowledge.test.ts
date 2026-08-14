@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   getGedcomKnowledgeEntry,
+  grepGedcomKnowledge,
   loadGedcomKnowledgeFromFile,
   parseGedcomKnowledgeCorpus,
+  registerGedcomKnowledgeTools,
   searchGedcomKnowledge,
   SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION,
 } from "./gedcomKnowledge.js";
-import type { GedcomKnowledgeEntry } from "./gedcomKnowledge.js";
+import type { GedcomKnowledgeEntry, GedcomKnowledgeStore } from "./gedcomKnowledge.js";
 import { checkFhHelpUpdates } from "./fhHelpUpdate.js";
 import { parseCorpus as parseFhHelpCorpus } from "./fhHelp.js";
 
@@ -90,6 +95,77 @@ describe("searchGedcomKnowledge", () => {
 
   it("returns an empty array when nothing matches", () => {
     expect(searchGedcomKnowledge(corpus, "xyzzy nonsense query")).toEqual([]);
+  });
+});
+
+describe("grepGedcomKnowledge", () => {
+  const corpus = parseGedcomKnowledgeCorpus(FIXTURE_JSONL);
+
+  it("matches a literal substring in the body even when the title doesn't contain it", () => {
+    const result = grepGedcomKnowledge(corpus, "Rejected always overrides Preferred");
+    expect(result.matches.map((m) => m.id)).toEqual(["fact-flag-vs-record-flag"]);
+  });
+
+  it("returns the complete matching entry, not an excerpt", () => {
+    const result = grepGedcomKnowledge(corpus, "private");
+    const match = result.matches.find((m) => m.id === "private-text");
+    expect(match).toEqual(corpus.find((e) => e.id === "private-text"));
+  });
+
+  it("is case-insensitive by default", () => {
+    const result = grepGedcomKnowledge(corpus, "TABLE");
+    expect(result.matches.map((m) => m.id)).toContain("ftf-tables");
+  });
+
+  it("returns no matches and totalMatches 0 for a pattern found nowhere", () => {
+    const result = grepGedcomKnowledge(corpus, "xyzzy nonsense query");
+    expect(result.matches).toEqual([]);
+    expect(result.totalMatches).toBe(0);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("does not require the pattern to be a literal substring anywhere when regex is requested", () => {
+    const result = grepGedcomKnowledge(corpus, "mark(s)? a (whole|specific)", { regex: true });
+    expect(result.matches.map((m) => m.id)).toEqual(["fact-flag-vs-record-flag"]);
+  });
+
+  it("treats the pattern literally (not as regex) unless regex is requested", () => {
+    const result = grepGedcomKnowledge(corpus, "table.");
+    expect(result.matches).toEqual([]);
+  });
+
+  it("throws a descriptive error for an invalid regex pattern", () => {
+    expect(() => grepGedcomKnowledge(corpus, "(unclosed", { regex: true })).toThrow();
+  });
+
+  it("defaults to a higher match cap than grep_fh_help, matching this corpus's own small size", () => {
+    const manyEntries = Array.from({ length: 30 }, (_, i) =>
+      JSON.stringify({
+        id: `topic-${i}`,
+        title: `Topic ${i}`,
+        breadcrumb: ["Topics"],
+        confidence: "Documented",
+        source: "test",
+        text: "Contains the word needle in every entry.",
+      }),
+    ).join("\n");
+    const bigCorpus = parseGedcomKnowledgeCorpus(manyEntries);
+    const result = grepGedcomKnowledge(bigCorpus, "needle");
+    expect(result.matches).toHaveLength(25);
+    expect(result.totalMatches).toBe(30);
+    expect(result.truncated).toBe(true);
+  });
+});
+
+describe("grepGedcomKnowledge real-corpus case (issue #101)", () => {
+  it("finds fhBridge.getFamilyGroup's documented contract by the literal function name, unburied by the token-overlap fallback a natural-language query falls back to", () => {
+    const corpus = loadGedcomKnowledgeFromFile(
+      fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url)),
+    );
+    const result = grepGedcomKnowledge(corpus, "getFamilyGroup");
+    const match = result.matches.find((m) => m.id === "run-lua-guidance-family-query-helpers");
+    expect(match).toBeDefined();
+    expect(match?.text).toContain("fhBridge.getFamilyGroup(indiPtr, type)");
   });
 });
 
@@ -334,6 +410,14 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText).toMatch(/:YEAR/);
     expect(combinedText.toLowerCase()).toMatch(/dt:compare\(\)|dp:compare\(\)/);
   });
+
+  it("documents that a bare leading-dot MoveTo data reference silently leaves the pointer Null instead of erroring, and cross-references the writeSessionRolledBack risk if it happens after an earlier write (issue #103)", () => {
+    expect(combinedText).toMatch(/MoveTo\(otherPtr, strDataReference\)/);
+    expect(combinedText).toMatch(/~\.DATE/);
+    expect(combinedText.toLowerCase()).toMatch(/bare leading-dot/);
+    expect(combinedText.toLowerCase()).toMatch(/silently leaves the pointer null|silently null/);
+    expect(combinedText).toMatch(/writeSessionRolledBack/);
+  });
 });
 
 describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION topic list (issue #49)", () => {
@@ -341,6 +425,25 @@ describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION topic list (issue #49)", () => {
     const lower = SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION.toLowerCase();
     expect(lower).toMatch(/qualifier code/);
     expect(lower).toMatch(/name qualifiers/);
+  });
+});
+
+describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION byte budget (issue #101 follow-up)", () => {
+  // Same failure class ADR 0011 found for RUN_LUA_DESCRIPTION: MCP clients that load tool
+  // descriptions via deferred/lazy schema-loading truncate around ~2048 bytes. This
+  // description had grown past that point (3001 bytes) with no safe-zoning of its own --
+  // re-zoned here while adding the grep_gedcom_knowledge fallback mention (issue #101),
+  // rather than growing it further.
+  it("stays under the observed ~2048-byte truncation point", () => {
+    expect(Buffer.byteLength(SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION, "utf8")).toBeLessThan(2000);
+  });
+
+  it("tells Claude to use grep_gedcom_knowledge when natural-language ranking buries a match", () => {
+    expect(SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION).toMatch(/grep_gedcom_knowledge/);
+  });
+
+  it("still tells Claude to call search_gedcom_knowledge('run_lua guidance') once near the start of a run_lua conversation", () => {
+    expect(SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION).toContain('"run_lua guidance"');
   });
 });
 
@@ -372,5 +475,96 @@ describe("file separation from check_fh_help_updates (acceptance criterion)", ()
     expect(fhHelpCorpusFileWritten.length).toBeGreaterThan(0);
     const after = loadGedcomKnowledgeFromFile(CORPUS_PATH);
     expect(after).toEqual(before);
+  });
+});
+
+describe("registerGedcomKnowledgeTools", () => {
+  // Registers the tools on a real McpServer and calls them over a real (in-memory) MCP
+  // client connection -- the only way to exercise the registered handler closures
+  // themselves (searchResult/grepResult mapping, error handling), as opposed to the pure
+  // functions (searchGedcomKnowledge, grepGedcomKnowledge) every test above calls
+  // directly. Mirrors fhHelp.test.ts's registerFhHelpTools pattern.
+  async function connectedClient(store: GedcomKnowledgeStore) {
+    const server = new McpServer({ name: "fh-mcp-bridge", version: "0.0.0-test" });
+    registerGedcomKnowledgeTools(server, store);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "gedcomKnowledge-test", version: "0.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    return { client, server };
+  }
+
+  describe("grep_gedcom_knowledge tool", () => {
+    it("returns matches as JSON, untruncated, when everything fits under the limit", async () => {
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "grep_gedcom_knowledge",
+          arguments: { pattern: "Rejected always overrides Preferred" },
+        });
+        expect(result.isError).toBeFalsy();
+        const body = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        expect(body.matches).toHaveLength(1);
+        expect(body.matches[0].id).toBe("fact-flag-vs-record-flag");
+        expect(body.truncated).toBe(false);
+        expect(body.note).toBeUndefined();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("returns a no-match message (not an error) when the pattern matches nothing", async () => {
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "grep_gedcom_knowledge",
+          arguments: { pattern: "xyzzynonexistentterm" },
+        });
+        expect(result.isError).toBeFalsy();
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(text).toContain('No match for "xyzzynonexistentterm" anywhere in the corpus');
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("adds a truncation note when limit caps the returned matches below the total", async () => {
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(FIXTURE_JSONL) });
+      try {
+        // "text" appears in every fixture entry's field name once serialized, but "Doubled"
+        // only appears in private-text and "table" only in ftf-tables -- use breadcrumb
+        // "FTF rich text" instead, shared by exactly two of the three fixture entries.
+        const result = await client.callTool({
+          name: "grep_gedcom_knowledge",
+          arguments: { pattern: "FTF rich text", limit: 1 },
+        });
+        const body = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        expect(body.matches).toHaveLength(1);
+        expect(body.totalMatches).toBe(2);
+        expect(body.truncated).toBe(true);
+        expect(body.note).toContain("Narrow the pattern");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("reports an invalid regex pattern as a tool error instead of throwing through the handler", async () => {
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "grep_gedcom_knowledge",
+          arguments: { pattern: "(unclosed", regex: true },
+        });
+        expect(result.isError).toBe(true);
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(text).toContain("Invalid pattern:");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
   });
 });

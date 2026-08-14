@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { searchEntries } from "./corpusSearch.js";
+import { grepEntries, searchEntries } from "./corpusSearch.js";
 
 export interface FhHelpTopic {
   url: string;
@@ -92,15 +92,6 @@ const GREP_MAX_MATCH_LIMIT = 25;
 // response, even under the match-count cap above.
 const GREP_MAX_TOTAL_BYTES = 200_000;
 
-function buildGrepMatcher(pattern: string, isRegex: boolean): (haystack: string) => boolean {
-  if (isRegex) {
-    const re = new RegExp(pattern, "i");
-    return (haystack) => re.test(haystack);
-  }
-  const needle = pattern.toLowerCase();
-  return (haystack) => haystack.toLowerCase().includes(needle);
-}
-
 /** Full-text grep across the whole corpus (title, breadcrumb, and body), returning the
  * complete text of every matching entry — not a truncated excerpt window like
  * searchFhHelp. For when the caller knows a fragment of what they're looking for (a
@@ -110,44 +101,32 @@ export function grepFhHelp(
   pattern: string,
   options: { regex?: boolean; limit?: number } = {},
 ): FhHelpGrepResult {
-  const limit = Math.min(options.limit ?? GREP_DEFAULT_MATCH_LIMIT, GREP_MAX_MATCH_LIMIT);
-  const matcher = buildGrepMatcher(pattern, options.regex ?? false);
-
-  const allMatches = corpus.filter(
-    (topic) => matcher(topic.title) || matcher(topic.breadcrumb.join(" ")) || matcher(topic.text),
-  );
-
-  const matches: FhHelpGrepMatch[] = [];
-  let totalBytes = 0;
-  for (const topic of allMatches) {
-    if (matches.length >= limit) break;
-    const bytes = Buffer.byteLength(topic.text, "utf8");
-    // The `matches.length > 0` guard lets a single entry through even if it alone
-    // exceeds the byte cap, so one oversized page can't turn a real match into "no results".
-    if (matches.length > 0 && totalBytes + bytes > GREP_MAX_TOTAL_BYTES) break;
-    totalBytes += bytes;
-    matches.push({
+  const { matches, totalMatches, truncated } = grepEntries(corpus, pattern, options, {
+    defaultLimit: GREP_DEFAULT_MATCH_LIMIT,
+    maxLimit: GREP_MAX_MATCH_LIMIT,
+    maxTotalBytes: GREP_MAX_TOTAL_BYTES,
+  });
+  return {
+    matches: matches.map((topic) => ({
       uri: resourceUriForUrl(topic.url),
       url: topic.url,
       title: topic.title,
       breadcrumb: topic.breadcrumb,
       text: topic.text,
-    });
-  }
-
-  return {
-    matches,
-    totalMatches: allMatches.length,
-    truncated: matches.length < allMatches.length,
+    })),
+    totalMatches,
+    truncated,
   };
 }
 
-// Steers Claude's own behavior when it uses this tool.
+// Steers Claude's own behavior when it uses this tool. Kept under the ~2048-byte
+// deferred-tool-loading truncation point some MCP clients enforce (same failure class
+// ADR 0011 found for RUN_LUA_DESCRIPTION) -- see fhHelp.test.ts's own byte-budget tests.
 export const SEARCH_FH_HELP_DESCRIPTION = `Search Family Historian 8's official help documentation (both the main FH8 help and the plugin-authoring help) for topics matching a query. Use this for questions about how Family Historian itself works — menus, features, dialogs, where something lives, how to write a plugin — as opposed to questions about the user's own tree data (use run_lua for that).
 
-Also use this BEFORE writing a run_lua script, any time you're not certain of an FH API function's exact signature, an item-pointer method's calling convention, or a data-reference syntax detail (e.g. "MoveToFirstChildItem", "fhGetItemText data reference syntax") — the corpus includes the full function reference. Cheaper and more reliable than guessing the shape and fixing it by trial and error against the user's real, live project. Specifically, always search for "fhNewItemPtr iteration" before writing any loop that iterates records or child items — confusing fhNewItemPtr() (for navigation) with fhCreateItem() (which creates actual database records) is a common mistake that leaves junk data behind. To sanity-check whether a bare fh*-prefixed name is real at all (not just to look up its signature), grep_fh_help the page titled "Function Index" — it's one corpus entry listing every valid fh* global by signature, cheaper than searching names one at a time.
+Also use this BEFORE writing a run_lua script, any time you're not certain of an FH API function's exact signature, an item-pointer method's calling convention, or a data-reference syntax detail — the corpus has the full function reference, cheaper and more reliable than guessing and fixing it by trial and error against the user's real, live project. Search "fhNewItemPtr iteration" before any loop over records/child items (confusing fhNewItemPtr() with fhCreateItem() leaves junk data behind); grep_fh_help the page titled "Function Index" to sanity-check whether a bare fh* name is real at all.
 
-Returns a ranked list of matching topics, each with a "uri" that can be read as an MCP resource for the topic's full text — but resource reads are unreliable in at least one tested MCP client (see docs/adr/0007-fh-help-resource-reads-unreliable-client-side.md), so treat that path as best-effort, not guaranteed. If an excerpt is insufficient and a resource read isn't available, retry with a narrower, more specific query first — the excerpt is a window around the best match, so a more targeted term (an exact function name, not a paraphrase) often surfaces the passage you actually need. If that still doesn't surface what's needed, use grep_fh_help next — it returns full page text, not an excerpt — before falling back to web search for content that's already local. This search is a simple keyword match, not semantic search: try the FH feature/menu name or function name a user/API would recognize. A full-sentence query falls back to matching on individual significant words, but a single term (e.g. "merge", "MoveToFirstChildItem") is still the most reliable form.`;
+If an excerpt is insufficient, retry with a narrower, more specific term first (an exact function name, not a paraphrase) — this is a simple keyword match, not semantic search. If that still doesn't surface it, use grep_fh_help next — full page text, not an excerpt — before falling back to web search for content that's already local. A ranked result's "uri" can be read as an MCP resource, but that path is unreliable in at least one tested MCP client (docs/adr/0007), so treat it as best-effort only.`;
 
 // Steers Claude's own behavior when it uses this tool.
 export const GREP_FH_HELP_DESCRIPTION = `Full-text search across the entire Family Historian help corpus (both the main FH8 help and the plugin-authoring help, including sample scripts) — matches against each entry's complete title, breadcrumb, and body text, and returns the complete text of every matching entry (not a truncated excerpt).

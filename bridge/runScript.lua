@@ -101,6 +101,46 @@ local function unrecognizedFhCallViolation(scriptText)
   return table.concat(messages, '; ')
 end
 
+-- Bare-leading-dot Data Reference pre-scan (issue #103, docs/adr/0023): rejects a script
+-- passing a literal Data Reference string starting with a bare '.' -- neither of the two
+-- valid forms (a '~'-relative reference, or a full path from a record-level tag) -- to any
+-- of the four call shapes FH's own API accepts one on. None of the four raise a Lua error
+-- for this: MoveTo/fhGetItemPtr silently leave the pointer Null, fhGetItemText/
+-- fhGetDisplayText silently return "" -- the same "not found" shape a caller can't tell
+-- apart from a genuinely absent field, discovered live (issue #103) when it surfaced only
+-- as a full write-session rollback well after the actual mistake. Same "literal argument
+-- only" heuristic limitation as every other pre-scan here (a data reference built into a
+-- variable first isn't caught) -- see docs/adr/0023 for the full scope decision.
+local DATA_REF_CALL_SHAPES = {
+  { name = 'MoveTo', symptom = 'silently leaves the pointer Null' },
+  { name = 'fhGetItemPtr', symptom = 'silently leaves the pointer Null' },
+  { name = 'fhGetItemText', symptom = 'silently returns an empty string' },
+  { name = 'fhGetDisplayText', symptom = 'silently returns an empty string' },
+}
+
+local function dataReferenceViolation(scriptText)
+  local messages = {}
+  for _, shape in ipairs(DATA_REF_CALL_SHAPES) do
+    -- '.-' (non-greedy) matches the 1st argument up to the first comma, so this doesn't
+    -- see through an expression containing its own comma as the 1st argument -- same class
+    -- of limitation eachFhCallName above already has. The %1 backreference requires the
+    -- captured quote character to match at both ends.
+    local pattern = '%f[%w_]' .. shape.name .. '%s*%(.-,%s*([\'"])(%.[^\'"]*)%1'
+    local _, ref = scriptText:match(pattern)
+    if ref then
+      table.insert(messages, "script calls " .. shape.name .. "(..., '" .. ref ..
+        "') with a Data Reference starting with a bare leading dot -- neither a '~'-relative " ..
+        "reference nor a full record-level-tag path -- " .. shape.name .. " " .. shape.symptom ..
+        " instead of erroring; use '~" .. ref .. "' if it's relative to the pointer passed, or " ..
+        "a full path starting from a record-level tag (e.g. 'INDI" .. ref .. "')")
+    end
+  end
+  if #messages == 0 then
+    return nil
+  end
+  return table.concat(messages, '; ')
+end
+
 -- Shared shape for a write-mode response that FH's own auto-undo should act on (docs/adr/0005):
 -- a JSON error carrying writeSessionRolledBack: true, plus the original error/message as a
 -- second return value the caller re-raises after sending. Both the write-mode-runtime-error
@@ -113,12 +153,12 @@ end
 function M.run(scriptText, accessMode)
   accessMode = accessMode or 'read-only'
 
-  -- Both pre-scans below run unconditionally and their messages are joined rather than
-  -- short-circuiting after the first hit (2026-08-08 grilling session, issue #81 follow-up):
-  -- a script that both writes without logging AND calls an unrecognized/excluded fh* name
+  -- All three pre-scans below run unconditionally and their messages are joined rather than
+  -- short-circuiting after the first hit (2026-08-08 grilling session, issue #81 follow-up;
+  -- extended to a third pre-scan, issue #103/docs/adr/0023): a script tripping more than one
   -- should hear about everything wrong with it in one round-trip, not fix one violation only
   -- to hit the next on resubmission. Response shape stays the existing single `error`
-  -- string (both messages concatenated), not a structured list, to keep today's response
+  -- string (all messages concatenated), not a structured list, to keep today's response
   -- contract unchanged.
   local violations = {}
   local writeViolation = preScanViolation(scriptText, accessMode)
@@ -128,6 +168,10 @@ function M.run(scriptText, accessMode)
   local fhCallViolation = unrecognizedFhCallViolation(scriptText)
   if fhCallViolation then
     table.insert(violations, fhCallViolation)
+  end
+  local dataRefViolation = dataReferenceViolation(scriptText)
+  if dataRefViolation then
+    table.insert(violations, dataRefViolation)
   end
   if #violations > 0 then
     return json.encode({ error = table.concat(violations, '; ') })
