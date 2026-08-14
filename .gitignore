@@ -7,3 +7,6 @@
 # server/package-lock.json is the one that matters.
 /node_modules/
 /package-lock.json
+
+# Project-specific session handoff notes -- not part of the repo's own history/docs
+/E40-HANDOFF.md
