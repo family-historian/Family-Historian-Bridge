@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### fhBridge/fhu discoverability: no index/catalog of helper functions in the corpus (issue #102)
+- `fhBridge.*` (12 functions across `familyHelper.lua`/`sourceHelper.lua`/
+  `sessionLogHelper.lua`) had zero corpus entries anywhere, unlike raw `fh*` globals
+  (fh-help's "Function Index") or `fhu.*` (fully documented, just unindexed). Added one
+  compact entry per function — Description/Parameters/Returns, matching the style of the
+  existing `fhu.md`-derived entries — to `gedcom-knowledge-corpus.jsonl`, under a new
+  `"Bridge project conventions" > "fhBridge API reference"` breadcrumb family alongside
+  the existing `"run_lua guidance"` family (docs/adr/0024). All 12 are reachable in one
+  `search_gedcom_knowledge("fhBridge API reference")` or `grep_gedcom_knowledge` call.
+- New test (`gedcomKnowledge.test.ts`) asserts this family's function names exactly match
+  `sandbox.lua`'s own `env.fhBridge` table, parsed from the real file rather than a
+  hand-kept list — so a 13th `fhBridge` function fails a test until documented, instead of
+  silently repeating this issue.
+- `fhu.*` (75 methods, already fully documented in `fh-help-corpus.jsonl`) got a
+  discoverability-only fix instead of new corpus content, matching the precedent set for
+  the analogous `fh*` Function Index gap: `grep_fh_help` the `"fhUtils.md"` breadcrumb to
+  list every entry across a few calls.
+- `docs/agents/fh-lua-api-lookup.md` and the `grep_fh_help`/`grep_gedcom_knowledge` tool
+  descriptions now point at both (kept within the ~2048-byte deferred-tool-loading
+  budget — `RUN_LUA_DESCRIPTION`/`SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION` were already full,
+  so the new pointers went on the two `grep_*` descriptions instead, which had headroom).
+
 ### `grep_gedcom_knowledge` tool, mirroring `grep_fh_help` (issue #101)
 - New MCP tool: literal-substring-by-default full-text search over the GEDCOM/FH
   domain-knowledge corpus, with a `regex: true` option, returning complete matching

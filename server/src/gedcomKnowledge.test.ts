@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   getGedcomKnowledgeEntry,
+  GREP_GEDCOM_KNOWLEDGE_DESCRIPTION,
   grepGedcomKnowledge,
   loadGedcomKnowledgeFromFile,
   parseGedcomKnowledgeCorpus,
@@ -420,6 +422,74 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
   });
 });
 
+describe("fhBridge API reference corpus entries (issue #102, docs/adr/0024-fhbridge-api-reference-lives-in-gedcom-knowledge-corpus.md)", () => {
+  // One compact entry per fhBridge.* function -- Description/Parameters/Returns, matching
+  // fhu.md-derived fh-help-corpus.jsonl entries' style, not the discursive run_lua
+  // guidance family above. The drift-safety invariant that matters: this set must exactly
+  // match sandbox.lua's own env.fhBridge table (the single source of truth for which
+  // fhBridge functions actually exist), derived here from the real file -- not a
+  // hand-kept list that could silently fall behind a 13th function the same way this
+  // issue found fhBridge had zero corpus entries at all.
+  const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
+  const corpus = loadGedcomKnowledgeFromFile(CORPUS_PATH);
+  const fhBridgeEntries = corpus.filter((entry) => entry.breadcrumb.includes("fhBridge API reference"));
+
+  // Unlike toolNames.test.ts's own "derive the expected set from the real thing" pattern
+  // (which registers real TS modules against a live MCP client -- a behavioral check
+  // immune to source formatting), there's no such behavioral seam across the Lua/TS
+  // boundary here without standing up a Lua interpreter in this test process. This
+  // regex-parses the actual env.fhBridge table literal instead -- weaker than a
+  // behavioral check (a stylua reformat or brace-style change to sandbox.lua could break
+  // it), but still derives from the real file rather than a hand-kept list, which is the
+  // property that actually matters: a 13th fhBridge function fails this test, it doesn't
+  // silently pass one that forgot to update it.
+  function fhBridgeMemberNamesFromSandbox(): string[] {
+    const sandboxPath = fileURLToPath(new URL("../../bridge/sandbox.lua", import.meta.url));
+    const source = fs.readFileSync(sandboxPath, "utf8");
+    const names = new Set<string>();
+
+    // Base table (env.fhBridge = { ... }), built unconditionally -- every read-only member.
+    const tableMatch = source.match(/env\.fhBridge = \{([\s\S]*?)\n {2}\}/);
+    if (!tableMatch) throw new Error("env.fhBridge table literal not found in bridge/sandbox.lua");
+    for (const line of tableMatch[1].split("\n")) {
+      const nameMatch = line.match(/^\s*(\w+) = /);
+      if (nameMatch) names.add(nameMatch[1]);
+    }
+
+    // Read-write-only additions (env.fhBridge.<name> = ...), inside the accessMode block.
+    for (const nameMatch of source.matchAll(/env\.fhBridge\.(\w+) = /g)) {
+      names.add(nameMatch[1]);
+    }
+
+    return [...names].sort();
+  }
+
+  it("has exactly one entry per fhBridge.* function sandbox.lua actually exposes -- no more, no fewer", () => {
+    const expectedNames = fhBridgeMemberNamesFromSandbox();
+    const documentedNames = fhBridgeEntries.map((entry) => entry.breadcrumb[2]).sort();
+    expect(expectedNames.length).toBeGreaterThanOrEqual(12);
+    expect(documentedNames).toEqual(expectedNames);
+  });
+
+  it("names each entry's title after its real call signature", () => {
+    for (const entry of fhBridgeEntries) {
+      expect(entry.title.startsWith(`fhBridge.${entry.breadcrumb[2]}(`), `${entry.id}'s title should start with its fhBridge.<fn>( signature`).toBe(true);
+    }
+  });
+
+  it('finds every fhBridge API reference entry with a single query, via breadcrumb match', () => {
+    const results = searchGedcomKnowledge(corpus, "fhBridge API reference");
+    expect(results.map((r) => r.id).sort()).toEqual(fhBridgeEntries.map((e) => e.id).sort());
+  });
+
+  it("carries no example call snippets or design-history prose -- compact reference only (grilling decision, issue #102)", () => {
+    for (const entry of fhBridgeEntries) {
+      expect(entry.text).toMatch(/Parameters:/);
+      expect(entry.text).toMatch(/Returns:/);
+    }
+  });
+});
+
 describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION topic list (issue #49)", () => {
   it("lists Data Reference qualifier codes as a searchable topic, so an agent has a cue to look here before grepping fh-help sample scripts", () => {
     const lower = SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION.toLowerCase();
@@ -444,6 +514,21 @@ describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION byte budget (issue #101 follow-up)
 
   it("still tells Claude to call search_gedcom_knowledge('run_lua guidance') once near the start of a run_lua conversation", () => {
     expect(SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION).toContain('"run_lua guidance"');
+  });
+});
+
+describe("GREP_GEDCOM_KNOWLEDGE_DESCRIPTION byte budget and fhBridge.* discoverability (issue #102)", () => {
+  // Same ~2048-byte deferred-tool-loading truncation risk docs/adr/0011 found for
+  // RUN_LUA_DESCRIPTION -- this description had headroom to spare (unlike
+  // RUN_LUA_DESCRIPTION/SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION above, both already near
+  // their own tested ceilings), so the new fhBridge.* discoverability pointer landed
+  // here instead.
+  it("stays under the observed ~2048-byte truncation point", () => {
+    expect(Buffer.byteLength(GREP_GEDCOM_KNOWLEDGE_DESCRIPTION, "utf8")).toBeLessThan(2000);
+  });
+
+  it('tells Claude to grep the "fhBridge API reference" breadcrumb to list every fhBridge.* function in one call', () => {
+    expect(GREP_GEDCOM_KNOWLEDGE_DESCRIPTION).toContain('"fhBridge API reference"');
   });
 });
 

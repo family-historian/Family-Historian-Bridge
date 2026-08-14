@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   getFhHelpPage,
+  GREP_FH_HELP_DESCRIPTION,
   grepFhHelp,
   loadCorpusFromFile,
   parseCorpus,
@@ -166,6 +167,25 @@ describe("SEARCH_FH_HELP_DESCRIPTION byte budget (issue #101 follow-up)", () => 
   it("still tells Claude to search before writing a run_lua script when uncertain of an API shape", () => {
     const lower = SEARCH_FH_HELP_DESCRIPTION.toLowerCase();
     expect(lower).toMatch(/before writing a run_lua script/);
+  });
+});
+
+describe("GREP_FH_HELP_DESCRIPTION byte budget and fhu.* discoverability (issue #102)", () => {
+  // Same ~2048-byte deferred-tool-loading truncation risk docs/adr/0011 found for
+  // RUN_LUA_DESCRIPTION -- this description had headroom to spare (unlike
+  // RUN_LUA_DESCRIPTION/SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION, both already near their own
+  // tested ceilings), so the new fhu.* discoverability pointer landed here instead.
+  it("stays under the observed ~2048-byte truncation point", () => {
+    expect(Buffer.byteLength(GREP_FH_HELP_DESCRIPTION, "utf8")).toBeLessThan(2000);
+  });
+
+  it('still tells Claude to grep the "Function Index" page for every bare fh* global name', () => {
+    expect(GREP_FH_HELP_DESCRIPTION).toMatch(/Function Index/);
+  });
+
+  it('tells Claude to grep the "fhUtils.md" breadcrumb to list every fhu.* entry, since fhu.* has no single-entry index of its own', () => {
+    expect(GREP_FH_HELP_DESCRIPTION).toContain('"fhUtils.md"');
+    expect(GREP_FH_HELP_DESCRIPTION.toLowerCase()).toMatch(/fhu\.\* .*no single-entry index/);
   });
 });
 

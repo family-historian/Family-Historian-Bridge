@@ -210,18 +210,30 @@ _Avoid_: Source (alone, when the template specifically is meant, not a record in
 A searchable reference (own JSONL file, separate from the FH-help corpus so a
 `check_fh_help_updates` sync can't overwrite it) of domain facts about FH's live data model —
 GEDCOM 5.5.1 core concepts, FTF rich text, Shared Facts, Fact/Record Flags, Source Template
-fields, Sentence templates. Each entry carries a confidence tag (Verified / Confirmed /
-Documented / Likely) and a citation back to its source (an FH help page, or a specific line in
-the family_historian_mobile project's tag-mapping specs) — entries inherited from that sibling
-project describe its raw exported-GEDCOM-file findings, not FH's live API, so each is
-cross-checked against FH's own help before being trusted here. Deliberately excludes anything
-that only describes the exported-file wire format (e.g. `_LINK_*`/`_LKID` mechanics, the
-`_PLAC`/`_ADDR` gazetteer, encoding options) since `run_lua`'s sandbox never reads or writes a
-`.ged` file directly — see docs/adr/0003-gedcom-corpus-scope-live-api-only.md. `_SRCT` itself is
-*not* one of these exclusions — it's also a live record-type tag (Source Template record),
-reachable the same way as INDI/FAM/SOUR; see **Source template** below and the corpus's
-"Creating a templated Source record" entry for how a Source record links to one and gets its
-fields populated.
+fields, Sentence templates — plus, under its own `"Bridge project conventions"` top-level
+breadcrumb (distinct from the domain-facts entries above), this project's own first-party
+operational guidance: the `"run_lua guidance"` family gathers behavioral gotchas moved out of
+`RUN_LUA_DESCRIPTION` once it outgrew the ~2KB safe zone (docs/adr/0011), and the
+`"fhBridge API reference"` family (issue #102, docs/adr/0024) sits alongside it — one compact
+entry per `fhBridge.*` function (Description/Parameters/Returns only; no design history or
+issue numbers — that stays in this file's own per-function entries and in bridge/README.md).
+Despite this file's name, it is not GEDCOM-domain-scoped only — "GEDCOM knowledge" describes
+its original seed content, not a hard boundary on what it now holds. Each entry carries a
+confidence tag (Verified / Confirmed / Documented / Likely) and a citation back to its source
+(an FH help page, a specific line in the family_historian_mobile project's tag-mapping specs,
+or — for the Bridge-project-conventions family — this repo's own source/ADRs, always tagged
+Verified) — entries inherited from that sibling project describe its raw exported-GEDCOM-file
+findings, not FH's live API, so each is cross-checked against FH's own help before being
+trusted here. Deliberately excludes anything that only describes the exported-file wire format
+(e.g. `_LINK_*`/`_LKID` mechanics, the `_PLAC`/`_ADDR` gazetteer, encoding options) since
+`run_lua`'s sandbox never reads or writes a `.ged` file directly — see
+docs/adr/0003-gedcom-corpus-scope-live-api-only.md; that exclusion is about the exported-file
+format specifically, not a bar on first-party Bridge content generally (the
+`"Bridge project conventions"` family predates and sits outside it). `_SRCT` itself is *not*
+one of the exported-file-format exclusions — it's also a live record-type tag (Source Template
+record), reachable the same way as INDI/FAM/SOUR; see **Source template** below and the
+corpus's "Creating a templated Source record" entry for how a Source record links to one and
+gets its fields populated.
 _Avoid_: FH help corpus (that's the separate, official-help-site-sourced one; see
 `fh-help-corpus.jsonl`)
 

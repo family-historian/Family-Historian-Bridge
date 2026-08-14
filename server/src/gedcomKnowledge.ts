@@ -106,7 +106,7 @@ export function grepGedcomKnowledge(
 // Steers Claude's own behavior when it uses this tool.
 export const GREP_GEDCOM_KNOWLEDGE_DESCRIPTION = `Full-text search across the entire GEDCOM/FH domain-knowledge corpus -- matches against each entry's complete title, breadcrumb, and body text, and returns the complete matching entries (search_gedcom_knowledge already returns full entries too, but ranks a natural-language query by word-overlap, which can bury an exact match under unrelated entries sharing common words).
 
-Use this when search_gedcom_knowledge's natural-language ranking doesn't surface what you need, or when you only know a fragment of what you're looking for -- an exact function name (e.g. "getFamilyGroup"), a Data Reference qualifier code, an exact phrase -- but a sentence-style query keeps returning something else first.
+Use this when search_gedcom_knowledge's natural-language ranking doesn't surface what you need, or when you only know a fragment of what you're looking for -- an exact function name (e.g. "getFamilyGroup"), a Data Reference qualifier code, an exact phrase -- but a sentence-style query keeps returning something else first. To list every fhBridge.* function's reference entry in one call, grep the breadcrumb "fhBridge API reference".
 
 By default the pattern is matched as a literal, case-insensitive substring. Pass regex: true to match it as a case-insensitive regular expression instead. Results are capped (a limited number of matches, and a limited total size) so an overly broad pattern can't dump the whole corpus in one response -- narrow the pattern and retry if the result reports truncation.`;
 
