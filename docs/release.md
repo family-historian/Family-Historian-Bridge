@@ -188,10 +188,15 @@ git push origin vX.Y.Z
 source ~/.zshrc   # FORGEJO_TOKEN
 API="http://192.168.50.161:3000/api/v1/repos/jane/fh-mcp-bridge"
 
-# Body is the CHANGELOG section for this version, as raw markdown.
+# Body is the CHANGELOG section for this version, as raw markdown. Use an anchored `awk`,
+# not `sed -n '/## X.Y.Z/,/## /p'` — a `### ` subsection heading (every section has one)
+# contains `## ` as a substring, so that pattern's range ends after the first subsection
+# instead of the whole release. Discovered cutting 0.13.0.
+BODY=$(awk '/^## X.Y.Z/{f=1; next} /^## /{if(f) exit} f' CHANGELOG.md \
+  | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}')
 curl -sS -X POST "$API/releases" \
   -H "Authorization: token $FORGEJO_TOKEN" -H "Content-Type: application/json" \
-  -d "$(python3 -c 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[1], "body": sys.argv[2]}))' "vX.Y.Z" "$(sed -n '/## X.Y.Z/,/## /p' CHANGELOG.md | sed '1d;$d')")"
+  -d "$(python3 -c 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[1], "body": sys.argv[2]}))' "vX.Y.Z" "$BODY")"
 
 # Note the release id from the response, then attach each asset:
 curl -sS -X POST "$API/releases/<release-id>/assets?name=fh-mcp-bridge-X.Y.Z.zip" \
@@ -253,3 +258,12 @@ platform installer/zip from `installer/output/` too if this release is publishin
   pointing at this if one hangs, so a future recurrence fails fast instead of hanging
   silently — but the underlying version mismatch is still worth fixing at the source
   wherever it's found, not just relying on the timeout to catch it after the fact.
+- **Step 9's release-body extraction silently truncated to one subsection.** Discovered
+  cutting 0.13.0: `sed -n '/## X.Y.Z/,/## /p'` matches its own end pattern against every
+  `### ` subsection heading, since `### ` contains `## ` as a substring — the range closed
+  after the version's first subsection instead of the whole section, and nothing about the
+  resulting `curl` call would have flagged a short body as wrong. Replaced with an anchored
+  `awk` (see step 9) that only matches a bare `## ` at line start. Caught by eyeballing the
+  posted release body against the CHANGELOG before moving on — this step has no automated
+  check, so the same class of silent truncation could recur with a differently-shaped
+  CHANGELOG entry.
