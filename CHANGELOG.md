@@ -15,10 +15,10 @@
   `sandbox.lua`'s own `env.fhBridge` table, parsed from the real file rather than a
   hand-kept list — so a 13th `fhBridge` function fails a test until documented, instead of
   silently repeating this issue.
-- `fhu.*` (75 methods, already fully documented in `fh-help-corpus.jsonl`) got a
-  discoverability-only fix instead of new corpus content, matching the precedent set for
-  the analogous `fh*` Function Index gap: `grep_fh_help` the `"fhUtils.md"` breadcrumb to
-  list every entry across a few calls.
+- `fhu.*` (42 methods as of this writing, already fully documented in
+  `fh-help-corpus.jsonl`) got a discoverability-only fix instead of new corpus content,
+  matching the precedent set for the analogous `fh*` Function Index gap: `grep_fh_help`
+  the `"fhUtils.md"` breadcrumb to list every entry across 2 calls.
 - `docs/agents/fh-lua-api-lookup.md` and the `grep_fh_help`/`grep_gedcom_knowledge` tool
   descriptions now point at both (kept within the ~2048-byte deferred-tool-loading
   budget — `RUN_LUA_DESCRIPTION`/`SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION` were already full,

@@ -12,8 +12,9 @@ records) even when called "just to see the error message":
    titled "Function Index" — it's a single corpus entry listing all of them by signature.
    `fhu.*` (the sandboxed `fhUtils` proxy, issue #102) has no equivalent single-entry
    index — each method is its own corpus entry — so `grep_fh_help` the breadcrumb
-   `"fhUtils.md"` instead to list every `fhu.*` entry across ~3 calls (25/call), or
-   `grep_fh_help` an exact method name (e.g. `"fhu.getParam"`) once you know it.
+   `"fhUtils.md"` instead to list every `fhu.*` entry (42 as of this writing) across 2
+   calls (25/call), or `grep_fh_help` an exact method name (e.g. `"fhu.getParam"`) once
+   you know it.
 2. `server/data/gedcom-knowledge-corpus.jsonl` — concept-level domain knowledge (FTF rich
    text, Shared Facts, Source Templates, Sentence templates), plus this project's own
    first-party guidance under the `"Bridge project conventions"` breadcrumb (see ADR 0011,
