@@ -38,11 +38,14 @@ now exist for three different surfaces; keep them distinct)
 **Session**:
 The period between a user clicking Start and clicking Stop (or an idle timeout, a
 socket `STOP` command, or closing the dialog via Exit or the window's X) on the bridge
-plugin's dialog. FH's main window is locked for the whole session — a deliberate
-trade-off, not a bug. Access mode (read-only vs read-write) is chosen once, at Start, and
-holds for the whole session.
+plugin's dialog. Access mode (read-only vs read-write) is chosen once, at Start, and
+holds for the whole session. Distinct from the main-window lock (see **Exit**) — Stop
+ends the Session but does not release the lock, so "locked for the whole session" is not
+quite right; the lock's real scope is "for as long as the plugin is loaded," not "for as
+long as a Session is running."
 _Avoid_: Connection (a session can span many short-lived socket connections, one per
-`run_lua` call)
+`run_lua` call), "locked for the whole session" (see above — that's the plugin's
+lifetime, not the Session's)
 
 **Exit**:
 Closes the whole Bridge plugin (not just the Session) — the Exit button and the dialog's
@@ -52,8 +55,19 @@ within the last 10 seconds (a hardcoded freshness heuristic, not user-configurab
 distinct from merely having clicked Start) — the only observable signal that Claude might
 be about to send another request. See
 docs/adr/0020-exit-button-shared-teardown-freshness-confirm.md.
+
+FH's main window is locked for as long as the plugin is loaded — from Start through Exit
+— not just for the Session's own Start-to-Stop span, a deliberate trade-off, not a bug.
+Confirmed against `bridge/bridgeSession.lua`: `btnStop:action` only unbinds the Session's
+TCP listener, it never calls `iup.CLOSE` or destroys the dialog, so Stop alone leaves the
+lock in place. FH's own `fhInitialise(..., "save_required")` gate only fires once, at
+plugin load, so a Stop-then-Start cycle within the same still-open dialog never
+re-triggers it either. This is why a user has to Exit (not just Stop) before they can
+File > Save in FH — see `run-lua-guidance-write-session-rolled-back`'s save-cadence
+mitigation in the GEDCOM knowledge corpus (issue #107).
 _Avoid_: Stop (alone, when Exit specifically is meant — Stop only ends the Session and
-leaves the plugin open; Exit ends the plugin itself)
+leaves the plugin open, main-window lock included; Exit ends the plugin itself and is
+what actually releases the lock)
 
 **Access mode**:
 The read-only/read-write toggle set by the user at session Start. Read-only exposes only
