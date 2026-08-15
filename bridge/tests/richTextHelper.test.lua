@@ -229,6 +229,10 @@ check(contains(errNilPtr, 'ptr'), 'the nil-ptr error names ptr specifically')
 local okNullPtr = pcall(richTextHelper.getTftfText, nullFieldPtr)
 check(okNullPtr == false, 'getTftfText rejects a non-nil but IsNull() ptr')
 
+local okStringPtr, errStringPtr = pcall(richTextHelper.getTftfText, "not a pointer")
+check(okStringPtr == false, 'getTftfText rejects a wrong-typed (string) ptr rather than a raw Lua crash (issue #110)')
+check(contains(errStringPtr, 'must point to'), 'the error is getTftfText\'s own message, not a raw "attempt to call a nil value (method \'IsNull\')" crash')
+
 ------------------------------------------------------------------
 -- setTftfText: happy path -- no existing citations, commits via a fresh RichText object's
 -- SetText(text, true, true), then fhSetValueAsRichText onto the target field.
@@ -291,6 +295,10 @@ local okNilPtrWrite, errNilPtrWrite = pcall(richTextHelper.setTftfText, nil, 'te
 check(okNilPtrWrite == false, 'setTftfText rejects a nil ptr')
 check(contains(errNilPtrWrite, 'ptr'), 'the nil-ptr error names ptr specifically')
 
+local okBoolPtrWrite, errBoolPtrWrite = pcall(richTextHelper.setTftfText, true, 'text')
+check(okBoolPtrWrite == false, 'setTftfText rejects a wrong-typed (boolean) ptr rather than a raw Lua crash (issue #110)')
+check(contains(errBoolPtrWrite, 'must point to'), 'the error is setTftfText\'s own message, not a raw "attempt to index a boolean value" crash')
+
 local okNonStringText, errNonStringText = pcall(richTextHelper.setTftfText, fieldWrite, 123)
 check(okNonStringText == false, 'setTftfText rejects a non-string text argument')
 check(contains(errNonStringText, 'text'), 'the non-string-text error names text specifically')
@@ -314,6 +322,11 @@ check(#setValueAsRichTextCalls == setValueCallCountBeforeValidateOnly, 'validate
 
 local okValidateOnlyCited = pcall(richTextHelper.validateSetTftfText, fieldCitedWrite, 'some text')
 check(okValidateOnlyCited == false, 'validateSetTftfText rejects a citation-bearing field, same as setTftfText')
+
+local okValidateOnlyBadType, errValidateOnlyBadType = pcall(richTextHelper.validateSetTftfText, 99, 'some text')
+check(okValidateOnlyBadType == false, 'validateSetTftfText rejects a wrong-typed (number) ptr too, same as setTftfText')
+check(contains(errValidateOnlyBadType, 'must point to'), 'the rejection is validateSetTftfText\'s own message, not a raw "attempt to index a number value" crash')
+check(contains(errValidateOnlyBadType, '99'), 'the rejection names the actual value given')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

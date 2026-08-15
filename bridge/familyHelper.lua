@@ -119,6 +119,59 @@ M.resolvePointer = resolvePointer
 -- independently maintained prefix regex per tag.
 M.parseQualifiedId = parseQualifiedId
 
+-- familyHelper.pointerProblem(v) (issue #110, docs/adr/0027): the shared check every
+-- validate*/get* function's own "not ptr or ptr:IsNull()" idiom used to hand-roll --
+-- copy-pasted across this module and richTextHelper.lua/sourceHelper.lua/
+-- sessionLogHelper.lua, and each copy assumed any non-nil value is pointer-shaped
+-- enough to support :IsNull(). It isn't: a plain string, a number, a boolean, or a
+-- wrong-shaped table (e.g. one of this module's own {id, qualifiedId, ...} descriptor
+-- tables, handed back to a function expecting a live pointer) all raised Lua's own raw
+-- "attempt to call/index a ... value" error instead of the calling function's own
+-- intended message -- confirmed live, issue #110: a run_lua call passed an
+-- action-description string as sessionLogHelper.logActivity's ptrRecord, and got
+-- "attempt to call a nil value (method 'IsNull')" instead of logActivity's own message,
+-- indistinguishable from an internal bridge crash.
+--
+-- Returns nil when v is a usable, non-null live Item Pointer -- the caller proceeds.
+-- Otherwise returns a string to append to the caller's own "X must point to Y" message:
+-- "" when v is nil or a genuinely-null pointer (the right shape, just empty -- the
+-- caller's own message already says everything useful; echoing a null pointer's own
+-- address would be noise, not help), or " -- got <type> (<value>), not a live Item
+-- Pointer" when v is any other wrong-shaped value -- the case this fix actually targets,
+-- naming what was actually passed so the mistake is diagnosable from the error text
+-- alone.
+--
+-- v:IsNull() is pcall'd, not type()-checked, since a live Item Pointer's real Lua type
+-- isn't fixed across this project (userdata in FH itself; a table with an __index
+-- metatable in every *.test.lua fake pointer), and pcall handles both uniformly with no
+-- branching -- the same "wrap the risky call" idiom sessionSettings.lua's
+-- loadOptions/saveOptions already use. Considered and rejected: bare duck-typing (`if v
+-- and v.IsNull then`) still raises Lua's own raw error for a number/boolean v, since
+-- field access alone on a non-indexable value errors before the .IsNull lookup ever
+-- runs -- confirmed empirically (docs/adr/0027).
+local function describeWrongType(v)
+  local text = tostring(v)
+  if #text > 60 then
+    text = text:sub(1, 60) .. "..."
+  end
+  return " -- got " .. type(v) .. " (" .. text .. "), not a live Item Pointer"
+end
+
+local function pointerProblem(v)
+  if v == nil then
+    return ""
+  end
+  local ok, isNull = pcall(function() return v:IsNull() end)
+  if not ok then
+    return describeWrongType(v)
+  end
+  if isNull then
+    return ""
+  end
+  return nil
+end
+M.pointerProblem = pointerProblem
+
 -- Individual record summary -- every getFamilyGroup/getAncestors entry carries one of
 -- these instead of a pointer, see the module comment above.
 local function indiDescriptor(ptr)
@@ -246,8 +299,9 @@ function M.getFamilyGroup(indiPtr, type)
   if not VALID_FAMILY_GROUP_TYPES[type] then
     error("getFamilyGroup: type must be one of 'all', 'parents', 'siblings', 'spouses' (got '" .. tostring(type) .. "')")
   end
-  if not indiPtr or indiPtr:IsNull() then
-    error("getFamilyGroup: indiPtr must point to an Individual record")
+  local problem = pointerProblem(indiPtr)
+  if problem then
+    error("getFamilyGroup: indiPtr must point to an Individual record" .. problem)
   end
   if fhGetTag(indiPtr) ~= "INDI" then
     error("getFamilyGroup: indiPtr must point to an Individual record (got a '" .. tostring(fhGetTag(indiPtr)) .. "' record)")
@@ -336,8 +390,9 @@ local DNA_LINE_BUILTIN = { ["y-chrom"] = "DnaShareYChrom", mtdna = "DnaShareMtDn
 -- "y-chrom"/"mtdna" already weed a non-matching line out of a descendant list.
 function M.getAncestors(indiPtr, maxGenerations, dnaLine)
   indiPtr = resolvePointer(indiPtr)
-  if not indiPtr or indiPtr:IsNull() then
-    error("getAncestors: indiPtr must point to an Individual record")
+  local problem = pointerProblem(indiPtr)
+  if problem then
+    error("getAncestors: indiPtr must point to an Individual record" .. problem)
   end
   if fhGetTag(indiPtr) ~= "INDI" then
     error("getAncestors: indiPtr must point to an Individual record (got a '" .. tostring(fhGetTag(indiPtr)) .. "' record)")
@@ -437,8 +492,9 @@ end
 -- result here -- considered and rejected for this reason, see ADR 0021.
 function M.getDescendants(indiPtr, maxGenerations, dnaLine)
   indiPtr = resolvePointer(indiPtr)
-  if not indiPtr or indiPtr:IsNull() then
-    error("getDescendants: indiPtr must point to an Individual record")
+  local problem = pointerProblem(indiPtr)
+  if problem then
+    error("getDescendants: indiPtr must point to an Individual record" .. problem)
   end
   if fhGetTag(indiPtr) ~= "INDI" then
     error("getDescendants: indiPtr must point to an Individual record (got a '" .. tostring(fhGetTag(indiPtr)) .. "' record)")
@@ -589,8 +645,9 @@ end
 -- Fact item works just as well as an Individual/Family/Source record itself.
 function M.getAllDetails(ptr)
   ptr = resolvePointer(ptr)
-  if not ptr or ptr:IsNull() then
-    error("getAllDetails: pointer must not be null")
+  local problem = pointerProblem(ptr)
+  if problem then
+    error("getAllDetails: pointer must not be null" .. problem)
   end
   return describeItem(ptr)
 end
@@ -618,8 +675,9 @@ end
 -- as searchByName: a legitimate answer, not a failure.
 function M.getFactsByTag(ptr, tags)
   ptr = resolvePointer(ptr)
-  if not ptr or ptr:IsNull() then
-    error("getFactsByTag: pointer must not be null")
+  local problem = pointerProblem(ptr)
+  if problem then
+    error("getFactsByTag: pointer must not be null" .. problem)
   end
   local wanted = tagSet(tags, "getFactsByTag")
 

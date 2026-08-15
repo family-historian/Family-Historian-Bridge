@@ -930,6 +930,38 @@ do
 end
 
 ------------------------------------------------------------------
+-- A boolean or a wrong-shaped table (e.g. a getFamilyGroup-shaped descriptor table
+-- handed back to a function expecting a pointer) raises the function's own clear error
+-- too, not a raw Lua "attempt to index/call a ... value" (issue #110: resolvePointer only
+-- special-cases string/number, so anything else used to fall straight through to the
+-- "not ptr or ptr:IsNull()" check unguarded).
+------------------------------------------------------------------
+
+do
+  local okBool, errBool = pcall(familyHelper.getAllDetails, true)
+  check(not okBool, 'a boolean raises an error instead of a raw "attempt to index" crash')
+  check(contains(errBool, "pointer must not be null"), 'the error is getAllDetails\' own message')
+  check(contains(errBool, "boolean"), 'the error names the type actually given')
+
+  local okTable, errTable = pcall(familyHelper.getFactsByTag, { id = 1, qualifiedId = "I219" }, "FAMS")
+  check(not okTable, 'a wrong-shaped table (e.g. a descriptor result reused by mistake) also raises an error')
+  check(contains(errTable, "pointer must not be null"), 'the error is getFactsByTag\'s own message')
+  check(contains(errTable, "table"), 'the error names the type actually given')
+
+  local okBoolFamily, errBoolFamily = pcall(familyHelper.getFamilyGroup, false, "parents")
+  check(not okBoolFamily, 'getFamilyGroup rejects a boolean rather than crashing on :IsNull()')
+  check(contains(errBoolFamily, "getFamilyGroup"), 'the error is getFamilyGroup\'s own message')
+
+  local okTableAncestors, errTableAncestors = pcall(familyHelper.getAncestors, { id = 1 })
+  check(not okTableAncestors, 'getAncestors rejects a wrong-shaped table rather than crashing on :IsNull()')
+  check(contains(errTableAncestors, "getAncestors"), 'the error is getAncestors\' own message')
+
+  local okBoolDescendants, errBoolDescendants = pcall(familyHelper.getDescendants, true)
+  check(not okBoolDescendants, 'getDescendants rejects a boolean rather than crashing on :IsNull()')
+  check(contains(errBoolDescendants, "getDescendants"), 'the error is getDescendants\' own message')
+end
+
+------------------------------------------------------------------
 -- parseQualifiedId (issue #100): tag-scoped id-shape parsing, shared by
 -- sourceHelper.lua's resolveByNameOrId so a caller passing a qualified id string like
 -- "S1186" resolves by id instead of being treated as a Title/NAME lookup. Pure string
@@ -950,6 +982,49 @@ do
     'parseQualifiedId rejects a malformed id shape (trailing non-digit)')
   check(familyHelper.parseQualifiedId("SOUR", "Not a title, just prose") == nil,
     'parseQualifiedId returns nil (not an error) for an ordinary Title-shaped string')
+end
+
+------------------------------------------------------------------
+-- pointerProblem (issue #110, docs/adr/0027): the shared pcall-guarded pointer check
+-- every helper module's own validate*/get* functions now build their own message from.
+-- Returns nil for a valid, non-null pointer; "" for nil or a genuinely-null pointer
+-- (nothing more useful to add to the caller's own message); a "-- got <type> (<value>),
+-- not a live Item Pointer" suffix for anything else. Checked directly here since it's
+-- the actual new public seam this fix introduces -- every call site above just wires its
+-- result into an existing message.
+------------------------------------------------------------------
+
+do
+  check(familyHelper.pointerProblem(nil) == "",
+    'pointerProblem returns "" for nil -- the caller\'s own message already covers it')
+
+  local nullPtr = newPtr()
+  check(familyHelper.pointerProblem(nullPtr) == "",
+    'pointerProblem returns "" for a right-shaped but genuinely-null pointer -- no address noise')
+
+  check(familyHelper.pointerProblem(ptrFor(self_)) == nil,
+    'pointerProblem returns nil for a valid, non-null pointer')
+
+  local problemString = familyHelper.pointerProblem("some description text")
+  check(type(problemString) == "string" and contains(problemString, "string"),
+    'pointerProblem names the type for a plain string')
+  check(contains(problemString, "not a live Item Pointer"),
+    'pointerProblem explains what was expected')
+
+  local problemNumber = familyHelper.pointerProblem(42)
+  check(contains(problemNumber, "number") and contains(problemNumber, "42"),
+    'pointerProblem names both the type and the value for a number')
+
+  local problemBool = familyHelper.pointerProblem(true)
+  check(contains(problemBool, "boolean"), 'pointerProblem names the type for a boolean')
+
+  local problemTable = familyHelper.pointerProblem({ id = 1 })
+  check(contains(problemTable, "table"), 'pointerProblem names the type for a wrong-shaped table')
+
+  local longString = string.rep("x", 100)
+  local problemLong = familyHelper.pointerProblem(longString)
+  check(contains(problemLong, "..."), 'pointerProblem truncates a long value rather than dumping it in full')
+  check(not contains(problemLong, longString), 'the truncated value does not include the full 100-char string')
 end
 
 if failures > 0 then

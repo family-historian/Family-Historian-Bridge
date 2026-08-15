@@ -478,8 +478,9 @@ end
 -- since citeSource only ever accepts CITN fields (see validateFields's expectCitation
 -- branch below), so there's no caller intent this could actually be misrouting.
 function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
-  if not ptrTarget or ptrTarget:IsNull() then
-    error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to")
+  local problem = familyHelper.pointerProblem(ptrTarget)
+  if problem then
+    error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to" .. problem)
   end
   local source = resolveSource(sourceNameOrId)
   fields = fields or {}
@@ -622,8 +623,9 @@ end
 -- that changes.
 function M.getPopulatedTemplateFields(sourPtr)
   sourPtr = familyHelper.resolvePointer(sourPtr)
-  if not sourPtr or sourPtr:IsNull() then
-    error("getPopulatedTemplateFields: pointer must not be null")
+  local problem = familyHelper.pointerProblem(sourPtr)
+  if problem then
+    error("getPopulatedTemplateFields: pointer must not be null" .. problem)
   end
 
   local template = linkedTemplate(sourPtr)

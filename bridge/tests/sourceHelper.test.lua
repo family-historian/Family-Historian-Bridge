@@ -741,6 +741,11 @@ local nullTarget = newPtr()
 local okNullTarget = pcall(sourceHelper.citeSource, nullTarget, certSourceId)
 check(not okNullTarget, 'a non-nil but IsNull() ptrTarget also raises an error rather than proceeding')
 
+local okStringTarget, errStringTarget = pcall(sourceHelper.citeSource, "not a pointer", certSourceId)
+check(not okStringTarget, 'a wrong-typed (string) ptrTarget raises an error rather than a raw Lua crash (issue #110)')
+check(contains(errStringTarget, 'ptrTarget') and contains(errStringTarget, 'string'),
+  'the error names ptrTarget and the type actually given, not a raw "attempt to index" crash')
+
 ------------------------------------------------------------------
 -- validateCiteSource (issue #97): the pure validation half of citeSource, exported so
 -- sandbox.lua can run it untracked before arming the write tracker. Same success/failure
@@ -754,6 +759,11 @@ check(sourCountOnTarget(badIdTarget) == 0, 'validateCiteSource never creates a c
 local okValidateNilTarget, errValidateNilTarget = pcall(sourceHelper.validateCiteSource, nil, certSourceId)
 check(not okValidateNilTarget, 'validateCiteSource rejects a nil ptrTarget, same as citeSource')
 check(contains(errValidateNilTarget, 'ptrTarget'), 'the rejection names ptrTarget specifically')
+
+local okValidateBoolTarget, errValidateBoolTarget = pcall(sourceHelper.validateCiteSource, true, certSourceId)
+check(not okValidateBoolTarget, 'validateCiteSource rejects a wrong-typed (boolean) ptrTarget too, same as citeSource')
+check(contains(errValidateBoolTarget, 'must point to'), 'the rejection is validateCiteSource\'s own message, not a raw "attempt to index a boolean value" crash -- note Lua\'s own raw error happens to name the local variable too (issue #110 test-writing gotcha), so this checks the full semantic phrase, not just "ptrTarget"')
+check(contains(errValidateBoolTarget, 'boolean'), 'the rejection also names the type actually given')
 
 ------------------------------------------------------------------
 -- citeSource fields (issue #99, follow-up to #98's own closing comment): standard
@@ -1071,6 +1081,10 @@ do
   local okNullPtr, errNullPtr = pcall(sourceHelper.getPopulatedTemplateFields, fhNewItemPtr())
   check(not okNullPtr, 'getPopulatedTemplateFields raises on a null pointer, rather than silently reading as "not templated"')
   check(contains(errNullPtr, "getPopulatedTemplateFields"), 'the error names the function, same as getAllDetails\' own null-pointer error')
+
+  local okTablePtr, errTablePtr = pcall(sourceHelper.getPopulatedTemplateFields, { id = 1, qualifiedId = "S1" })
+  check(not okTablePtr, 'getPopulatedTemplateFields raises on a wrong-shaped table too, rather than a raw Lua crash (issue #110)')
+  check(contains(errTablePtr, "table"), 'the error names the type actually given')
 end
 
 ------------------------------------------------------------------

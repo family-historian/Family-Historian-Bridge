@@ -37,6 +37,12 @@
 
 local M = {}
 
+-- Reused for the shared pcall-guarded pointer check (pointerProblem, issue #110,
+-- docs/adr/0027) that getTftfText/validateSetTftfText's own ptr checks below now use
+-- instead of their own copy of the "not ptr or ptr:IsNull()" idiom -- familyHelper.lua
+-- has no require()s of its own, so this introduces no cycle.
+local familyHelper = require('familyHelper')
+
 local function countTableEntries(t)
   if not t then
     return 0
@@ -73,8 +79,9 @@ end
 -- under both access modes -- fhGetValueAsRichText and fhGetQualifiedRecordId are both
 -- already unrestricted reads (see sandbox.lua).
 function M.getTftfText(ptr)
-  if not ptr or ptr:IsNull() then
-    error("getTftfText: ptr must point to the rich-text field to read")
+  local problem = familyHelper.pointerProblem(ptr)
+  if problem then
+    error("getTftfText: ptr must point to the rich-text field to read" .. problem)
   end
 
   local rt = fhGetValueAsRichText(ptr)
@@ -106,8 +113,9 @@ end
 -- for citations at write time (not just whatever getTftfText saw earlier) in case the field
 -- gained a citation by hand in FH's own UI between a getTftfText call and this one.
 function M.validateSetTftfText(ptr, text)
-  if not ptr or ptr:IsNull() then
-    error("setTftfText: ptr must point to the rich-text field to write")
+  local problem = familyHelper.pointerProblem(ptr)
+  if problem then
+    error("setTftfText: ptr must point to the rich-text field to write" .. problem)
   end
   if type(text) ~= "string" then
     error("setTftfText: text must be a string in tFTF syntax")

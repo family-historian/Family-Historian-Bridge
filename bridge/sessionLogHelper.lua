@@ -16,6 +16,12 @@
 
 local M = {}
 
+-- Reused for the shared pcall-guarded pointer check (pointerProblem, issue #110,
+-- docs/adr/0027) that validateLogActivity's ptrRecord check below now uses instead of
+-- its own copy of the "not ptr or ptr:IsNull()" idiom -- familyHelper.lua has no
+-- require()s of its own, so this introduces no cycle.
+local familyHelper = require('familyHelper')
+
 -- nil until this Session's first M.logActivity call.
 local notePtr = nil
 local textPtr = nil
@@ -59,8 +65,9 @@ end
 --
 -- Validates ptrRecord/action/media.name up front, before touching the buffer or creating
 -- the _RNOT record, matching sourceHelper.lua's own validate-before-mutate convention (and
--- familyHelper.lua's own "not ptr or ptr:IsNull()" idiom for the pointer check specifically,
--- reused verbatim here rather than inventing a second phrasing) -- for two separate reasons:
+-- reusing familyHelper.pointerProblem for the pointer check specifically -- the shared,
+-- pcall-guarded check every fhBridge.* pointer-argument check now goes through, issue #110,
+-- docs/adr/0027 -- rather than inventing a second phrasing) -- for two separate reasons:
 -- the buffer is module-level state that persists across calls, so a bad call throwing
 -- partway through would otherwise leave a stray, never-flushed entry for the next successful
 -- call to inherit; and, on this Session's first call specifically, a bad ptrRecord/action
@@ -78,8 +85,20 @@ end
 -- itself still calls this first too, so direct callers/tests keep today's single-call,
 -- validate-then-mutate contract unchanged.
 function M.validateLogActivity(ptrRecord, action, media)
-  if not ptrRecord or ptrRecord:IsNull() then
-    error("logActivity: ptrRecord must point to the record this activity concerns")
+  local problem = familyHelper.pointerProblem(ptrRecord)
+  if problem then
+    error("logActivity: ptrRecord must point to the record this activity concerns" .. problem)
+  end
+  -- fhHasParentItem is FH's own documented way to tell a record item apart from a
+  -- field/Fact item ("record items do not have parent items, but all other items... do")
+  -- -- ptrRecord must always be the record itself (e.g. the Individual just created, or
+  -- the one a fact was just added to -- never the fact), matching this function's own
+  -- doc comment above and the AddRecordLink call this feeds: an unnoticed Fact pointer
+  -- here would still create a "successful" record link, just to the wrong (or a
+  -- meaningless) thing, with nothing to signal the mistake (issue #110 follow-up,
+  -- grilling session).
+  if fhHasParentItem(ptrRecord) then
+    error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ptrRecord)) .. "' item")
   end
   if type(action) ~= "string" or action == "" then
     error("logActivity: action must be a non-empty string describing what happened")

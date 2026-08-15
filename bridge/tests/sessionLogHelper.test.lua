@@ -81,6 +81,21 @@ function PtrMethods:MoveTo(otherPtr, dataRef)
   end
 end
 
+
+-- ptrRecord must be a top-level record, not a Fact/sub-item (issue #110 follow-up):
+-- fhHasParentItem is FH's own documented way to tell them apart ("record items do not
+-- have parent items, but all other items (i.e. field items) do"). Nodes get an optional
+-- .parent field for this -- fhCreateItem above never sets one (every node it creates is
+-- top-level), so a "has a parent" fixture is built directly in the test that needs one.
+fhHasParentItem = function(ptr)
+  local node = currentNode(ptr)
+  return node ~= nil and node.parent ~= nil
+end
+
+fhGetTag = function(ptr)
+  local node = currentNode(ptr)
+  return node and node.tag
+end
 fhNewItemPtr = newPtr
 
 ------------------------------------------------------------------
@@ -318,6 +333,27 @@ local nullPtr = fhNewItemPtr()
 local okNullPtr = pcall(freshSessionLogHelper.logActivity, nullPtr, "created")
 check(okNullPtr == false, 'a non-nil but IsNull() ptrRecord also raises an error rather than proceeding')
 
+local okStringPtr, errStringPtr = pcall(freshSessionLogHelper.logActivity,
+  "E40: ticked items rec=S29/S31/S35", "created")
+check(okStringPtr == false,
+  'a string ptrRecord (issue #110: the whole action-description string landed in ptrRecord\'s slot, one arg short) raises an error rather than a raw Lua crash')
+check(contains(errStringPtr, "ptrRecord"),
+  'the string-ptrRecord error names ptrRecord specifically, not a raw method-missing crash')
+check(contains(errStringPtr, "string"), 'the error names the type actually given')
+check(not contains(errStringPtr, "IsNull"),
+  'the error is logActivity\'s own message, not a raw "attempt to call ... IsNull" crash')
+
+local factNode = { tag = 'BIRT', id = 99999, parent = indiG }
+local factPtr = newPtr()
+factPtr.list = { factNode }
+factPtr.index = 1
+
+local okFactPtr, errFactPtr = pcall(freshSessionLogHelper.logActivity, factPtr, "created")
+check(okFactPtr == false,
+  'a Fact/sub-item ptrRecord (not a top-level record) raises an error rather than silently creating a misleading record link')
+check(contains(errFactPtr, "ptrRecord"), 'the error names ptrRecord specifically')
+check(contains(errFactPtr, "BIRT"), 'the error names the actual tag found, same style as getFamilyGroup\'s wrong-record-type error')
+
 local okNilAction, errNilAction = pcall(freshSessionLogHelper.logActivity, indiG, nil)
 check(okNilAction == false, 'a nil action raises an error rather than proceeding')
 check(contains(errNilAction, "action"), 'the nil-action error names action specifically')
@@ -326,9 +362,9 @@ local okEmptyAction = pcall(freshSessionLogHelper.logActivity, indiG, "")
 check(okEmptyAction == false, 'an empty-string action also raises an error rather than proceeding')
 
 check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeInvalid,
-  'none of the four invalid calls above created a _RNOT record')
+  'none of the six invalid calls above created a _RNOT record')
 check(#setValueCalls == setValueCallCountBeforeInvalid,
-  'none of the four invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
+  'none of the six invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
 
 ------------------------------------------------------------------
 -- validateLogActivity (issue #97): the pure validation half of logActivity, exported so
@@ -348,6 +384,15 @@ check(#setValueCalls == setValueCallCountBeforeValidateOnly, 'validateLogActivit
 local okValidateOnlyNilPtr, errValidateOnlyNilPtr = pcall(freshSessionLogHelper.validateLogActivity, nil, "created")
 check(okValidateOnlyNilPtr == false, 'validateLogActivity rejects a nil ptrRecord, same as logActivity')
 check(contains(errValidateOnlyNilPtr, "ptrRecord"), 'the rejection names ptrRecord specifically')
+
+local okValidateOnlyBadType, errValidateOnlyBadType = pcall(freshSessionLogHelper.validateLogActivity, 42, "created")
+check(okValidateOnlyBadType == false, 'validateLogActivity rejects a wrong-typed (number) ptrRecord too, same as logActivity')
+check(contains(errValidateOnlyBadType, "number") and contains(errValidateOnlyBadType, "42"),
+  'the rejection names both the type and the value actually given')
+
+local okValidateOnlyFactPtr, errValidateOnlyFactPtr = pcall(freshSessionLogHelper.validateLogActivity, factPtr, "created")
+check(okValidateOnlyFactPtr == false, 'validateLogActivity rejects a Fact/sub-item ptrRecord too, same as logActivity')
+check(contains(errValidateOnlyFactPtr, "BIRT"), 'the rejection names the actual tag found')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
