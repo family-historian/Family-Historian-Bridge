@@ -172,6 +172,40 @@ local function pointerProblem(v)
 end
 M.pointerProblem = pointerProblem
 
+-- familyHelper.checkWrite(bOK, message) (issue #111, docs/adr/0028): the shared check
+-- every fhSetValueAs* write call's own bOK return now goes through, instead of discarding
+-- it the way sourceHelper.lua/sessionLogHelper.lua/richTextHelper.lua's ~17 call sites all
+-- used to. FH's own docs describe bOK as its documented, non-throwing way of reporting a
+-- write that silently didn't happen ("returns true on success and false on failure") --
+-- confirmed by this project's own history: sessionLogHelper.lua's own comment records
+-- fhSetValueAsRichText(notePtr, ...) once silently returning false and writing nothing,
+-- before the code was fixed to target the right child item instead. ADR 0027 found and
+-- named this exact gap while fixing pointer-argument-shape validation, and deliberately
+-- deferred it as its own separate scoping decision -- see docs/adr/0028.
+--
+-- Unlike pointerProblem above, there's no "right shape, just empty" case to distinguish --
+-- a write either happened or it didn't -- so this owns the whole error message rather than
+-- returning a suffix for the caller to append to some other, pre-existing message.
+local function checkWrite(bOK, message)
+  if not bOK then
+    error(message)
+  end
+end
+M.checkWrite = checkWrite
+
+-- familyHelper.checkCreated(item, message) (issue #111, docs/adr/0028): the fhCreateItem
+-- counterpart to checkWrite above. fhCreateItem's own docs describe a different failure
+-- shape from fhSetValueAs*'s boolean bOK -- "a NULL pointer if the create fails for any
+-- reason" -- but a NULL Item Pointer is exactly what pointerProblem above already detects
+-- (a real, pcall-guarded IsNull() check, not a Lua nil check), so this reuses it rather
+-- than a second copy of the same null-detection logic.
+local function checkCreated(item, message)
+  if pointerProblem(item) then
+    error(message)
+  end
+end
+M.checkCreated = checkCreated
+
 -- Individual record summary -- every getFamilyGroup/getAncestors entry carries one of
 -- these instead of a pointer, see the module comment above.
 local function indiDescriptor(ptr)

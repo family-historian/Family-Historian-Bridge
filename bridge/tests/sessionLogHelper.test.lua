@@ -35,6 +35,11 @@ local function resetTree()
   nextId = 1
 end
 
+-- Write-result failure injection (issue #111, docs/adr/0028): set true immediately
+-- before the one call a fixture wants to fail; self-resets after firing once.
+local forceNextCreateFailure = false
+local forceNextWriteFailure = false
+
 local PtrMethods = {}
 PtrMethods.__index = PtrMethods
 
@@ -52,6 +57,12 @@ end
 -- only ever lived on this child). Modelled here as a node.textNode set at creation time,
 -- reached via ptr:MoveTo(notePtr, '~.TEXT') the same way sessionLogHelper.lua does.
 fhCreateItem = function(tag)
+  if forceNextCreateFailure then
+    forceNextCreateFailure = false
+    -- An unpositioned fake pointer: currentNode(ptr) is nil, so :IsNull() is true --
+    -- the same shape real FH's own NULL-pointer create failure has.
+    return newPtr()
+  end
   local node = { tag = tag, id = nextId }
   nextId = nextId + 1
   if tag == '_RNOT' then
@@ -127,6 +138,11 @@ fhNewRichText = newRichText
 local setValueCalls = {}
 fhSetValueAsRichText = function(ptr, richTextObj)
   table.insert(setValueCalls, { node = currentNode(ptr), richText = richTextObj })
+  if forceNextWriteFailure then
+    forceNextWriteFailure = false
+    return false
+  end
+  return true
 end
 
 ------------------------------------------------------------------
@@ -393,6 +409,35 @@ check(contains(errValidateOnlyBadType, "number") and contains(errValidateOnlyBad
 local okValidateOnlyFactPtr, errValidateOnlyFactPtr = pcall(freshSessionLogHelper.validateLogActivity, factPtr, "created")
 check(okValidateOnlyFactPtr == false, 'validateLogActivity rejects a Fact/sub-item ptrRecord too, same as logActivity')
 check(contains(errValidateOnlyFactPtr, "BIRT"), 'the rejection names the actual tag found')
+
+------------------------------------------------------------------
+-- Write-result checks (issue #111, docs/adr/0028): a bOK=false/NULL-pointer failure from
+-- fhSetValueAsRichText/fhCreateItem now raises via familyHelper.checkWrite/checkCreated
+-- instead of being silently discarded. checkWrite/checkCreated themselves are unit-tested
+-- directly in familyHelper.test.lua -- this just proves logActivity is wired to them, and
+-- that a failed note-create doesn't corrupt the module's persistent notePtr state for the
+-- rest of the Session.
+------------------------------------------------------------------
+
+package.loaded['sessionLogHelper'] = nil
+local writeCheckSessionLogHelper = require('sessionLogHelper')
+local indiWriteCheck = fhCreateItem("INDI")
+
+forceNextCreateFailure = true
+local okNoteCreate, errNoteCreate = pcall(writeCheckSessionLogHelper.logActivity, indiWriteCheck, "created")
+check(okNoteCreate == false, 'logActivity raises when fhCreateItem("_RNOT") itself fails')
+check(contains(errNoteCreate, "logActivity") and contains(errNoteCreate, "_RNOT"),
+  'the note-create error names the function and what failed to create')
+
+local rnotCountBeforeRetry = #(recordsByTag["_RNOT"] or {})
+writeCheckSessionLogHelper.logActivity(indiWriteCheck, "created")
+check(#(recordsByTag["_RNOT"] or {}) == rnotCountBeforeRetry + 1,
+  'a later call after a failed note-create still creates a fresh _RNOT record, not stuck reusing the broken one')
+
+forceNextWriteFailure = true
+local okSave, errSave = pcall(writeCheckSessionLogHelper.logActivity, indiWriteCheck, "fact added Birth")
+check(okSave == false, 'logActivity raises when the entry save (fhSetValueAsRichText) fails')
+check(contains(errSave, "logActivity"), 'the save-failure error names the function')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

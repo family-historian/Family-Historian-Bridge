@@ -1027,6 +1027,36 @@ do
   check(not contains(problemLong, longString), 'the truncated value does not include the full 100-char string')
 end
 
+------------------------------------------------------------------
+-- checkWrite / checkCreated (issue #111, docs/adr/0028): the write-result counterparts to
+-- pointerProblem above -- checkWrite for fhSetValueAs*'s boolean bOK, checkCreated for
+-- fhCreateItem's NULL-pointer failure, reusing pointerProblem's own null-detection rather
+-- than a second copy of it.
+------------------------------------------------------------------
+
+do
+  local ok = pcall(familyHelper.checkWrite, true, "should not fire")
+  check(ok, 'checkWrite does not raise when bOK is true')
+
+  local okFalse, errFalse = pcall(familyHelper.checkWrite, false, "some write failed")
+  check(not okFalse, 'checkWrite raises when bOK is false')
+  check(contains(errFalse, "some write failed"), 'checkWrite raises exactly the message it was given')
+
+  local okNil, errNil = pcall(familyHelper.checkWrite, nil, "nil bOK also fails")
+  check(not okNil, 'checkWrite treats a nil bOK the same as false')
+  check(contains(errNil, "nil bOK also fails"), 'checkWrite raises its given message for a nil bOK too')
+end
+
+do
+  local okCreated = pcall(familyHelper.checkCreated, ptrFor(self_), "should not fire")
+  check(okCreated, 'checkCreated does not raise for a valid, non-null pointer')
+
+  local nullPtr = newPtr()
+  local okNull, errNull = pcall(familyHelper.checkCreated, nullPtr, "create failed")
+  check(not okNull, 'checkCreated raises when fhCreateItem returns a NULL pointer')
+  check(contains(errNull, "create failed"), 'checkCreated raises exactly the message it was given')
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

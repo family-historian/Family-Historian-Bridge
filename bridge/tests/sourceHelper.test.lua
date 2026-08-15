@@ -48,6 +48,14 @@ local function resetTree()
   nextId = 1
 end
 
+-- Write-result failure injection (issue #111, docs/adr/0028): sourceHelper.lua's own
+-- checkWrite/checkCreated calls now inspect fhSetValueAs*'s bOK / fhCreateItem's NULL-
+-- pointer failure contract, so a fixture that wants to prove the guard fires sets one of
+-- these true immediately before the one call it wants to fail -- each flag self-resets
+-- after firing once, so it never leaks into an unrelated later call in the same test.
+local forceNextWriteFailure = false
+local forceNextCreateFailure = false
+
 -- Forward-declared so fhGetDisplayText (defined before fhNewDate below) can format a
 -- fake Date object's fields -- assigned (not re-declared) at fhNewDate's own definition
 -- further down, so both share the same upvalue.
@@ -227,6 +235,12 @@ end
 -- above, which reads it back the same way) that keeps this fake internally consistent
 -- without modeling the real tag-vs-Data-Reference indirection issue #67/#73 uncovered.
 fhCreateItem = function(tagOrShortcut, parentPtr)
+  if forceNextCreateFailure then
+    forceNextCreateFailure = false
+    -- An unpositioned fake pointer: currentNode(ptr) is nil, so :IsNull() is true --
+    -- the same shape real FH's own NULL-pointer create failure has.
+    return newPtr()
+  end
   local node = { tag = tagOrShortcut, children = {} }
   local ptr = newPtr()
   if not parentPtr then
@@ -246,27 +260,47 @@ fhCreateItem = function(tagOrShortcut, parentPtr)
 end
 
 fhSetValueAsText = function(ptr, value)
+  if forceNextWriteFailure then
+    forceNextWriteFailure = false
+    return false
+  end
   local node = currentNode(ptr)
   node.value = value
   node.valueType = "text"
+  return true
 end
 
 fhSetValueAsDate = function(ptr, dateObj)
+  if forceNextWriteFailure then
+    forceNextWriteFailure = false
+    return false
+  end
   local node = currentNode(ptr)
   node.value = dateObj
   node.valueType = "date"
+  return true
 end
 
 fhSetValueAsLink = function(ptr, targetPtr)
+  if forceNextWriteFailure then
+    forceNextWriteFailure = false
+    return false
+  end
   local node = currentNode(ptr)
   node.value = currentNode(targetPtr)
   node.valueType = "link"
+  return true
 end
 
 fhSetValueAsRichText = function(ptr, richTextObj)
+  if forceNextWriteFailure then
+    forceNextWriteFailure = false
+    return false
+  end
   local node = currentNode(ptr)
   node.value = richTextObj
   node.valueType = "richtext"
+  return true
 end
 
 -- Needed for familyHelper.getAllDetails (via findSources) to build a link field's
@@ -1143,6 +1177,52 @@ do
 
   local okBadTemplate = pcall(sourceHelper.getTemplateFieldCensus, "No Such Template")
   check(not okBadTemplate, 'an unresolvable template name raises an error, same as findSources/createSourceFromTemplate')
+end
+
+------------------------------------------------------------------
+-- Write-result checks (issue #111, docs/adr/0028): a bOK=false/NULL-pointer failure from
+-- fhSetValueAs*/fhCreateItem now raises via familyHelper.checkWrite/checkCreated instead
+-- of being silently discarded, at every fhCreateItem/fhSetValueAs* call
+-- createSourceFromTemplate and citeSource make. One create-failure + one write-failure
+-- case per function is enough to prove the wiring -- checkWrite/checkCreated themselves
+-- are unit-tested directly in familyHelper.test.lua.
+------------------------------------------------------------------
+
+do
+  resetTree()
+  local tpl = buildTemplate("Write-Check Template")
+  local tplId = fhGetRecordId(tpl)
+
+  forceNextCreateFailure = true
+  local okSourCreate, errSourCreate = pcall(sourceHelper.createSourceFromTemplate, tplId, {})
+  check(not okSourCreate, 'createSourceFromTemplate raises when fhCreateItem("SOUR") itself fails')
+  check(contains(errSourCreate, "createSourceFromTemplate") and contains(errSourCreate, "SOUR record"),
+    'the SOUR-create error names the function and what failed to create')
+
+  forceNextWriteFailure = true
+  local okLink, errLink = pcall(sourceHelper.createSourceFromTemplate, tplId, {})
+  check(not okLink, 'createSourceFromTemplate raises when the _SRCT template link write fails')
+  check(contains(errLink, "createSourceFromTemplate") and contains(errLink, "template"),
+    'the link-write error names the function and what it was linking')
+end
+
+do
+  resetTree()
+  local tpl = buildTemplate("Cite Write-Check Template")
+  local tplId = fhGetRecordId(tpl)
+  local sourceRecord = sourceHelper.createSourceFromTemplate(tplId, {})
+  local target = fhCreateItem("INDI")
+
+  forceNextCreateFailure = true
+  local okCiteCreate, errCiteCreate = pcall(sourceHelper.citeSource, target, sourceRecord.id)
+  check(not okCiteCreate, 'citeSource raises when fhCreateItem("SOUR", ptrTarget) (the citation itself) fails')
+  check(contains(errCiteCreate, "citeSource"), 'the citation-create error names the function')
+
+  forceNextWriteFailure = true
+  local okCiteLink, errCiteLink = pcall(sourceHelper.citeSource, target, sourceRecord.id)
+  check(not okCiteLink, 'citeSource raises when linking the citation to its source fails')
+  check(contains(errCiteLink, "citeSource") and contains(errCiteLink, "link"),
+    'the citation-link error names the function and what it was linking')
 end
 
 if failures > 0 then

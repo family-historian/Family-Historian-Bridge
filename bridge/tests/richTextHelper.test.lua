@@ -87,9 +87,24 @@ fhGetQualifiedRecordId = function(ptr)
   return ptr.name
 end
 
+-- Used only by setTftfText's own write-result error message (issue #111, docs/adr/0028)
+-- to name which field a failed write targeted.
+fhGetTag = function(ptr)
+  return ptr.name
+end
+
+-- Write-result failure injection (issue #111, docs/adr/0028): set true immediately before
+-- the one call a fixture wants to fail; self-resets after firing once.
+local forceNextWriteFailure = false
+
 local setValueAsRichTextCalls = {}
 fhSetValueAsRichText = function(ptr, richTextObj)
   table.insert(setValueAsRichTextCalls, { ptr = ptr, richText = richTextObj })
+  if forceNextWriteFailure then
+    forceNextWriteFailure = false
+    return false
+  end
+  return true
 end
 
 fhNewRichText = function()
@@ -327,6 +342,27 @@ local okValidateOnlyBadType, errValidateOnlyBadType = pcall(richTextHelper.valid
 check(okValidateOnlyBadType == false, 'validateSetTftfText rejects a wrong-typed (number) ptr too, same as setTftfText')
 check(contains(errValidateOnlyBadType, 'must point to'), 'the rejection is validateSetTftfText\'s own message, not a raw "attempt to index a number value" crash')
 check(contains(errValidateOnlyBadType, '99'), 'the rejection names the actual value given')
+
+------------------------------------------------------------------
+-- Write-result check (issue #111, docs/adr/0028): a bOK=false from fhSetValueAsRichText
+-- now raises via familyHelper.checkWrite instead of being silently discarded.
+-- checkWrite itself is unit-tested directly in familyHelper.test.lua -- this just proves
+-- setTftfText is wired to it.
+------------------------------------------------------------------
+
+local fieldWriteFailure = newPtr('field-write-failure')
+fixturesByFieldPtr[fieldWriteFailure] = {
+  sText = 'old content',
+  bRich = false,
+  tblRecLinks = nil,
+  tblCitations = nil,
+}
+
+forceNextWriteFailure = true
+local okWriteFail, errWriteFail = pcall(richTextHelper.setTftfText, fieldWriteFailure, 'replacement text')
+check(okWriteFail == false, 'setTftfText raises when fhSetValueAsRichText itself fails')
+check(contains(errWriteFail, 'setTftfText'), 'the failure names the function')
+check(contains(errWriteFail, 'field-write-failure'), 'the failure names the target field (via fhGetTag)')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

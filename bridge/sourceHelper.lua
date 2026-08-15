@@ -372,33 +372,65 @@ end
 -- citation children instead (GEDCOM SOUR > PAGE, SOUR > QUAY, siblings of DATA). Reuses an
 -- existing DATA child rather than creating a second one if Text and EntryDate are both
 -- supplied in the same call.
+
+-- Best-effort description of what a write-result error message is naming as its target.
+-- sour may be a real record (createSourceFromTemplate's freshly created SOUR, or ptrTarget
+-- in citeSource -- an INDI/FAM record or a Fact item) or a citation sub-item (citeSource's
+-- own SOUR-tag child, never a standalone record) -- fhGetQualifiedRecordId resolves the
+-- former but returns "" for the latter (per its own docs, a non-record item has no
+-- qualified id), so this falls back to naming the item's own tag instead.
+local function describeTarget(ptr)
+  local qid = fhGetQualifiedRecordId(ptr)
+  if qid ~= "" then
+    return qid
+  end
+  return "this " .. fhGetTag(ptr) .. " item"
+end
+
 local function citationDataItem(citation)
-  return findChildItem(citation, "DATA") or fhCreateItem("DATA", citation)
+  local existing = findChildItem(citation, "DATA")
+  if existing then
+    return existing
+  end
+  local data = fhCreateItem("DATA", citation)
+  familyHelper.checkCreated(data, "citeSource: failed to create the DATA item on " .. describeTarget(citation))
+  return data
 end
 
 local function setStandardField(citation, code, value)
+  local target = describeTarget(citation)
   if code == "Page" then
-    fhSetValueAsText(fhCreateItem("PAGE", citation), value)
+    local item = fhCreateItem("PAGE", citation)
+    familyHelper.checkCreated(item, "citeSource: failed to create standard field 'Page' (PAGE) on " .. target)
+    familyHelper.checkWrite(fhSetValueAsText(item, value), "citeSource: failed to write standard field 'Page' on " .. target)
   elseif code == "Assessment" then
-    fhSetValueAsText(fhCreateItem("QUAY", citation), value)
+    local item = fhCreateItem("QUAY", citation)
+    familyHelper.checkCreated(item, "citeSource: failed to create standard field 'Assessment' (QUAY) on " .. target)
+    familyHelper.checkWrite(fhSetValueAsText(item, value), "citeSource: failed to write standard field 'Assessment' on " .. target)
   elseif code == "Text" then
     local data = citationDataItem(citation)
-    fhSetValueAsRichText(fhCreateItem("TEXT", data), fhNewRichText(value, false))
+    local item = fhCreateItem("TEXT", data)
+    familyHelper.checkCreated(item, "citeSource: failed to create standard field 'Text' (DATA.TEXT) on " .. target)
+    familyHelper.checkWrite(fhSetValueAsRichText(item, fhNewRichText(value, false)), "citeSource: failed to write standard field 'Text' on " .. target)
   elseif code == "EntryDate" then
     local data = citationDataItem(citation)
-    fhSetValueAsDate(fhCreateItem("DATE", data), toDate(value))
+    local item = fhCreateItem("DATE", data)
+    familyHelper.checkCreated(item, "citeSource: failed to create standard field 'EntryDate' (DATA.DATE) on " .. target)
+    familyHelper.checkWrite(fhSetValueAsDate(item, toDate(value)), "citeSource: failed to write standard field 'EntryDate' on " .. target)
   end
 end
 
-local function setField(sour, value, def)
+local function setField(sour, value, def, code, callerName)
   local item = fhCreateItem(shortcutFor(def), sour)
+  familyHelper.checkCreated(item, callerName .. ": failed to create field '" .. code .. "' (" .. shortcutFor(def) .. ") on " .. describeTarget(sour))
+  local message = callerName .. ": failed to write field '" .. code .. "' on " .. describeTarget(sour)
   if def.type == "Date" then
-    fhSetValueAsDate(item, toDate(value))
+    familyHelper.checkWrite(fhSetValueAsDate(item, toDate(value)), message)
   elseif def.type == "Repository" then
-    fhSetValueAsLink(item, value)
+    familyHelper.checkWrite(fhSetValueAsLink(item, value), message)
   else
     -- Text, Name, Place, Address, Enum, URL all land via the same plain-string setter.
-    fhSetValueAsText(item, value)
+    familyHelper.checkWrite(fhSetValueAsText(item, value), message)
   end
 end
 
@@ -430,16 +462,19 @@ function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
   local template, defs = M.validateCreateSourceFromTemplate(templateNameOrId, fields)
 
   local sour = fhCreateItem("SOUR")
+  familyHelper.checkCreated(sour, "createSourceFromTemplate: failed to create the SOUR record")
   local link = fhCreateItem("_SRCT", sour)
-  fhSetValueAsLink(link, template)
+  familyHelper.checkCreated(link, "createSourceFromTemplate: failed to create the source's _SRCT template link")
+  familyHelper.checkWrite(fhSetValueAsLink(link, template), "createSourceFromTemplate: failed to link the source to its template")
 
   for code, value in pairs(fields) do
-    setField(sour, value, defs[code])
+    setField(sour, value, defs[code], code, "createSourceFromTemplate")
   end
 
   if transcription then
     local text = fhCreateItem("TEXT", sour)
-    fhSetValueAsRichText(text, fhNewRichText(transcription, false))
+    familyHelper.checkCreated(text, "createSourceFromTemplate: failed to create the source's TEXT (transcription) field")
+    familyHelper.checkWrite(fhSetValueAsRichText(text, fhNewRichText(transcription, false)), "createSourceFromTemplate: failed to write the source's transcription")
   end
 
   fhSrcEnableAutoTitle(sour, true)
@@ -526,13 +561,14 @@ end
 function M.citeSource(ptrTarget, sourceNameOrId, fields)
   local source, standardFields, templateFields, defs = M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   local citation = fhCreateItem("SOUR", ptrTarget)
-  fhSetValueAsLink(citation, source)
+  familyHelper.checkCreated(citation, "citeSource: failed to create the citation on " .. describeTarget(ptrTarget))
+  familyHelper.checkWrite(fhSetValueAsLink(citation, source), "citeSource: failed to link the citation to its source")
 
   for code, value in pairs(standardFields) do
     setStandardField(citation, code, value)
   end
   for code, value in pairs(templateFields) do
-    setField(citation, value, defs[code])
+    setField(citation, value, defs[code], code, "citeSource")
   end
 
   return citation

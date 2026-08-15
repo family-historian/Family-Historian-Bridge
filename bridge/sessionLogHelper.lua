@@ -112,7 +112,9 @@ function M.logActivity(ptrRecord, action, media)
   M.validateLogActivity(ptrRecord, action, media)
 
   if not notePtr then
-    notePtr = fhCreateItem("_RNOT")
+    local newNotePtr = fhCreateItem("_RNOT")
+    familyHelper.checkCreated(newNotePtr, "logActivity: failed to create this Session's _RNOT research-note record")
+    notePtr = newNotePtr
     -- FH auto-creates a _RNOT record's one mandatory TEXT subfield as part of fhCreateItem
     -- itself -- fhSetValueAsRichText must target that child item, not notePtr itself
     -- (confirmed live: fhSetValueAsRichText(notePtr, ...) silently returns false and
@@ -163,7 +165,7 @@ function M.logActivity(ptrRecord, action, media)
     buffer:AddText(subline, false)
   end
 
-  fhSetValueAsRichText(textPtr, buffer)
+  familyHelper.checkWrite(fhSetValueAsRichText(textPtr, buffer), "logActivity: failed to save this entry to the session's research note")
 end
 
 return M

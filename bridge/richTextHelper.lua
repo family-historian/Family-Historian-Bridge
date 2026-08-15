@@ -138,7 +138,7 @@ function M.setTftfText(ptr, text)
   M.validateSetTftfText(ptr, text)
   local rt = fhNewRichText()
   rt:SetText(text, true, true)
-  fhSetValueAsRichText(ptr, rt)
+  familyHelper.checkWrite(fhSetValueAsRichText(ptr, rt), "setTftfText: failed to write - FH declined the write to this '" .. fhGetTag(ptr) .. "' field")
 end
 
 return M
