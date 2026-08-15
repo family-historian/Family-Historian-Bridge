@@ -237,6 +237,24 @@ local fakeSessionLogHelper = {
 }
 package.loaded.sessionLogHelper = fakeSessionLogHelper
 
+-- richTextHelper.lua (issue #107, docs/adr/0025) is stubbed the same way: getTftfText is
+-- a pure read (present under both access modes, like findSources); validateSetTftfText/
+-- setTftfText follow the same validate-then-mutate (issue #97) shape as
+-- createSourceFromTemplate/citeSource/logActivity above, recording into the same
+-- helperCallLog and rejecting on the same 'BAD' sentinel.
+local fakeRichTextHelper = {
+  getTftfText = function(ptr) return { text = 'tftf:' .. tostring(ptr), editable = true } end,
+  validateSetTftfText = function(ptr, text)
+    table.insert(helperCallLog, { 'validateSetTftfText', ptr })
+    if ptr == 'BAD' then error('validateSetTftfText rejected it') end
+  end,
+  setTftfText = function(ptr, text)
+    table.insert(helperCallLog, { 'setTftfText', ptr })
+    return 'settftf:' .. tostring(ptr)
+  end,
+}
+package.loaded.richTextHelper = fakeRichTextHelper
+
 -- familyHelper.lua (family/detail query helpers) is stubbed the same way, for the same
 -- reason: this test stays a pure allowlist check, independent of familyHelper.lua's own
 -- behavior (covered by familyHelper.test.lua). Every stub returns an identifiable value
@@ -376,9 +394,11 @@ check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.ge
 check(env.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources present under read-only, by reference (a pure read, unlike sourceHelper.lua\'s other two members)')
 check(env.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields present under read-only, by reference (issue #73 -- a pure read, same as findSources)')
 check(env.fhBridge.getTemplateFieldCensus == fakeSourceHelper.getTemplateFieldCensus, 'fhBridge.getTemplateFieldCensus present under read-only, by reference (issue #74 -- a pure read, same as findSources/getPopulatedTemplateFields)')
+check(env.fhBridge.getTftfText == fakeRichTextHelper.getTftfText, 'fhBridge.getTftfText present under read-only, by reference (issue #107 -- a pure read, same as findSources)')
 check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTemplate absent under read-only (calls real fh* write globals directly — must not be reachable without the write gate)')
 check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
+check(env.fhBridge.setTftfText == nil, 'fhBridge.setTftfText absent under read-only (calls the real fhSetValueAsRichText write global directly — must not be reachable without the write gate)')
 
 -- Write tracker (issue #15): present on every build(), starts false, independent of
 -- accessMode (a read-only script can never flip it, since it has no write functions).
@@ -602,6 +622,15 @@ check(trackerRejectLog.wrote == false,
 check(trackerRejectLog.logged == false,
   'a logActivity call rejected by validation leaves tracker.logged false too')
 
+helperCallLog = {}
+local envRejectSetTftf, trackerRejectSetTftf = sandbox.build("read-write")
+local okRejectSetTftf = pcall(envRejectSetTftf.fhBridge.setTftfText, 'BAD', 'some text')
+check(okRejectSetTftf == false, 'a setTftfText call rejected by validation raises an error')
+check(#helperCallLog == 1 and helperCallLog[1][1] == 'validateSetTftfText',
+  'the rejected setTftfText call never reached the real setTftfText (mutate) at all')
+check(trackerRejectSetTftf.wrote == false,
+  'a setTftfText call rejected by validation leaves tracker.wrote false')
+
 -- fhBridge's read-only members (familyHelper.lua) are still present under read-write too,
 -- by reference (not tracked-write) — env.fhBridge gains members going into read-write, it
 -- never gets rebuilt from scratch.
@@ -614,6 +643,7 @@ check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'f
 check(envReadWrite3.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources still present under read-write, by reference (still unwrapped -- it never writes)')
 check(envReadWrite3.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields still present under read-write, by reference (issue #73 -- still unwrapped, it never writes)')
 check(envReadWrite3.fhBridge.getTemplateFieldCensus == fakeSourceHelper.getTemplateFieldCensus, 'fhBridge.getTemplateFieldCensus still present under read-write, by reference (issue #74 -- still unwrapped, it never writes)')
+check(envReadWrite3.fhBridge.getTftfText == fakeRichTextHelper.getTftfText, 'fhBridge.getTftfText still present under read-write, by reference (issue #107 -- still unwrapped, it never writes)')
 
 -- fhBridge.logActivity (require('sessionLogHelper'), issue #36): present, wrapped, forwards
 -- through and flips the tracker the same way createSourceFromTemplate/citeSource do above.
@@ -627,6 +657,17 @@ check(trackerReadWrite6.wrote == true, 'calling a wrapped fhBridge.logActivity f
 -- other write primitive -- proves logged and wrote are genuinely independent signals, not
 -- the same flag under two names.
 check(trackerReadWrite6.logged == true, 'calling fhBridge.logActivity flips tracker.logged')
+
+-- fhBridge.setTftfText (require('richTextHelper'), issue #107, docs/adr/0025): present,
+-- wrapped, forwards through and flips the tracker the same way createSourceFromTemplate/
+-- citeSource/logActivity do above.
+helperCallLog = {}
+local envReadWriteSetTftf, trackerReadWriteSetTftf = sandbox.build("read-write")
+check(type(envReadWriteSetTftf.fhBridge.setTftfText) == 'function' and envReadWriteSetTftf.fhBridge.setTftfText ~= fakeRichTextHelper.setTftfText,
+  'read-write fhBridge.setTftfText is wrapped, not the raw function')
+check(envReadWriteSetTftf.fhBridge.setTftfText('ptr', 'some text') == 'settftf:ptr', 'wrapped fhBridge.setTftfText forwards through to the real richTextHelper.setTftfText')
+check(trackerReadWriteSetTftf.wrote == true, 'calling a wrapped fhBridge.setTftfText flips the tracker too')
+check(trackerReadWriteSetTftf.logged == false, 'calling fhBridge.setTftfText (not logActivity) leaves tracker.logged false')
 
 local envReadWrite7, trackerReadWrite7 = sandbox.build("read-write")
 check(envReadWrite7.fhCreateItem('INDI') == 'created:INDI', 'wrapped fhCreateItem still forwards through')

@@ -471,8 +471,14 @@ function M.build(accessMode)
   -- fh* write primitive), so all three are wired into env.fhBridge here too, by reference
   -- like every other read-only member -- gating tracks whether a function writes, not
   -- which file it's defined in.
+  --
+  -- richTextHelper.lua's getTftfText (issue #107, docs/adr/0025) is the same story:
+  -- fhGetValueAsRichText/fhGetQualifiedRecordId are both pure reads already granted above,
+  -- so it's wired in unconditionally too. Its sibling setTftfText calls the real
+  -- fhSetValueAsRichText write primitive and stays gated to read-write, below.
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
+  local realRichTextHelper = require('richTextHelper')
   env.fhBridge = {
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
@@ -483,6 +489,7 @@ function M.build(accessMode)
     findSources = realSourceHelper.findSources,
     getPopulatedTemplateFields = realSourceHelper.getPopulatedTemplateFields,
     getTemplateFieldCensus = realSourceHelper.getTemplateFieldCensus,
+    getTftfText = realRichTextHelper.getTftfText,
   }
 
   if accessMode == "read-write" then
@@ -504,6 +511,9 @@ function M.build(accessMode)
     -- trackedLog, for these three -- see their own comment above for why: each has a real
     -- validation phase (validateCreateSourceFromTemplate/validateCiteSource/
     -- validateLogActivity) worth running before the tracker arms, unlike a raw fh* primitive.
+    -- richTextHelper.lua's setTftfText (issue #107, docs/adr/0025) is the same shape --
+    -- validateSetTftfText re-checks for citations right before the real write, gated the
+    -- same validatedTrackedWrite way as createSourceFromTemplate/citeSource.
     local realSessionLogHelper = require('sessionLogHelper')
     env.fhBridge.createSourceFromTemplate = validatedTrackedWrite(
       realSourceHelper.validateCreateSourceFromTemplate, realSourceHelper.createSourceFromTemplate)
@@ -511,6 +521,8 @@ function M.build(accessMode)
       realSourceHelper.validateCiteSource, realSourceHelper.citeSource)
     env.fhBridge.logActivity = validatedTrackedLog(
       realSessionLogHelper.validateLogActivity, realSessionLogHelper.logActivity)
+    env.fhBridge.setTftfText = validatedTrackedWrite(
+      realRichTextHelper.validateSetTftfText, realRichTextHelper.setTftfText)
   end
 
   return env, tracker

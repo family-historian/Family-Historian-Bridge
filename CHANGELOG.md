@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### fhBridge.getTftfText/setTftfText: full-document tFTF rewrite for mid-document RichText edits (issue #107)
+- New `bridge/richTextHelper.lua` module resolves the record-link case of issue #107's
+  "unsolved mid-document RichText edit" problem (see 0.13.0's own changelog entry below).
+  `fhBridge.getTftfText(ptr)` converts a field's `GetText()`-returned eFTF text
+  (index-based `<rec=N,...>` + `tblRecLinks`) into a self-contained tFTF string
+  (`<rec=QualifiedId,...>`, resolved via `fhGetQualifiedRecordId`) that a caller can
+  freely splice/reorder anywhere with plain Lua string operations — including a brand-new
+  record link mid-document. `fhBridge.setTftfText(ptr, text)` commits it back in one
+  `RichText:SetText(text, true, true)` rewrite, which needs no side table at all and so
+  structurally cannot hit issue #106's broken-`tblRecLinks` bug. `getTftfText` is a pure
+  read (present under both access modes); `setTftfText` is read-write-only
+  (`docs/adr/0025-tftf-full-rewrite-for-mid-document-richtext-edit.md`).
+- Neither function will touch a field with embedded source citations: tFTF cannot
+  represent them, and `SetText(text, true, true)` does not error on one — confirmed live,
+  it silently discards the citation with no warning. `getTftfText` reports
+  `editable = false` with a `reason`; `setTftfText` re-checks at write time and errors
+  outright, confirmed live to leave the field untouched. Editing a citation-bearing
+  field's interior remains an open problem, deliberately out of scope here.
+- Live-verified twice against Family Historian Sample Project 8 (2026-08-15 grilling
+  session): once exercising the underlying `RichText:SetText`/`GetText` logic by hand,
+  once against the real sandboxed `fhBridge.getTftfText`/`fhBridge.setTftfText` functions
+  end to end (splice + citation guard + a real write, plugin reload, and re-read).
+- GEDCOM knowledge corpus: new `Confirmed`-tagged
+  `run-lua-guidance-tftf-full-document-rewrite` entry documents the technique;
+  `run-lua-guidance-mid-document-richtext-edit-unconfirmed` (issue #107) now points
+  forward to it for the record-link case, kept alongside as the historical record of what
+  didn't work.
+
 ## 0.13.0
 
 ### GEDCOM knowledge corpus: typed getter dispatch, Source duplicate detection, corrected save/rollback mechanics, unsolved mid-document RichText edit (issue #107)

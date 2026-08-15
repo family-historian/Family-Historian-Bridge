@@ -89,7 +89,29 @@ implements.
   (plain FTF text, not an interactive checkbox) under that entry, with the location in
   parentheses when one was mentioned. This never touches the media file's bytes or the
   filesystem; the user drags the file into FH themselves after the Session ends.
-- `familyHelper.lua` — six read-only query helpers, unlike the two above: every fh*
+- `richTextHelper.lua` — `fhBridge.getTftfText(ptr)`/`fhBridge.setTftfText(ptr, text)`
+  (issue #107, docs/adr/0025-tftf-full-rewrite-for-mid-document-richtext-edit.md): a safe
+  way to edit IN THE MIDDLE of an existing large RichText field (Notes, Source `TEXT`,
+  citation `DATA/TEXT`), not just append to the end of it the way `logActivity` above
+  already does well. `GetText()`'s own eFTF text uses index-based `<rec=N,...>` tags paired
+  with a `tblRecLinks` table; any hand-extension of that table for `SetText`'s eFTF path
+  returns `false` silently (issue #106), and `AddText`/`AddRecordLink` on a live object
+  only appends to the end. `getTftfText` sidesteps both by resolving every `<rec=N,...>`
+  to a self-contained `<rec=QualifiedId,...>` one (tFTF, via `fhGetQualifiedRecordId`) —
+  a plain string a caller can splice/reorder anywhere with ordinary Lua string operations
+  (`string.find(text, anchor, 1, true)` for a literal, non-pattern anchor) — and
+  `setTftfText` commits the whole thing back in one `SetText(text, true, true)` rewrite,
+  which needs no side table at all and so cannot hit the #106 bug. `getTftfText` is a pure
+  read (present under both access modes, like `findSources`); `setTftfText` is
+  read-write-only. Neither function will touch a field that already has embedded source
+  citations — tFTF cannot represent them, and `SetText(..., true, true)` does not error on
+  one, it silently discards it (confirmed live) — `getTftfText` reports `editable = false`
+  with a `reason`, and `setTftfText` re-checks and errors outright rather than risk that
+  loss. Editing a citation-bearing field's interior remains an open problem, deliberately
+  out of scope here; see docs/adr/0025.
+- `familyHelper.lua` — six read-only query helpers, unlike the three above (each of
+  `sourceHelper.lua`/`sessionLogHelper.lua`/`richTextHelper.lua` has at least one
+  read-write-only member): every fh*
   function this module calls is a read primitive already granted in the Read-only half of
   the sandbox, so `sandbox.lua` wires `env.fhBridge` up with these for BOTH access modes,
   and only *adds* the read-write-only members above on top of that same table.
@@ -160,7 +182,8 @@ implements.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
 `timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, `sessionSettings.lua`,
-`familyHelper.lua`, and `versionCompare.lua` have standalone unit tests, in `tests/`
+`familyHelper.lua`, `richTextHelper.lua`, and `versionCompare.lua` have standalone unit
+tests, in `tests/`
 (`*.test.lua`, run with a plain `lua` interpreter — no FH dependency). Keeping tests out
 of this folder means every file directly in `bridge/`
 is exactly what `scripts/build.lua` bundles into the single installable file (see

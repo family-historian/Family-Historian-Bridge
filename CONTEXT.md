@@ -255,8 +255,30 @@ _Avoid_: FH help corpus (that's the separate, official-help-site-sourced one; se
 The rich-text markup FH stores internally in any multi-line text field (Notes, Source `TEXT`,
 citation-level `DATA/TEXT`, etc.) — inline style commands (`<b>`, `<i>`, ...), tables, web/record/
 citation links, and `[[private]]` spans. Distinct from eFTF (report-only superset) and tFTF
-(the `SetText` plugin API's text-only variant).
+(the `SetText` plugin API's text-only variant, and the basis for **getTftfText**/
+**setTftfText** below).
 _Avoid_: Rich text (alone, when FTF's specific markup grammar is meant)
+
+**getTftfText** / **setTftfText**:
+The `fhBridge` helper pair (`richTextHelper.lua`, issue #107,
+docs/adr/0025-tftf-full-rewrite-for-mid-document-richtext-edit.md) for editing IN THE
+MIDDLE of an existing large RichText field, not just appending to the end of it (the
+append-only case `logActivity` already handles well via a live-object
+`AddText`/`AddRecordLink` buffer). `getTftfText(ptr)` fetches a field's content and
+rewrites every index-based `<rec=N,...>` reference (eFTF, as `GetText()` itself returns)
+into a self-contained `<rec=QualifiedId,...>` one (tFTF) — safe to splice/reorder/insert
+into with ordinary Lua string operations, since a qualified id needs no companion table
+the way an index does. `setTftfText(ptr, text)` commits an edited tFTF string back in one
+full-document `SetText(text, true, true)` rewrite. Neither function will touch a field
+that has embedded source citations — tFTF cannot represent a citation at all, and,
+confirmed live, `SetText(..., true, true)` does not error on one; it silently discards it.
+`getTftfText` reports such a field `editable = false` with a `reason`; `setTftfText`
+re-checks and errors outright rather than risk that loss. Editing a citation-bearing
+field's interior remains an open problem — deliberately out of scope for this pair; see
+docs/adr/0025.
+_Avoid_: A hand-rolled `GetText()`/extended-`tblRecLinks`/`SetText()` round trip for a
+record-link edit — proven broken for anything beyond an exact passthrough (issue #106,
+`run-lua-guidance-settext-reclinks-cannot-add-new-links` in the gedcom-knowledge-corpus)
 
 **Shared Fact**:
 A Fact (Individual or Family event/attribute) with participants beyond the record it's attached
