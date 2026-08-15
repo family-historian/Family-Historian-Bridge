@@ -56,7 +56,16 @@ export function describeBridgeConnectionError(err: unknown): CallToolResult {
   return textResult(`Bridge communication error: ${message}`, true);
 }
 
-export function interpretBridgeResponse(raw: string): CallToolResult {
+// mergeIntoResult (issue #109): describe_project's own way to fold bridgeState into its
+// fixed script's own JSON object before stringifying, without teaching this shared
+// module (used by run_lua too) anything about what bridgeState is. Only reached on the
+// success path below -- an error/malformed response returns before mergeIntoResult is
+// ever applied, so it never leaks into an error result. run_lua never passes it, so its
+// arbitrary script results are unaffected.
+export function interpretBridgeResponse(
+  raw: string,
+  mergeIntoResult?: Record<string, unknown>,
+): CallToolResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -80,5 +89,8 @@ export function interpretBridgeResponse(raw: string): CallToolResult {
     return textResult(`Script error: ${parsed.error}${undoHint}`, true);
   }
 
-  return textResult(JSON.stringify(parsed));
+  const result = mergeIntoResult
+    ? { ...(parsed as Record<string, unknown>), ...mergeIntoResult }
+    : parsed;
+  return textResult(JSON.stringify(result));
 }

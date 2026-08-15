@@ -39,25 +39,29 @@ describe("compareVersions", () => {
 });
 
 describe("interpretVersionResponse", () => {
-  it("reports match when the bridge's version equals the server's", () => {
+  it("reports match with the bridge's version retained and accessMode null when the reply omits it", () => {
     expect(interpretVersionResponse('{"version":"0.4.0"}', "0.4.0")).toEqual({
       status: "match",
+      bridgeVersion: "0.4.0",
+      accessMode: null,
     });
   });
 
-  it("reports warn with both versions attached on a minor/patch mismatch", () => {
+  it("reports warn with both versions and accessMode null attached on a minor/patch mismatch", () => {
     expect(interpretVersionResponse('{"version":"0.4.0"}', "0.4.1")).toEqual({
       status: "warn",
       bridgeVersion: "0.4.0",
       serverVersion: "0.4.1",
+      accessMode: null,
     });
   });
 
-  it("reports block with both versions attached on a major mismatch", () => {
+  it("reports block with both versions and accessMode null attached on a major mismatch", () => {
     expect(interpretVersionResponse('{"version":"1.0.0"}', "2.0.0")).toEqual({
       status: "block",
       bridgeVersion: "1.0.0",
       serverVersion: "2.0.0",
+      accessMode: null,
     });
   });
 
@@ -76,19 +80,49 @@ describe("interpretVersionResponse", () => {
       status: "unparseable",
     });
   });
+
+  it("reports the accessMode a Bridge reply includes, on both match and warn (issue #109)", () => {
+    expect(
+      interpretVersionResponse('{"version":"0.4.0","accessMode":"read-write"}', "0.4.0"),
+    ).toEqual({ status: "match", bridgeVersion: "0.4.0", accessMode: "read-write" });
+
+    expect(
+      interpretVersionResponse('{"version":"0.4.0","accessMode":"read-only"}', "0.4.1"),
+    ).toEqual({
+      status: "warn",
+      bridgeVersion: "0.4.0",
+      serverVersion: "0.4.1",
+      accessMode: "read-only",
+    });
+  });
+
+  it("treats an unrecognized accessMode value as null rather than passing it through", () => {
+    expect(
+      interpretVersionResponse('{"version":"0.4.0","accessMode":"sudo"}', "0.4.0"),
+    ).toEqual({ status: "match", bridgeVersion: "0.4.0", accessMode: null });
+  });
 });
 
 describe("checkBridgeVersion", () => {
-  it("blocks nothing and returns no note when versions match", async () => {
+  it("blocks nothing, returns no note, and reports bridgeState on a match", async () => {
     const result = await checkBridgeVersion(
       async () => '{"version":"0.4.0"}',
       "0.4.0",
     );
 
-    expect(result).toEqual({ block: null, note: null });
+    expect(result).toEqual({
+      block: null,
+      note: null,
+      bridgeState: {
+        bridgeVersion: "0.4.0",
+        serverVersion: "0.4.0",
+        versionStatus: "match",
+        accessMode: null,
+      },
+    });
   });
 
-  it("returns a note (but does not block) on a minor/patch mismatch", async () => {
+  it("returns a note (but does not block) and reports bridgeState on a minor/patch mismatch", async () => {
     const result = await checkBridgeVersion(
       async () => '{"version":"0.4.0"}',
       "0.4.1",
@@ -98,6 +132,12 @@ describe("checkBridgeVersion", () => {
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toContain("0.4.0");
     expect(result.note).toContain("0.4.1");
+    expect(result.bridgeState).toEqual({
+      bridgeVersion: "0.4.0",
+      serverVersion: "0.4.1",
+      versionStatus: "warn",
+      accessMode: null,
+    });
   });
 
   it("blocks with an error result on a major mismatch, naming both versions, tagged as a version-mismatch reason", async () => {
@@ -116,7 +156,7 @@ describe("checkBridgeVersion", () => {
     expect(text.toLowerCase()).toContain("major");
   });
 
-  it("returns a note (but does not block) when the Bridge doesn't support version reporting", async () => {
+  it("returns a note (but does not block) and reports bridgeState with a null bridgeVersion/accessMode when the Bridge doesn't support version reporting", async () => {
     const result = await checkBridgeVersion(
       async () => '{"error": "expected STOP or LUA <n>"}',
       "0.4.0",
@@ -125,14 +165,26 @@ describe("checkBridgeVersion", () => {
     expect(result.block).toBeNull();
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toMatch(/doesn't support version reporting/);
+    expect(result.bridgeState).toEqual({
+      bridgeVersion: null,
+      serverVersion: "0.4.0",
+      versionStatus: "unsupported",
+      accessMode: null,
+    });
   });
 
-  it("returns a generic note (but does not block) on an unparseable response", async () => {
+  it("returns a generic note (but does not block) and reports bridgeState with a null bridgeVersion/accessMode on an unparseable response", async () => {
     const result = await checkBridgeVersion(async () => "garbage", "0.4.0");
 
     expect(result.block).toBeNull();
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toMatch(/could not determine/i);
+    expect(result.bridgeState).toEqual({
+      bridgeVersion: null,
+      serverVersion: "0.4.0",
+      versionStatus: "unparseable",
+      accessMode: null,
+    });
   });
 
   it("blocks with the no-Session message when the version query itself can't connect, tagged as a connection-error reason", async () => {
@@ -147,6 +199,17 @@ describe("checkBridgeVersion", () => {
     const text = (result.block.content[0] as { text: string }).text;
     expect(text).toMatch(/no .*session/i);
     expect(text).toMatch(/click start/i);
+  });
+
+  it("reports the accessMode a Bridge reply includes in bridgeState (issue #109)", async () => {
+    const result = await checkBridgeVersion(
+      async () => '{"version":"0.4.0","accessMode":"read-write"}',
+      "0.4.0",
+    );
+
+    expect(result.block).toBeNull();
+    if (result.block !== null) throw new Error("unreachable");
+    expect(result.bridgeState.accessMode).toBe("read-write");
   });
 });
 

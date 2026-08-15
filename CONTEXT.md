@@ -159,6 +159,17 @@ Recomputed on every call; see docs/adr/0002-describe-project-no-server-cache.md 
 it isn't cached. Always executes in the Read-only sandbox regardless of the Session's own
 Access mode — its script is fixed and known to never call a write function, so there's no
 reason to ever run it with write capability available even during a read-write Session.
+Also returns `bridgeState` (issue #109, docs/adr/0026-bridge-state-in-describe-project-
+census.md) — the running Bridge plugin's own state, not the FH project's:
+`bridgeVersion`/`serverVersion`/`versionStatus` (the same match/warn/unsupported/
+unparseable verdict every call's VERSION exchange already computes, reused verbatim rather
+than re-derived) and `accessMode` (the Session's real read-only/read-write toggle — distinct
+from the Read-only sandbox this script itself always executes under, described just above).
+Any field genuinely unknown (an old Bridge predating `accessMode` on the wire, or a version
+reply that didn't parse) is `null`, not an omitted key. Merged in server-side from the same
+VERSION exchange every call already makes (see **Version check** below) — no second
+connection, no new sandbox globals.
+
 _Avoid_: Census tool, project summary (there is exactly one tool with this name and shape)
 
 **author_fh_plugin**:
@@ -204,7 +215,13 @@ A `VERSION` request the server sends over its own connection ahead of every
 its own version against the running Bridge's (issue #45) — catches a stale Bridge plugin
 left installed against a freshly upgraded server, or vice versa, since a mismatch doesn't
 necessarily break the wire protocol on its own. A matching or minor/patch-differing version
-just gets noted in the tool's result text and the Bridge's own dialog; a differing major
+always gets noted in the Bridge's own dialog, and in the tool's result text for
+`run_lua`/`install_fh_plugin` — `describe_project` surfaces the same verdict as a
+structured `bridgeState.versionStatus` field instead (issue #109,
+docs/adr/0026-bridge-state-in-describe-project-census.md), not a second copy as text; see
+**describe_project**'s own entry above. Issue #109 also grew the Bridge's `VERSION` reply
+from `{version}` to `{version, accessMode}`, so `describe_project`'s `bridgeState` can
+report the Session's real Access mode without a second connection. A differing major
 version blocks the call entirely with an error instead of running the real request (inert
 today, pre-1.0 — see docs/adr/0013-bridge-server-version-mismatch-check.md for the full
 wire protocol, severity policy, and the backward-compatible handling of a Bridge that

@@ -5,8 +5,9 @@ import {
   runLuaOnBridge as defaultRunLuaOnBridge,
   type RunLuaOnBridgeOptions,
 } from "./bridgeClient.js";
+import { interpretBridgeResponse } from "./bridgeResponse.js";
 import { SERVER_VERSION } from "./serverVersion.js";
-import { runVersionCheckedScript, type BridgeScriptDeps } from "./versionCheck.js";
+import { checkVersionThenRunScript, type BridgeScriptDeps } from "./versionCheck.js";
 
 export type DescribeProjectDeps = BridgeScriptDeps;
 
@@ -74,7 +75,13 @@ Returns JSON shaped as:
     "CI_APP_MODE": "<\\"Project Mode\\" | \\"Gedcom Mode\\" | \\"Gedcom Mode (new)\\">",
     "CI_STRING_ENCODING": "<\\"ANSI\\" | \\"UTF-8\\">"
   },
-  "fhAppVersion": "<Family Historian's own application version, e.g. \\"8.0.0\\", from fhGetAppVersion()>"
+  "fhAppVersion": "<Family Historian's own application version, e.g. \\"8.0.0\\", from fhGetAppVersion()>",
+  "bridgeState": {
+    "bridgeVersion": "<the running Bridge plugin's own version, or null if it couldn't be determined>",
+    "serverVersion": "<this server's own version>",
+    "versionStatus": "<\\"match\\" | \\"warn\\" | \\"unsupported\\" | \\"unparseable\\">",
+    "accessMode": "<\\"read-only\\" | \\"read-write\\", the current Bridge Session's real Access mode, or null if the Bridge predates this field>"
+  }
 }
 
 flagCensus covers Individual record flags only (Living/Private plus any project-specific
@@ -84,7 +91,11 @@ a specific fact) aren't covered here.
 contextInfo carries every fhGetContextInfo() value that's actually usable here: the two
 window-handle values (CI_APP_HWND/CI_PARENT_HWND) and the two report/book-only values
 (CI_BOOK_CONTEXT/CI_BOOK_ITEM_HEADING, meaningless outside a report plugin's book context)
-are omitted — see the script's own comment for why.`;
+are omitted — see the script's own comment for why.
+
+bridgeState describes the running Bridge plugin itself, not the FH project — accessMode is
+the Session's real read-only/read-write toggle, distinct from the Read-only sandbox this
+tool's own fixed script always executes under regardless of that toggle.`;
 
 // Fixed, built-in script (not Claude-authored — see CONTEXT.md "describe_project"). Runs
 // through the same sandbox/transport as run_lua, so it's limited to the same read-only
@@ -327,10 +338,19 @@ return {
 }
 `;
 
+// Shares checkVersionThenRunScript's version-check/run-script steps with run_lua
+// (versionCheck.ts's runVersionCheckedScript) but not its final response-shaping step:
+// run_lua ends with appendVersionNote, while describe_project (issue #109, docs/adr/0026)
+// folds the same verdict into the response body as structured bridgeState instead of a
+// free-text note -- run_lua keeps the note unchanged, since its result has no fixed schema
+// to merge structured data into.
 export async function handleDescribeProject(
   deps: DescribeProjectDeps = defaultDeps,
 ): Promise<CallToolResult> {
-  return runVersionCheckedScript(deps, SERVER_VERSION, DESCRIBE_PROJECT_SCRIPT);
+  const run = await checkVersionThenRunScript(deps, SERVER_VERSION, DESCRIBE_PROJECT_SCRIPT);
+  if (run.block) return run.block;
+
+  return interpretBridgeResponse(run.raw, { bridgeState: run.versionCheck.bridgeState });
 }
 
 export function registerDescribeProjectTool(

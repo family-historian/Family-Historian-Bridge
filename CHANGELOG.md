@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### describe_project reports the running Bridge plugin's own state (issue #109)
+- New `bridgeState` section in `describe_project`'s census: `bridgeVersion`, `serverVersion`,
+  `versionStatus` (the existing match/warn/unsupported/unparseable verdict, reused
+  verbatim), and `accessMode` (the Session's real read-only/read-write toggle -- distinct
+  from the Read-only sandbox `describe_project`'s own fixed script always executes under).
+  Any field genuinely unknown (an old Bridge predating `accessMode` on the wire, or a
+  version reply that didn't parse) is `null`, not an omitted key
+  (`docs/adr/0026-bridge-state-in-describe-project-census.md`).
+- No new wire connection: piggybacks on the `VERSION` exchange every `describe_project`
+  call already makes (issue #45/ADR 0013) -- the Bridge's reply grows from `{version}` to
+  `{version, accessMode}` (`bridge/bridgeSession.lua`).
+- `describe_project` stops appending the free-text version-mismatch note now that
+  `bridgeState.versionStatus` is a structured home for the same verdict; `run_lua` keeps
+  the note unchanged (its result has no fixed schema to merge structured data into).
+- Fixed a pre-existing bug in `interpretVersionResponse` (`server/src/versionCheck.ts`):
+  the `match` outcome discarded the parsed `bridgeVersion` string entirely, so the common
+  case (versions agree) was the one case guaranteed to lose the value needed for
+  `bridgeState.bridgeVersion`.
+
 ### fhBridge.getTftfText/setTftfText: full-document tFTF rewrite for mid-document RichText edits (issue #107)
 - New `bridge/richTextHelper.lua` module resolves the record-link case of issue #107's
   "unsolved mid-document RichText edit" problem (see 0.13.0's own changelog entry below).

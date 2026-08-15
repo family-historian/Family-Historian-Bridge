@@ -93,3 +93,36 @@ describe("interpretBridgeResponse", () => {
     expect(result.content[0]?.text).toContain("bridge.fh_lua");
   });
 });
+
+describe("interpretBridgeResponse mergeIntoResult (issue #109)", () => {
+  it("merges extra fields into a successful object response", () => {
+    const result = interpretBridgeResponse('{"individuals":42}', {
+      bridgeState: { versionStatus: "match" },
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content[0]?.text).toBe(
+      '{"individuals":42,"bridgeState":{"versionStatus":"match"}}',
+    );
+  });
+
+  it("does not merge extra fields into a Lua script error result", () => {
+    const result = interpretBridgeResponse('{"error": "boom"}', {
+      bridgeState: { versionStatus: "match" },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe("Script error: boom");
+  });
+
+  it("does not merge extra fields into an unparseable-response error", () => {
+    const result = interpretBridgeResponse("not json at all", {
+      bridgeState: { versionStatus: "match" },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).not.toContain("bridgeState");
+  });
+
+  it("leaves the response unchanged when no extra fields are given", () => {
+    const result = interpretBridgeResponse('{"individuals":42}');
+    expect(result.content[0]?.text).toBe('{"individuals":42}');
+  });
+});

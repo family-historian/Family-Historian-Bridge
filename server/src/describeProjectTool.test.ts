@@ -28,7 +28,7 @@ describe("handleDescribeProject", () => {
     expect(scriptSent).toBe(DESCRIBE_PROJECT_SCRIPT);
   });
 
-  it("returns the script's result as text on success", async () => {
+  it("returns the script's result merged with bridgeState as text on success", async () => {
     const result = await handleDescribeProject({
       runLuaOnBridge: async () =>
         '{"recordCounts":{"INDI":42},"tagCensus":{"individualAndFamily":{"BIRT":10},"source":{},"sourceTemplateFieldDefinitions":{}}}',
@@ -36,12 +36,19 @@ describe("handleDescribeProject", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(result.content).toEqual([
-      {
-        type: "text",
-        text: '{"recordCounts":{"INDI":42},"tagCensus":{"individualAndFamily":{"BIRT":10},"source":{},"sourceTemplateFieldDefinitions":{}}}',
-      },
-    ]);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.recordCounts).toEqual({ INDI: 42 });
+    expect(parsed.tagCensus).toEqual({
+      individualAndFamily: { BIRT: 10 },
+      source: {},
+      sourceTemplateFieldDefinitions: {},
+    });
+    expect(parsed.bridgeState).toEqual({
+      bridgeVersion: SERVER_VERSION,
+      serverVersion: SERVER_VERSION,
+      versionStatus: "match",
+      accessMode: null,
+    });
   });
 
   it("surfaces a Lua-side error response as a tool error carrying the message", async () => {
@@ -297,7 +304,7 @@ describe("handleDescribeProject version check (issue #45)", () => {
     expect(text.toLowerCase()).toContain("major");
   });
 
-  it("still runs the script and appends a note on a minor/patch version mismatch", async () => {
+  it("still runs the script on a minor/patch version mismatch, without appending a text note — reflected in bridgeState.versionStatus instead (issue #109)", async () => {
     const result = await handleDescribeProject({
       runLuaOnBridge: async () => '{"recordCounts":{}}',
       queryBridgeVersion: async () => JSON.stringify({ version: `${SERVER_VERSION}-does-not-match` }),
@@ -305,8 +312,53 @@ describe("handleDescribeProject version check (issue #45)", () => {
 
     expect(result.isError).toBeFalsy();
     const text = (result.content[0] as { text: string }).text;
-    expect(text).toContain('{"recordCounts":{}}');
-    expect(text.toLowerCase()).toContain("note");
+    // A stray appended text note would break this parse entirely (trailing non-JSON after
+    // the object) — parsing cleanly is itself proof no note was appended.
+    const parsed = JSON.parse(text);
+    expect(parsed.recordCounts).toEqual({});
+    expect(parsed.bridgeState).toEqual({
+      bridgeVersion: `${SERVER_VERSION}-does-not-match`,
+      serverVersion: SERVER_VERSION,
+      versionStatus: "warn",
+      accessMode: null,
+    });
+  });
+
+  it("reports versionStatus 'unsupported' and null bridgeVersion/accessMode when the Bridge doesn't support version reporting (issue #109)", async () => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => '{"recordCounts":{}}',
+      queryBridgeVersion: async () => JSON.stringify({ error: "expected STOP or LUA <n>" }),
+    });
+
+    expect(result.isError).toBeFalsy();
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.bridgeState).toEqual({
+      bridgeVersion: null,
+      serverVersion: SERVER_VERSION,
+      versionStatus: "unsupported",
+      accessMode: null,
+    });
+  });
+
+  it("reports the Session's real Access mode in bridgeState when the Bridge reply includes one (issue #109)", async () => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => '{"recordCounts":{}}',
+      queryBridgeVersion: async () =>
+        JSON.stringify({ version: SERVER_VERSION, accessMode: "read-write" }),
+    });
+
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.bridgeState.accessMode).toBe("read-write");
+  });
+
+  it("reports accessMode null in bridgeState when the Bridge predates accessMode-in-VERSION-reply (issue #109)", async () => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => '{"recordCounts":{}}',
+      queryBridgeVersion: matchingVersion,
+    });
+
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.bridgeState.accessMode).toBeNull();
   });
 
   it("tells Claude to ask the user to click Start when the version check itself can't connect, without ever attempting the script", async () => {
@@ -326,5 +378,20 @@ describe("handleDescribeProject version check (issue #45)", () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toMatch(/no .*session/i);
     expect(text).toMatch(/click start/i);
+  });
+});
+
+describe("DESCRIBE_PROJECT_DESCRIPTION bridgeState shape (issue #109)", () => {
+  it("documents bridgeState and its four fields", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"bridgeState"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"bridgeVersion"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"serverVersion"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"versionStatus"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"accessMode"/);
+  });
+
+  it("distinguishes bridgeState's Access mode from the Read-only sandbox this tool's own script always runs under", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/session/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/read-only sandbox/);
   });
 });

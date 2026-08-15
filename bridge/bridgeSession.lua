@@ -205,9 +205,9 @@ local pendingRethrow = nil
 --   LUA_RO <n>     -- same, but forces the Read-only sandbox regardless of the Session's
 --                     Access mode (issue #16 — used exclusively by describe_project).
 --   VERSION <v>    -- issue #45: no body. Replies with this Bridge's own version and
---                     compares it against the server's, surfacing a mismatch via
---                     currentVersionWarning (see above) rather than the LUA/LUA_RO
---                     response shape.
+--                     current Access mode (issue #109), compares the version against the
+--                     server's, surfacing a mismatch via currentVersionWarning (see above)
+--                     rather than the LUA/LUA_RO response shape.
 -- This replaces the prototype's single-line-only receive("*l") read, which could not
 -- carry a multi-line Lua script.
 function timPoll:action_cb()
@@ -256,7 +256,9 @@ function timPoll:action_cb()
         lastActivityTime = os.time()
         lastRequestHandledTime = lastActivityTime
         local severity = versionCompare.compare(BRIDGE_VERSION, request.serverVersion)
-        client:send(json.encode({ version = BRIDGE_VERSION }) .. "\n")
+        -- issue #109: also reports the Session's real Access mode, so the server's
+        -- describe_project bridgeState can surface it without a second connection.
+        client:send(json.encode({ version = BRIDGE_VERSION, accessMode = currentAccessMode() }) .. "\n")
         client:close()
         if severity == "match" then
             currentVersionWarning = nil
