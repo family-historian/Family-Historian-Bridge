@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.0
+
 ### describe_project reports the running Bridge plugin's own state (issue #109)
 - New `bridgeState` section in `describe_project`'s census: `bridgeVersion`, `serverVersion`,
   `versionStatus` (the existing match/warn/unsupported/unparseable verdict, reused
@@ -48,6 +50,28 @@
   `run-lua-guidance-mid-document-richtext-edit-unconfirmed` (issue #107) now points
   forward to it for the record-link case, kept alongside as the historical record of what
   didn't work.
+
+### Pointer-argument validation and write-result checking now share pcall-guarded helpers (issues #110, #111)
+- New `familyHelper.pointerProblem(v)` replaces a copy-pasted `ptr:IsNull()` idiom at all
+  10 call sites across `familyHelper.lua`/`richTextHelper.lua`/`sourceHelper.lua`/
+  `sessionLogHelper.lua` that crashed with a raw Lua error instead of its own intended
+  message whenever a caller passed a non-pointer value (string, number, boolean, or a
+  wrong-shaped table) -- confirmed live: an off-by-one `run_lua` call triggered an earlier
+  write's ADR 0005 full write-session rollback, discarding an unrelated, otherwise-
+  successful write. `sessionLogHelper.validateLogActivity`'s `ptrRecord` also now rejects
+  a Fact/sub-item pointer, matching its own already-documented record-vs-field contract
+  (`docs/adr/0027-shared-pcall-guarded-pointer-check.md`).
+- New `familyHelper.checkWrite`/`checkCreated` close a gap found while fixing the above:
+  every `fhSetValueAsText/Date/Link/RichText` call (11 sites) and every `fhCreateItem`
+  call (6 sites) discarded FH's own non-throwing failure signal (`bOK`, or a NULL pointer)
+  -- a write that silently didn't happen looked identical to one that did. Every failure
+  now aborts the composite call via `error()`, reaching the existing auto-undo and write-
+  tracker paths with no new plumbing
+  (`docs/adr/0028-shared-write-result-checks-checkwrite-checkcreated.md`).
+- GEDCOM knowledge corpus: two new gaps documented -- a `committed: true` result only
+  means the call didn't error, not that the right bytes landed; and tFTF record links
+  render as `<rec=QualifiedId,...>`, not the `<rec=N,...>` numeral a plain `GetText()`
+  shows.
 
 ## 0.13.0
 
