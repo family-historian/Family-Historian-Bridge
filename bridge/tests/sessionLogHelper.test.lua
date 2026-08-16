@@ -170,7 +170,7 @@ local lastSave = setValueCalls[#setValueCalls]
 check(lastSave.node == noteNode.textNode, 'fhSetValueAsRichText is called on the new _RNOT record\'s TEXT subfield, not the record\'s own pointer')
 
 local segments = lastSave.richText.segments
-check(#segments == 9, 'one call produces the Title:/Type:/Status:/Date: header (6 segments, since Title: needs its own open/text/close markup split) plus a bullet marker, an entry-prefix segment, and one record link')
+check(#segments == 7, 'one call produces the Title:/Type:/Status:/Date: header (4 segments -- bold-open, Title: text, bold-close, and one merged Type:/Status:/Date: paragraph) plus a bullet marker, an entry-prefix segment, and one record link')
 
 check(segments[1].kind == 'text' and segments[1].text == '<b><fs="+2">' and segments[1].rich == true,
   'Title: opens with bold + a +2pt size bump, as real FTF markup (issue #79, kept through issue #112)')
@@ -183,19 +183,16 @@ check(titleSegment.rich == false, 'the Title: line itself is added as plain (aut
 check(segments[3].kind == 'text' and segments[3].text == '</fs></b>\n' and segments[3].rich == true,
   'Title: closes bold/size and ends its own paragraph (issue #112 -- the blank-paragraph gap moved to after Date:, since the old intro line is gone)')
 
-check(segments[4].kind == 'text' and segments[4].text == 'Type: mcp-log\n' and segments[4].rich == false,
-  'Type: is a fixed constant, plain (non-FTF-markup) font (issue #112)')
+check(segments[4].kind == 'text' and segments[4].rich == false
+  and segments[4].text:match('^Type: mcp%-log\nStatus: closed\nDate: %d%d %a%a%a %d%d%d%d\n\n$') ~= nil,
+  'Type:/Status:/Date: are written as one plain (non-FTF-markup) paragraph block -- Type/Status are fixed constants, Date: uses its own human-scannable date-only format, and the trailing blank line separates the header from the first entry (issue #112)')
 
-check(segments[5].kind == 'text' and segments[5].text == 'Status: closed\n' and segments[5].rich == false,
-  'Status: is a fixed constant, plain font (issue #112)')
-
-check(segments[6].kind == 'text' and segments[6].rich == false and segments[6].text:match('^Date: %d%d %a%a%a %d%d%d%d\n\n$') ~= nil,
-  'Date: uses its own human-scannable date-only format, and its trailing blank line separates the header from the first entry (issue #112)')
-
-check(segments[7].kind == 'text' and segments[7].text == '* ' and segments[7].rich == true,
+check(segments[5].kind == 'text' and segments[5].text == '* ' and segments[5].rich == true,
   'the entry starts a new bulleted FTF paragraph (issue #79)')
 
-local firstLink = segments[9]
+-- The record link is always the entry's last segment (nothing follows AddRecordLink when
+-- there's no media detail), so indexing off #segments needs no header-size-dependent offset.
+local firstLink = segments[#segments]
 check(firstLink.kind == 'reclink', 'the record reference is a real record link, not plain text')
 check(firstLink.node == currentNode(indiA), 'the record link points at the record passed to logActivity')
 check(firstLink.display == nil,
@@ -213,26 +210,30 @@ local lastSave2 = setValueCalls[#setValueCalls]
 check(lastSave2.node == noteNode.textNode, 'second call still saves onto the same _RNOT record\'s TEXT subfield')
 
 local segments2 = lastSave2.richText.segments
-check(#segments2 == 13, 'second call appends a further bulleted entry (separator, bullet, prefix, link) rather than replacing the buffer')
+check(#segments2 == 11, 'second call appends a further bulleted entry (separator, bullet, prefix, link) rather than replacing the buffer')
 
--- Earlier entry untouched.
+-- Earlier entry untouched. segments/segments2 are the same underlying (mutated-in-place)
+-- table, so re-checking firstLink's own fields directly proves the first entry's slot
+-- wasn't touched, with no need to re-derive its index into the now-longer segments2.
 check(segments2[2].text == segments[2].text, 'the Title: line is unchanged after the second call')
-check(segments2[9].kind == 'reclink' and segments2[9].node == firstLink.node and segments2[9].display == firstLink.display,
+check(firstLink.kind == 'reclink' and firstLink.node == currentNode(indiA) and firstLink.display == nil,
   'the first entry\'s record link is unchanged after the second call')
 
-check(segments2[10].kind == 'text' and segments2[10].text == '\n' and segments2[10].rich == false,
+-- The second entry's four appended segments (separator, bullet, prefix, link) are always the
+-- last four in the buffer, regardless of the header's own segment count.
+check(segments2[#segments2 - 3].kind == 'text' and segments2[#segments2 - 3].text == '\n' and segments2[#segments2 - 3].rich == false,
   'a blank-line separator precedes the second entry, as before')
-check(segments2[11].kind == 'text' and segments2[11].text == '* ' and segments2[11].rich == true,
+check(segments2[#segments2 - 2].kind == 'text' and segments2[#segments2 - 2].text == '* ' and segments2[#segments2 - 2].rich == true,
   'the second entry also starts its own bulleted FTF paragraph')
 
-local secondLink = segments2[13]
+local actionText = segments2[#segments2 - 1]
+check(actionText.kind == 'text' and contains(actionText.text, 'fact added Birth'),
+  'the second entry\'s action text is included in the appended segment')
+
+local secondLink = segments2[#segments2]
 check(secondLink.kind == 'reclink', 'the second entry\'s record reference is also a real record link')
 check(secondLink.node == currentNode(indiB), 'the second record link points at the second record passed to logActivity')
 check(secondLink.display == nil, 'the second record link is also "automatic" (no display-text argument)')
-
-local actionText = segments2[12]
-check(actionText.kind == 'text' and contains(actionText.text, 'fact added Birth'),
-  'the second entry\'s action text is included in the appended segment')
 
 ------------------------------------------------------------------
 -- A fresh module load (simulating a new Session) starts a new note on its next call

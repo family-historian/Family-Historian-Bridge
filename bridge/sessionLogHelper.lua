@@ -27,8 +27,11 @@ local notePtr = nil
 local textPtr = nil
 local buffer = nil
 
-local function timestamp()
-  return os.date("%Y-%m-%d %H:%M")
+-- now (optional): an os.time() instant to format instead of the current time -- lets the
+-- header below stamp Title: and Date: off one shared "now" rather than each taking its own
+-- separate os.date() reading (issue #112 cleanup).
+local function timestamp(now)
+  return os.date("%Y-%m-%d %H:%M", now)
 end
 
 local function timeOnly()
@@ -38,8 +41,8 @@ end
 -- Human-scannable, date-only format for the header's Date: line (e.g. "16 Aug 2026") --
 -- deliberately distinct from timestamp()'s "%Y-%m-%d %H:%M", since Date: is read by a
 -- person scanning the Records Window, not re-parsed (issue #112).
-local function dateOnly()
-  return os.date("%d %b %Y")
+local function dateOnly(now)
+  return os.date("%d %b %Y", now)
 end
 
 -- sessionLogHelper.logActivity(ptrRecord, action, media)
@@ -152,6 +155,10 @@ function M.logActivity(ptrRecord, action, media)
     textPtr = fhNewItemPtr()
     textPtr:MoveTo(notePtr, "~.TEXT")
     buffer = fhNewRichText()
+    -- Captured once and formatted two ways below (Title:'s timestamp, Date:'s date-only
+    -- form) rather than each calling os.date() separately, so the two can't disagree if
+    -- note creation happens to straddle a midnight boundary (issue #112 cleanup).
+    local now = os.time()
     -- Title: line -- bold + a fixed +2pt bump (issue #79, kept through issue #112). FTF's
     -- <fs> is only ever a relative delta off the user's own default Notes font size --
     -- there's no absolute-point command and no API to read that default, so "+2" is a fixed
@@ -162,18 +169,16 @@ function M.logActivity(ptrRecord, action, media)
     -- docs/adr/0029) -- confirmed live that FH's Title:-paragraph detection still works with
     -- this markup around it, so only this line (not Type:/Status:/Date: below) keeps it.
     buffer:AddText("<b><fs=\"+2\">", true)
-    buffer:AddText("Title: Claude session log - " .. timestamp(), false)
+    buffer:AddText("Title: Claude session log - " .. timestamp(now), false)
     buffer:AddText("</fs></b>\n", true)
-    -- Type:/Status: lines -- fixed constants on every note this helper creates (issue #112),
-    -- plain (non-FTF-markup) font, so the user can target these notes with a Smart Folder or
-    -- query for bulk cleanup once reviewed.
-    buffer:AddText("Type: mcp-log\n", false)
-    buffer:AddText("Status: closed\n", false)
-    -- Date: line -- dateOnly()'s human-scannable format, distinct from Title's embedded
-    -- timestamp. The extra "\n" leaves a blank paragraph between the header and the first
+    -- Type:/Status:/Date: lines -- fixed constants plus dateOnly()'s human-scannable date,
+    -- distinct from Title's embedded timestamp. One plain (non-FTF-markup) call covers all
+    -- three, since nothing but ordinary "\n"s separates them -- the fixed Type/Status values
+    -- let the user target these notes with a Smart Folder or query for bulk cleanup once
+    -- reviewed. The trailing "\n" leaves a blank paragraph between the header and the first
     -- entry below, the same gap issue #79 established, just moved here now that the old
     -- static intro line (which used to carry it) is gone.
-    buffer:AddText("Date: " .. dateOnly() .. "\n\n", false)
+    buffer:AddText("Type: mcp-log\nStatus: closed\nDate: " .. dateOnly(now) .. "\n\n", false)
   else
     buffer:AddText("\n", false)
   end
