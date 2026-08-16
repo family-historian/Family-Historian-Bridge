@@ -7,8 +7,11 @@ user-level `~/CLAUDE.md`, not here — this file only covers what's specific to 
   at the start of a session, then use its symbolic tools (`find_symbol`, `get_symbols_overview`,
   `find_referencing_symbols`, etc.) for codebase structure, architecture, or "how does X work"
   questions rather than searching files directly.
-- Covers TypeScript (`server/`) and Lua (`bridge/*.lua`). `.fh_lua` files are **not** recognized
+- Covers TypeScript (`server/`), Lua (`bridge/*.lua`), Bash, Markdown, JSON, and YAML
+  (`.serena/project.yml`'s `language_servers` list). `.fh_lua` files are **not** recognized
   by Serena's Lua language server (issue #75) — fall back to grep/Read for those specifically.
+- PowerShell (`installer/release-windows.ps1`) is **not** covered — can't be added while running
+  on macOS. Fall back to grep/Read for it too.
 - Re-activating an already-active project is a no-op in this Serena version (doesn't reread
   `.serena/project.yml` or restart language servers), so a fresh session is needed after
   editing that file.
