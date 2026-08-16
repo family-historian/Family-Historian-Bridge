@@ -1,6 +1,7 @@
 .ua/
 .mcp.json
 .syncthing*
+.agents/skills/
 
 # The root package.json is a dependency-free task runner (see its description field).
 # Anything npm leaves behind up here is incidental and shouldn't be committed --
