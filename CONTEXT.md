@@ -449,6 +449,31 @@ backstop via `sandbox.lua`'s `tracker.logged` flag, rejecting or rolling back a 
 writes without logging (issue #43) — see
 docs/adr/0012-enforce-write-then-log-via-pre-scan-and-runtime-check.md.
 
+The note's opening bold heading + static intro paragraph is being replaced (issue #112,
+2026-08-16 grilling session) by a labelled-field block — `Title:`/`Type:`/`Status:`/
+`Date:` — using FH's own labelled-paragraph convention (the mechanism behind
+`fhGetLabelledText`/`fhSetLabelledText`, see those entries below). This isn't cosmetic: FH
+derives a `_RNOT` record's `fhGetDisplayText` and its name in the Records Window from a
+`Title:`-labelled first paragraph, so `Title`'s value (still "Claude session log -
+<timestamp>") becomes the record's actual name everywhere in FH, not just a heading
+inside the note. Only the `Title:` line keeps the existing bold + `+2` heading styling —
+`Type:`/`Status:`/`Date:` are plain — confirmed live by the user (issue #112) that FH's
+`Title:`-paragraph detection still works with FTF rich markup around/inside the labelled
+text, so there was no need to drop it for safety. `Type` (`"mcp-log"`) and `Status`
+(`"closed"`) are both fixed constants on every note this helper creates — not
+session/action-varying — specifically so the user can target these notes with a Smart
+Folder or query once reviewed, for quick bulk cleanup. `Date` carries its own
+human-scannable, date-only format (e.g. "16 Aug 2026"), distinct from the
+`timestamp()`/`timeOnly()` helpers already used elsewhere in this file — it's meant for a
+person scanning the Records Window, not for re-parsing. A blank paragraph still separates
+the header block from the first bulleted entry, the same visual gap issue #79 established
+between "header stuff" and entries, just with the (now-removed) static intro line no
+longer sitting in between. No backfill: notes already created by Sessions before this
+change keeps their old bold-heading layout; only notes from Sessions started after the
+change ships get the new block. See
+docs/adr/0029-logactivity-labelled-title-type-status-date-header.md for the full decision,
+including why the plain-text-only alternative was rejected.
+
 **run_lua guidance (corpus entries)**:
 The `"run_lua guidance"`-titled entries in the GEDCOM knowledge corpus (call-shape
 gotchas, `citeSource` guidance, `writeSessionRolledBack` handling) — content that used to

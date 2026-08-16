@@ -35,25 +35,52 @@ local function timeOnly()
   return os.date("%H:%M")
 end
 
+-- Human-scannable, date-only format for the header's Date: line (e.g. "16 Aug 2026") --
+-- deliberately distinct from timestamp()'s "%Y-%m-%d %H:%M", since Date: is read by a
+-- person scanning the Records Window, not re-parsed (issue #112).
+local function dateOnly()
+  return os.date("%d %b %Y")
+end
+
 -- sessionLogHelper.logActivity(ptrRecord, action, media)
 -- Given an item pointer to the record an action concerns (e.g. the Individual just
 -- created, or the one a fact was just added to) and a short description of what happened
 -- (e.g. "created", "fact added Birth"): on this Session's first call, creates a new _RNOT
--- record with a bold, +2pt heading paragraph timestamped at creation (e.g. "Claude session
--- log - 2026-08-01 14:32"), followed by a static, default-font intro paragraph ("The
--- following updates were applied to the project:", issue #79, written once alongside the
--- heading, not repeated per entry), and writes the first log entry into it. Every
--- subsequent call in the same Session appends a further entry to that same note,
--- leaving every earlier entry untouched, and never creates a second note. Each entry is its
--- own bulleted ("* ") FTF paragraph, in default (non-bold, default-size) font, and carries
--- only a time (not a full date) -- the heading's timestamp already gives the date, and a
--- Session running over midnight is still evident from an entry's time going backwards
--- (issue #79). The record reference in each entry is a live FTF record link (RichText's
--- AddRecordLink, called with no display-text argument so FH treats it as an "automatic"
--- link) -- not plain text -- so opening the note in FH lets the user click straight through
--- to each record touched, and the label always shows that record's current display name
--- (e.g. the person's name), updating on its own if that name later changes, rather than a
--- name or id frozen at the moment this entry was logged.
+-- record with a four-line labelled header -- Title:/Type:/Status:/Date: -- and writes the
+-- first log entry into it. Every subsequent call in the same Session appends a further
+-- entry to that same note, leaving every earlier entry untouched, and never creates a
+-- second note.
+--
+-- The header (issue #112, docs/adr/0029-logactivity-labelled-title-type-status-date-header.md)
+-- replaces the old free-form heading + static intro paragraph:
+--   Title: Claude session log - 2026-08-16 14:32   (bold, +2pt -- see below)
+--   Type: mcp-log
+--   Status: closed
+--   Date: 16 Aug 2026
+-- Only Title keeps the bold/+2pt styling the old heading had; Type/Status/Date are plain.
+-- This isn't cosmetic: FH derives a _RNOT record's fhGetDisplayText and its name in the
+-- Records Window from a Title:-labelled first paragraph (the same general mechanism behind
+-- fhGetLabelledText/fhSetLabelledText), so Title's value becomes this record's actual name
+-- everywhere in FH, not just an in-note heading -- confirmed live that FH's Title:-paragraph
+-- detection still works with the FTF markup around it, so there was no need to drop the
+-- styling for safety. Type ("mcp-log") and Status ("closed") are both fixed constants on
+-- every note this helper creates, so the user can target them with a Smart Folder or query
+-- for bulk cleanup once reviewed. Date carries its own human-scannable, date-only format
+-- (dateOnly() above), distinct from Title's embedded timestamp -- it's for a person scanning
+-- the Records Window, not for re-parsing. A blank paragraph still separates the header from
+-- the first entry, the same visual gap issue #79 established, just with the (now-removed)
+-- static intro line no longer sitting in between. No backfill: notes already created by past
+-- Sessions keep their old heading+intro layout.
+--
+-- Every subsequent entry is its own bulleted ("* ") FTF paragraph, in default (non-bold,
+-- default-size) font, and carries only a time (not a full date) -- the header's Date: line
+-- already gives the date, and a Session running over midnight is still evident from an
+-- entry's time going backwards (issue #79). The record reference in each entry is a live FTF
+-- record link (RichText's AddRecordLink, called with no display-text argument so FH treats it
+-- as an "automatic" link) -- not plain text -- so opening the note in FH lets the user click
+-- straight through to each record touched, and the label always shows that record's current
+-- display name (e.g. the person's name), updating on its own if that name later changes,
+-- rather than a name or id frozen at the moment this entry was logged.
 --
 -- media (optional, issue #39): a {name, location} table describing media the user still
 -- needs to add by hand once the Session ends -- this project never touches the media
@@ -125,20 +152,28 @@ function M.logActivity(ptrRecord, action, media)
     textPtr = fhNewItemPtr()
     textPtr:MoveTo(notePtr, "~.TEXT")
     buffer = fhNewRichText()
-    -- Heading paragraph: bold + a fixed +2pt bump (issue #79). FTF's <fs> is only ever a
-    -- relative delta off the user's own default Notes font size -- there's no absolute-point
-    -- command and no API to read that default, so "+2" is a fixed bump, not a literal 12pt
-    -- guarantee. The <b>/<fs> markers go through their own bRich=true call; the timestamp
-    -- stays on a separate bRich=false call so it's auto-escaped without needing fhFtfEncode.
+    -- Title: line -- bold + a fixed +2pt bump (issue #79, kept through issue #112). FTF's
+    -- <fs> is only ever a relative delta off the user's own default Notes font size --
+    -- there's no absolute-point command and no API to read that default, so "+2" is a fixed
+    -- bump, not a literal 12pt guarantee. The <b>/<fs> markers go through their own
+    -- bRich=true call; the "Title: " label and timestamp stay on a separate bRich=false call
+    -- so they're auto-escaped without needing fhFtfEncode. This is the paragraph FH reads to
+    -- derive the _RNOT record's own fhGetDisplayText/Records Window name (issue #112,
+    -- docs/adr/0029) -- confirmed live that FH's Title:-paragraph detection still works with
+    -- this markup around it, so only this line (not Type:/Status:/Date: below) keeps it.
     buffer:AddText("<b><fs=\"+2\">", true)
-    buffer:AddText("Claude session log - " .. timestamp(), false)
-    -- The extra "\n" leaves a blank paragraph between the heading and the intro line below
-    -- (issue #79 follow-up).
-    buffer:AddText("</fs></b>\n\n", true)
-    -- Static intro paragraph, written once alongside the heading (issue #79), default font.
-    -- No markup in it, so it stays a single bRich=false call -- no separate rich-markup call
-    -- needed the way the heading/bullet/indent markers each require one.
-    buffer:AddText("The following updates were applied to the project:\n", false)
+    buffer:AddText("Title: Claude session log - " .. timestamp(), false)
+    buffer:AddText("</fs></b>\n", true)
+    -- Type:/Status: lines -- fixed constants on every note this helper creates (issue #112),
+    -- plain (non-FTF-markup) font, so the user can target these notes with a Smart Folder or
+    -- query for bulk cleanup once reviewed.
+    buffer:AddText("Type: mcp-log\n", false)
+    buffer:AddText("Status: closed\n", false)
+    -- Date: line -- dateOnly()'s human-scannable format, distinct from Title's embedded
+    -- timestamp. The extra "\n" leaves a blank paragraph between the header and the first
+    -- entry below, the same gap issue #79 established, just moved here now that the old
+    -- static intro line (which used to carry it) is gone.
+    buffer:AddText("Date: " .. dateOnly() .. "\n\n", false)
   else
     buffer:AddText("\n", false)
   end
