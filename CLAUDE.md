@@ -25,6 +25,10 @@ Activate Serena for this project at the start of a session (general Serena/code-
 
 After rebuilding `bridge/dist/Claude MCP Bridge.fh_lua`, ask the user to load it and confirm — don't go hunting for FH's Plugins folder or install state yourself. See `docs/agents/manual-testing.md`.
 
+### Releases
+
+Cutting a release (versioning, build scripts, Forgejo upload) is scripted + checklist-driven. See `docs/release.md`.
+
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
