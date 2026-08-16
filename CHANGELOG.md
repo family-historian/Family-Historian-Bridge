@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.15.0
+
+### logActivity's session-log note gets a labelled Title/Type/Status/Date header (issue #112)
+- Replaces the old free-form bold heading + static intro paragraph with four labelled
+  lines: `Title:` (bold/+2, unchanged wording, still drives `fhGetDisplayText`/the
+  Records Window name), `Type: mcp-log`, `Status: closed` (both fixed constants, so a
+  Smart Folder or query can target these notes for bulk cleanup once reviewed), and
+  `Date: <day> <Mon> <year>` (new human-scannable format, distinct from `Title`'s
+  embedded timestamp). Only `Title` keeps the FTF bold/+2pt styling — confirmed live
+  that FH's `Title:`-paragraph auto-naming tolerates it. No backfill; notes already
+  created by past Sessions keep their old layout
+  (`docs/adr/0029-logactivity-labelled-title-type-status-date-header.md`).
+- `timestamp()`/the new `dateOnly()` now take an optional `now`, and the header-creation
+  branch captures `os.time()` once and formats both `Title`'s timestamp and `Date`'s
+  date-only form off that same instant — removes a theoretical midnight skew between the
+  two. `Type:`/`Status:`/`Date:` are written as one `AddText` call instead of three.
+
+### GEDCOM knowledge corpus: setTftfText auto-flag overrides supplied DisplayText
+- Confirmed live during the E40 source-transcription session (S49 birth-certificate
+  transcription): a `<rec=...,auto>` link substitutes the linked record's own live
+  display name in place of the supplied DisplayText, even in the stored/returned text —
+  not just at render time. Use `Flag="text"` instead when transcription must preserve
+  the source document's literal wording.
+
 ## 0.14.0
 
 ### describe_project reports the running Bridge plugin's own state (issue #109)
