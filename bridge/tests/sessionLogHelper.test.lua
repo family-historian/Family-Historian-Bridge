@@ -92,6 +92,21 @@ function PtrMethods:MoveTo(otherPtr, dataRef)
   end
 end
 
+-- Needed for familyHelper.resolvePointer's qualified-id-string resolution (issue #114) --
+-- same fake as factHelper.test.lua's own MoveToRecordById.
+function PtrMethods:MoveToRecordById(tag, id)
+  local list = recordsByTag[tag] or {}
+  for i, node in ipairs(list) do
+    if node.id == id then
+      self.list = list
+      self.index = i
+      return
+    end
+  end
+  self.list = list
+  self.index = #list + 1
+end
+
 
 -- ptrRecord must be a top-level record, not a Fact/sub-item (issue #110 follow-up):
 -- fhHasParentItem is FH's own documented way to tell them apart ("record items do not
@@ -359,12 +374,11 @@ check(okNullPtr == false, 'a non-nil but IsNull() ptrRecord also raises an error
 local okStringPtr, errStringPtr = pcall(freshSessionLogHelper.logActivity,
   "E40: ticked items rec=S29/S31/S35", "created")
 check(okStringPtr == false,
-  'a string ptrRecord (issue #110: the whole action-description string landed in ptrRecord\'s slot, one arg short) raises an error rather than a raw Lua crash')
-check(contains(errStringPtr, "ptrRecord"),
-  'the string-ptrRecord error names ptrRecord specifically, not a raw method-missing crash')
-check(contains(errStringPtr, "string"), 'the error names the type actually given')
+  'a string ptrRecord that is not qualified-id-shaped (issue #110: the whole action-description string landed in ptrRecord\'s slot, one arg short) raises an error rather than a raw Lua crash')
+check(contains(errStringPtr, "could not resolve qualified id"),
+  'the error is familyHelper.resolveQualifiedId\'s own message (issue #114: ptrRecord now resolves through familyHelper.resolvePointer first, so a non-qualified-id-shaped string fails there, the same unwrapped-error convention getAllDetails/getFactsByTag/createFact already use)')
 check(not contains(errStringPtr, "IsNull"),
-  'the error is logActivity\'s own message, not a raw "attempt to call ... IsNull" crash')
+  'the error is a named error(), not a raw "attempt to call ... IsNull" crash')
 
 local factNode = { tag = 'BIRT', id = 99999, parent = indiG }
 local factPtr = newPtr()
@@ -388,6 +402,65 @@ check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeInvalid,
   'none of the six invalid calls above created a _RNOT record')
 check(#setValueCalls == setValueCallCountBeforeInvalid,
   'none of the six invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
+
+------------------------------------------------------------------
+-- ptrRecord accepts a qualified id string too (issue #114, grilling session 2026-08-17):
+-- resolved via familyHelper.resolvePointer, the same as every other fhBridge.* pointer
+-- argument (getAllDetails/getFactsByTag/createFact) -- logActivity was the one
+-- write-capable helper that didn't, confirmed live during issue #113's own end-to-end
+-- verification. No record-type restriction: resolvePointer resolves any of its 11
+-- supported qualified-id prefixes, not just INDI/FAM -- a Session's log needs to be able
+-- to point at any record type actually touched (an OBJE, a SOUR, etc.), not only
+-- Individuals/Families.
+------------------------------------------------------------------
+
+package.loaded['sessionLogHelper'] = nil
+local qidSessionLogHelper = require('sessionLogHelper')
+
+recordsByTag["INDI"] = recordsByTag["INDI"] or {}
+table.insert(recordsByTag["INDI"], { tag = "INDI", id = 219 })
+local indiQidNode = recordsByTag["INDI"][#recordsByTag["INDI"]]
+
+local rnotBeforeQid = #(recordsByTag["_RNOT"] or {})
+qidSessionLogHelper.logActivity("I219", "created")
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeQid + 1,
+  'a qualified id string ptrRecord ("I219") succeeds the same way a live pointer does')
+
+local qidIndiSave = setValueCalls[#setValueCalls]
+local qidIndiSegments = qidIndiSave.richText.segments
+local qidIndiLink = qidIndiSegments[#qidIndiSegments]
+check(qidIndiLink.kind == 'reclink' and qidIndiLink.node == indiQidNode,
+  'the resolved live pointer -- not the original string -- is what gets passed to AddRecordLink')
+
+recordsByTag["FAM"] = recordsByTag["FAM"] or {}
+table.insert(recordsByTag["FAM"], { tag = "FAM", id = 3 })
+local famQidNode = recordsByTag["FAM"][#recordsByTag["FAM"]]
+
+qidSessionLogHelper.logActivity("F3", "created")
+local famQidSave = setValueCalls[#setValueCalls]
+local famQidSegments = famQidSave.richText.segments
+local famQidLink = famQidSegments[#famQidSegments]
+check(famQidLink.kind == 'reclink' and famQidLink.node == famQidNode,
+  'a FAM qualified id string ("F3") resolves and links correctly too')
+
+recordsByTag["SOUR"] = recordsByTag["SOUR"] or {}
+table.insert(recordsByTag["SOUR"], { tag = "SOUR", id = 77 })
+local sourQidNode = recordsByTag["SOUR"][#recordsByTag["SOUR"]]
+
+local okSourQid = pcall(qidSessionLogHelper.logActivity, "S77", "created")
+check(okSourQid == true,
+  'a non-INDI/FAM qualified id string ("S77", a Source) also succeeds -- no record-type restriction, unlike createFact')
+local sourQidSave = setValueCalls[#setValueCalls]
+local sourQidSegments = sourQidSave.richText.segments
+local sourQidLink = sourQidSegments[#sourQidSegments]
+check(sourQidLink.kind == 'reclink' and sourQidLink.node == sourQidNode,
+  'the Source record link also points at the correctly-resolved node')
+
+local okBareNumberQid, errBareNumberQid = pcall(qidSessionLogHelper.logActivity, 219, "created")
+check(okBareNumberQid == false,
+  'a bare number ptrRecord is still rejected -- ambiguous across every record type resolvePointer supports, same as getAllDetails/getFactsByTag/createFact (issue #65 precedent)')
+check(contains(errBareNumberQid, "qualified id"),
+  'the error is familyHelper.resolvePointer\'s own bare-number rejection, not a generic crash')
 
 ------------------------------------------------------------------
 -- validateLogActivity (issue #97): the pure validation half of logActivity, exported so

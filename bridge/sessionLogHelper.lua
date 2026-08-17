@@ -114,7 +114,23 @@ end
 -- for a call that (by definition, once this errors) never touched the tree. M.logActivity
 -- itself still calls this first too, so direct callers/tests keep today's single-call,
 -- validate-then-mutate contract unchanged.
+--
+-- ptrRecord may be a live Item Pointer or a qualified id string (e.g. "I219", "F3", or any
+-- other record type resolvePointer supports -- no INDI/FAM-only restriction, unlike
+-- createFact: a Session's log needs to be able to point at any record type actually touched)
+-- -- familyHelper.resolvePointer, matching createFact's own validateCreateFact pattern
+-- (issue #114). logActivity was the one write-capable fhBridge helper that didn't already do
+-- this, confirmed live during issue #113's own end-to-end verification (Family Historian
+-- Sample Project 8): fhBridge.logActivity("I2", "...") raised "ptrRecord must point to the
+-- record this activity concerns -- got string (I2), not a live Item Pointer", ending the
+-- Session via the usual write-then-error rollback after a real write had already landed.
+--
+-- Returns the resolved live pointer (same "validate once, mutate reuses the result"
+-- contract as factHelper.validateCreateFact/sourceHelper.validateCiteSource) -- M.logActivity
+-- below needs it too, since its own AddRecordLink call must receive a live pointer, never the
+-- original qualified id string.
 function M.validateLogActivity(ptrRecord, action, media)
+  ptrRecord = familyHelper.resolvePointer(ptrRecord)
   local problem = familyHelper.pointerProblem(ptrRecord)
   if problem then
     error("logActivity: ptrRecord must point to the record this activity concerns" .. problem)
@@ -136,10 +152,11 @@ function M.validateLogActivity(ptrRecord, action, media)
   if media and not media.name then
     error("media.name is required when a media detail is given")
   end
+  return ptrRecord
 end
 
 function M.logActivity(ptrRecord, action, media)
-  M.validateLogActivity(ptrRecord, action, media)
+  local ptr = M.validateLogActivity(ptrRecord, action, media)
 
   if not notePtr then
     local newNotePtr = fhCreateItem("_RNOT")
@@ -190,7 +207,7 @@ function M.logActivity(ptrRecord, action, media)
   -- over midnight still shows up as the entries' times going backwards.
   buffer:AddText("* ", true)
   buffer:AddText(timeOnly() .. " - " .. action .. ": ", false)
-  buffer:AddRecordLink(ptrRecord)
+  buffer:AddRecordLink(ptr)
 
   if media then
     -- Its own FTF indent paragraph (leading ">", issue #79) rather than literal leading
