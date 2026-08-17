@@ -335,6 +335,24 @@ end
 -- exactly what happened -- this bug shipped past every existing unit test and was only
 -- caught live.
 dateObjFields = setmetatable({}, { __mode = 'k' })
+-- resolveDate's string-date support (issue #113, docs/adr/0030) calls dt:SetValueAsText(...)
+-- on a fhNewDate()-built object -- debug.setmetatable on a thread sets ONE shared metatable
+-- for every coroutine in this process (Lua only supports a per-type, not per-value,
+-- metatable for threads), so this is set once here rather than per-fhNewDate-call. Succeeds
+-- only for a bare 4-digit-year string, matching resolveDate's own bAllowPhrase=false call --
+-- just enough to exercise the success/failure split, not a real date-parsing engine.
+debug.setmetatable(coroutine.create(function() end), {
+  __index = {
+    SetValueAsText = function(self, text, allowPhrase)
+      if type(text) == "string" and text:match("^%d%d%d%d$") then
+        dateObjFields[self].year = tonumber(text)
+        dateObjFields[self].parsedFromText = text
+        return true
+      end
+      return false
+    end,
+  },
+})
 fhNewDate = function(...)
   local argCount = select('#', ...)
   local y, m, d, subtype = ...
@@ -576,6 +594,39 @@ check(dateObjVal == dateObj, 'Date field accepts an already-built Date object un
 ------------------------------------------------------------------
 
 check(resultDateObj ~= nil and type(resultDateObj.id) == 'number', 'template resolution by numeric id succeeds')
+
+------------------------------------------------------------------
+-- Date field via a plain string (issue #113, docs/adr/0030) -- resolved through
+-- familyHelper.resolveDate, same as the table shorthand and the Date-object form above.
+------------------------------------------------------------------
+
+local resultDateString = sourceHelper.createSourceFromTemplate(civilRegId, { Reg_Date = "1899" })
+local sourNode3 = recordsByTag["SOUR"][#recordsByTag["SOUR"]]
+local dateStringVal, dateStringTag = nil, nil
+for _, child in ipairs(sourNode3.children) do
+  if child.tag == "~DT-Reg_Date" then
+    dateStringVal = child.value
+    dateStringTag = child.tag
+  end
+end
+check(dateStringVal ~= nil and dateObjFields[dateStringVal] and dateObjFields[dateStringVal].year == 1899,
+  'a recognized date string is parsed into a real Date object via familyHelper.resolveDate before being written')
+check(dateStringTag == "~DT-Reg_Date", 'the parsed-from-string Date field still uses the ~DT- shortcut prefix')
+check(resultDateString ~= nil, 'createSourceFromTemplate succeeds with a string Date field')
+
+-- Unlike the unknown-field-code/invalid-Enum/citation-field cases above (all caught by
+-- validateFields during the pure validateCreateSourceFromTemplate pass, before fhCreateItem
+-- ever runs), a Date field's resolveDate call only happens inside setField, per-field,
+-- during the mutate phase itself -- a pre-existing characteristic of this loop (each field
+-- is created-then-set in turn), not something this change introduces. So a rejected Date
+-- string here does still leave the SOUR record and its _SRCT template link behind, same as
+-- any other field-population failure partway through this same loop.
+local sourCountBeforeBadDate = #recordsByTag["SOUR"]
+local okBadDate, errBadDate = pcall(sourceHelper.createSourceFromTemplate, civilRegId, { Reg_Date = "not a date" })
+check(not okBadDate, 'an unrecognized date string raises rather than proceeding')
+check(contains(errBadDate, "not a date"), 'the rejection names the offending string')
+check(#recordsByTag["SOUR"] == sourCountBeforeBadDate + 1,
+  'the SOUR record and its _SRCT link are still created before the per-field loop reaches and rejects the bad Date field (pre-existing behavior, unrelated to this change)')
 
 ------------------------------------------------------------------
 -- fields may be nil or {} — a linked Source with no fields is valid
@@ -841,6 +892,42 @@ do
 
   local quayChild = findChild(citationNode, "QUAY")
   check(quayChild ~= nil and quayChild.value == "Direct Primary", 'Assessment sets a QUAY child directly on the citation')
+end
+
+------------------------------------------------------------------
+-- citeSource's EntryDate as a plain string (issue #113, docs/adr/0030) -- same
+-- familyHelper.resolveDate path as createSourceFromTemplate's Date-typed template fields.
+------------------------------------------------------------------
+
+do
+  local target = fhCreateItem("INDI")
+  local returned = sourceHelper.citeSource(target, certSourceId, { EntryDate = "1899" })
+  local citationNode = findChild(currentNode(target), "SOUR")
+  local dateChild = findChild(dataChild(citationNode), "DATE")
+  local df = dateChild and dateObjFields[dateChild.value]
+  check(df ~= nil and df.year == 1899 and df.parsedFromText == "1899",
+    'a recognized EntryDate string is parsed into a real Date object via familyHelper.resolveDate before being written')
+  check(returned ~= nil, 'citeSource succeeds with a string EntryDate')
+
+  -- Same pre-existing (not introduced by this change) "citation already created before its
+  -- own standard fields are populated" ordering as the SOUR-record case above -- setStandardField
+  -- runs after fhCreateItem("SOUR", ptrTarget)/the source link, so a rejected EntryDate string
+  -- still leaves a real, linked citation behind, just missing its EntryDate (and any field
+  -- after it in the loop).
+  local target2 = fhCreateItem("INDI")
+  local sourCountBefore = 0
+  for _, child in ipairs(currentNode(target2).children) do
+    if child.tag == "SOUR" then sourCountBefore = sourCountBefore + 1 end
+  end
+  local okBadDate, errBadDate = pcall(sourceHelper.citeSource, target2, certSourceId, { EntryDate = "not a date" })
+  check(not okBadDate, 'an unrecognized EntryDate string raises rather than proceeding')
+  check(contains(errBadDate, "not a date"), 'the rejection names the offending string')
+  local sourCountAfter = 0
+  for _, child in ipairs(currentNode(target2).children) do
+    if child.tag == "SOUR" then sourCountAfter = sourCountAfter + 1 end
+  end
+  check(sourCountAfter == sourCountBefore + 1,
+    'the citation itself is still created and linked before EntryDate is reached and rejected (pre-existing behavior, unrelated to this change)')
 end
 
 ------------------------------------------------------------------

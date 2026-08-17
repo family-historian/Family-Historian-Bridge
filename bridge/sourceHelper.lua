@@ -259,28 +259,11 @@ local function validateFields(fields, defs, expectCitation)
   end
 end
 
--- fields may supply a Date already built via fhNewDate, or the {year=,month=,day=
--- [,subtype=]} table shorthand — only the latter is a plain Lua table.
-local function toDate(value)
-  if type(value) == "table" then
-    -- fhNewDate's strSubType is documented optional (fhNewDate.htm:
-    -- "fhNewDate([iYear[, iMonth [, iDay [, strSubType]]]])"), but live-confirmed
-    -- (issue #99, discovered via live testing) that FH's binding rejects an explicit nil
-    -- in that 4th slot ("bad argument #4 to 'fhNewDate' (string expected, got nil)")
-    -- rather than treating it the same as the argument being omitted entirely -- so
-    -- value.subtype being nil (the common case: no subtype in the table shorthand) must
-    -- drop the argument, not pass it through as nil. Pre-existing bug, not new to issue
-    -- #99's own EntryDate field -- createSourceFromTemplate's own Date fields share this
-    -- same function and were equally exposed; the unit-test fake didn't catch it because
-    -- its own fhNewDate stub tolerated a nil 4th argument where real FH's doesn't.
-    if value.subtype then
-      return fhNewDate(value.year, value.month, value.day, value.subtype)
-    end
-    return fhNewDate(value.year, value.month, value.day)
-  end
-  return value
-end
-
+-- Date fields (a template field typed "Date", or citeSource's EntryDate standard field)
+-- accept a Date object, the {year=,month=,day=[,subtype=]} table shorthand, or (issue #113)
+-- a plain string parsed via FH's own Date string parser -- see familyHelper.resolveDate,
+-- moved there (from this module's own local toDate) once factHelper.lua needed the
+-- identical logic too, docs/adr/0030.
 -- The 4 generic citation-specific fields FH's own help documents (sourcesandsourcetemplates
 -- .html: "generic citation-specific fields... Entry date / Assessment / Where within Source
 -- / Text from Source") -- issue #99, the follow-up #98's own closing comment deliberately
@@ -416,7 +399,7 @@ local function setStandardField(citation, code, value)
     local data = citationDataItem(citation)
     local item = fhCreateItem("DATE", data)
     familyHelper.checkCreated(item, "citeSource: failed to create standard field 'EntryDate' (DATA.DATE) on " .. target)
-    familyHelper.checkWrite(fhSetValueAsDate(item, toDate(value)), "citeSource: failed to write standard field 'EntryDate' on " .. target)
+    familyHelper.checkWrite(fhSetValueAsDate(item, familyHelper.resolveDate(value, "citeSource")), "citeSource: failed to write standard field 'EntryDate' on " .. target)
   end
 end
 
@@ -425,7 +408,7 @@ local function setField(sour, value, def, code, callerName)
   familyHelper.checkCreated(item, callerName .. ": failed to create field '" .. code .. "' (" .. shortcutFor(def) .. ") on " .. describeTarget(sour))
   local message = callerName .. ": failed to write field '" .. code .. "' on " .. describeTarget(sour)
   if def.type == "Date" then
-    familyHelper.checkWrite(fhSetValueAsDate(item, toDate(value)), message)
+    familyHelper.checkWrite(fhSetValueAsDate(item, familyHelper.resolveDate(value, callerName)), message)
   elseif def.type == "Repository" then
     familyHelper.checkWrite(fhSetValueAsLink(item, value), message)
   else

@@ -206,6 +206,68 @@ local function checkCreated(item, message)
 end
 M.checkCreated = checkCreated
 
+-- familyHelper.resolveDate(value, callerName) (docs/adr/0030): the shared "accept several
+-- date shapes, always hand back a real Date object" resolver every write path that sets a
+-- Date-typed field goes through -- sourceHelper.lua's own createSourceFromTemplate/
+-- citeSource (its Date-typed template fields and the EntryDate standard field) and
+-- factHelper.lua's createFact (dtDate). Moved here from sourceHelper.lua's own local
+-- toDate (issue #113) once factHelper.lua needed the identical logic too -- same reasoning
+-- as resolvePointer/pointerProblem/checkWrite/checkCreated above: a helper needed by more
+-- than one module lives here, not duplicated per module.
+--
+-- Accepts three shapes:
+-- 1. Already a Date object (anything not a string and not a plain Lua table) -- passed
+--    through unchanged. This is the only shape the original toDate() (pre-issue-#113)
+--    ever needed to distinguish, since every caller built one via fhNewDate(...) by hand.
+-- 2. A {year=, month=, day=[, subtype=]} plain Lua table -- converted via fhNewDate(...).
+--    strSubType is dropped entirely (not passed as an explicit nil) when value.subtype is
+--    absent -- live-confirmed (issue #99) that FH's fhNewDate binding rejects an explicit
+--    nil in that 4th slot ("bad argument #4 to 'fhNewDate' (string expected, got nil)")
+--    rather than treating it the same as the argument being omitted entirely.
+-- 3. A plain string (new, issue #113) -- parsed via FH's own Date object string parser:
+--    fhNewDate():SetValueAsText(value, false) -- bAllowPhrase deliberately false, so an
+--    unrecognized string is rejected outright (bResult false) rather than silently
+--    accepted as a free-text date Phrase with no computable date value. Confirmed live
+--    (Family Historian Sample Project 8, issue #113) that a raw string handed straight to
+--    fhSetValueAsDate instead -- the mistake this resolver exists to prevent -- raises
+--    "bad argument #2 to 'fhSetValueAsDate' (fh.DATE expected, got string)" from deep
+--    inside fhu.createFact's own implementation, but only after the Fact item itself has
+--    already been created -- a real write, arming ADR 0005's rollback tracker and ending
+--    the Session for what should have been a caught-before-writing input error.
+--
+-- nil passes through unchanged (every caller treats a nil Date field as "not supplied,
+-- skip it" -- same as every other optional field these write helpers pass through).
+-- Any other type (number, boolean, a table that isn't the {year=,month=,day=} shape) is
+-- handed to fhNewDate()/SetValueAsText as-is and left to raise FH's own error -- this
+-- resolver's job is widening the accepted input shapes, not exhaustively validating every
+-- possible wrong one; the pcall-free error a genuinely wrong-shaped value raises here is
+-- still far more specific than the deferred, mid-write one that motivated this fix.
+--
+-- callerName names the calling function in the one error this resolver itself raises (an
+-- unrecognized string) -- same "who's asking" convention checkWrite/checkCreated's own
+-- messages already follow, since this can be reached from more than one module.
+local function resolveDate(value, callerName)
+  if value == nil then
+    return nil
+  end
+  if type(value) == "table" then
+    if value.subtype then
+      return fhNewDate(value.year, value.month, value.day, value.subtype)
+    end
+    return fhNewDate(value.year, value.month, value.day)
+  end
+  if type(value) == "string" then
+    local dt = fhNewDate()
+    local ok = dt:SetValueAsText(value, false)
+    if not ok then
+      error(callerName .. ": '" .. value .. "' is not a recognized date")
+    end
+    return dt
+  end
+  return value
+end
+M.resolveDate = resolveDate
+
 -- Individual record summary -- every getFamilyGroup/getAncestors entry carries one of
 -- these instead of a pointer, see the module comment above.
 local function indiDescriptor(ptr)

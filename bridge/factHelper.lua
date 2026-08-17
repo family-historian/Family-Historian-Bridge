@@ -18,7 +18,7 @@ local M = {}
 
 local familyHelper = require('familyHelper')
 
--- factHelper.validateCreateFact(ptrRecord, sTag)
+-- factHelper.validateCreateFact(ptrRecord, sTag, dtDate)
 -- The pure validation half of M.createFact below (issue #97 pattern: sandbox.lua calls this
 -- on its own, untracked, before arming the write tracker, so a rejected call never arms ADR
 -- 0005's rollback path). ptrRecord may be a live Item Pointer or a qualified id string (e.g.
@@ -26,16 +26,26 @@ local familyHelper = require('familyHelper')
 -- accepts either an INDI or a FAM record, so a number alone can't say which (the same
 -- ambiguity familyHelper.getAllDetails/getFactsByTag already reject, issue #65) --
 -- resolvePointer's own bare-number rejection covers this, no separate check needed here.
--- Returns the resolved pointer, which M.createFact itself also needs.
 --
--- Only takes ptrRecord/sTag, not M.createFact's full sPlace/dtDate/sAddress/sValue/sAge --
--- there's nothing to validate about them (fhu.createFact itself skips any that are nil, and
--- this project's own stance is to trust the caller and let FH reject a genuinely nonsensical
--- value, same as M.createFact's own comment on sAge below). sandbox.lua's
+-- dtDate (docs/adr/0030) goes through familyHelper.resolveDate -- accepts a Date object, the
+-- {year=,month=,day=[,subtype=]} table shorthand, or a plain string (parsed via FH's own
+-- Date object string parser, fhNewDate():SetValueAsText) -- resolved and validated here,
+-- before M.createFact ever calls fhu.createFact, so a malformed date rejects cleanly instead
+-- of creating the Fact item first and only failing (and rolling back) on the DATE subfield
+-- write, which is what a raw string used to do (live-confirmed, Family Historian Sample
+-- Project 8, before this fix).
+--
+-- Returns the resolved pointer and the resolved Date value, both of which M.createFact
+-- itself also needs -- same "validate once, mutate reuses the result" contract as
+-- sourceHelper.lua's validateCreateSourceFromTemplate/validateCiteSource.
+--
+-- Doesn't take M.createFact's remaining sPlace/sAddress/sValue/sAge -- there's nothing to
+-- validate about them (fhu.createFact itself skips any that are nil, and this project's own
+-- stance is to trust the caller and let FH reject a genuinely nonsensical value). sandbox.lua's
 -- validatedTrackedWrite still calls this with all 7 args every real call passes -- Lua
 -- silently ignores the extra ones, same as any function called with more args than it
 -- declares.
-function M.validateCreateFact(ptrRecord, sTag)
+function M.validateCreateFact(ptrRecord, sTag, dtDate)
   local ptr = familyHelper.resolvePointer(ptrRecord)
   local problem = familyHelper.pointerProblem(ptr)
   if problem then
@@ -44,26 +54,20 @@ function M.validateCreateFact(ptrRecord, sTag)
   if type(sTag) ~= "string" or sTag == "" then
     error("createFact: sTag must be a non-empty fact tag string (e.g. 'BIRT')")
   end
-  return ptr
+  local resolvedDate = familyHelper.resolveDate(dtDate, "createFact")
+  return ptr, resolvedDate
 end
 
 -- factHelper.createFact(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue, sAge)
 -- Creates a new Fact on ptrRecord via fhu.createFact (fhUtils.md's own
 -- "fhUtils.createFact(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue, sAge)" -- Returns:
 -- new fact record pointer), which itself skips any of sPlace/dtDate/sAddress/sValue/sAge
--- that are nil. dtDate must be a real Date value (fhNewDate(...), the same "dt" Hungarian
--- prefix convention sourceHelper.lua's own toDate() already honors for Date-typed template
--- fields) -- NOT a plain date string. Confirmed live (issue #113, Family Historian Sample
--- Project 8): fhu.createFact(ptr, "CENS", "Testville", "1901") raised "bad argument #2 to
--- 'fhSetValueAsDate' (fh.DATE expected, got string)" from inside fhu.createFact's own
--- implementation, after already creating the Fact item -- a real write, so it armed ADR
--- 0005's rollback path and ended the Session. This module doesn't convert dtDate the way
--- sourceHelper.lua's toDate() does for template fields (no {year=,month=,day=} shorthand
--- accepted here either) -- pass a pre-built fhNewDate(...) object directly, same "trust the
--- caller, let FH itself reject a genuinely nonsensical combination" stance as every other
--- field this project passes straight through to a raw fh*/fhu call.
+-- that are nil. dtDate is resolved via familyHelper.resolveDate first (see
+-- validateCreateFact above) -- a Date object, the {year=,month=,day=[,subtype=]} table
+-- shorthand, or a plain string are all accepted; a genuinely unrecognized string errors
+-- before fhu.createFact ever runs.
 -- sAge only applies to an Individual attribute fact per fhUtils' own docs -- not enforced
--- here, same stance.
+-- here, same "trust the caller" stance sPlace/sAddress/sValue already get.
 --
 -- Returns the new Fact's own live item Pointer -- fhu.createFact's own documented return
 -- value, passed straight through, not a qualifiedId, since a Fact is a sub-item of its
@@ -81,9 +85,9 @@ end
 -- (familyHelper.lua's own pointerProblem comment) -- so it degrades to a clear error under
 -- any of those shapes, not just the one fhCreateItem itself documents.
 function M.createFact(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue, sAge)
-  local ptr = M.validateCreateFact(ptrRecord, sTag)
+  local ptr, resolvedDate = M.validateCreateFact(ptrRecord, sTag, dtDate)
   local fhu = require('fhUtils')
-  local fact = fhu.createFact(ptr, sTag, sPlace, dtDate, sAddress, sValue, sAge)
+  local fact = fhu.createFact(ptr, sTag, sPlace, resolvedDate, sAddress, sValue, sAge)
   familyHelper.checkCreated(fact, "createFact: fhu.createFact failed to create a " .. sTag ..
     " fact on " .. fhGetQualifiedRecordId(ptr))
   return fact

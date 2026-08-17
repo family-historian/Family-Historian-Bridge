@@ -102,6 +102,33 @@ local function makeRecord(tag)
   return addNode(tag)
 end
 
+-- fhNewDate fake (issue #113, docs/adr/0030): validateCreateFact now resolves dtDate via
+-- familyHelper.resolveDate, which calls dt:SetValueAsText(...) on a fhNewDate()-built
+-- object -- same coroutine-as-userdata-stand-in fake, and the same reasoning, as
+-- sourceHelper.test.lua/familyHelper.test.lua already use (a coroutine's type() is
+-- 'thread', genuinely distinct from a plain table, matching real FH's userdata Date
+-- object -- see resolveDate's own type(value) == "table" branch). debug.setmetatable on a
+-- thread sets ONE shared metatable for every coroutine in this process. Succeeds only for
+-- a bare 4-digit-year string, matching resolveDate's own bAllowPhrase=false call.
+local dateObjFields = setmetatable({}, { __mode = 'k' })
+debug.setmetatable(coroutine.create(function() end), {
+  __index = {
+    SetValueAsText = function(self, text, allowPhrase)
+      if type(text) == "string" and text:match("^%d%d%d%d$") then
+        dateObjFields[self].year = tonumber(text)
+        dateObjFields[self].parsedFromText = text
+        return true
+      end
+      return false
+    end,
+  },
+})
+fhNewDate = function(year, month, day, subtype)
+  local co = coroutine.create(function() end)
+  dateObjFields[co] = { year = year, month = month, day = day, subtype = subtype }
+  return co
+end
+
 local factHelper = require('factHelper')
 
 ------------------------------------------------------------------
@@ -112,7 +139,7 @@ local factHelper = require('factHelper')
 
 do
   local indi = makeRecord("INDI")
-  local resolvedPtr = factHelper.validateCreateFact(indi, "BIRT", "Someplace")
+  local resolvedPtr = factHelper.validateCreateFact(indi, "BIRT")
   check(resolvedPtr == indi, 'validateCreateFact returns the resolved live pointer unchanged when already a live pointer')
 end
 
@@ -180,12 +207,11 @@ local function withFakeFhu(fakeFhu, fn)
   package.loaded.fhUtils = nil
 end
 
--- dtDate here is a plain string purely to prove createFact forwards it byte-for-byte
--- unchanged (this fake's createFact stub never calls the real fhSetValueAsDate, so it can't
--- catch the type mismatch a live FH host would) -- NOT a usage example. Real FH requires
--- dtDate to be a Date object built via fhNewDate(...); a plain string live-confirmed-fails
--- with "bad argument #2 to 'fhSetValueAsDate' (fh.DATE expected, got string)", see
--- factHelper.lua's own createFact doc comment (issue #113).
+-- dtDate here is a plain, recognized date string ("1895") -- proves createFact resolves it
+-- via familyHelper.resolveDate into a real Date object BEFORE forwarding to fhu.createFact,
+-- not the raw string unchanged -- the fix for the live bug this test used to warn about
+-- instead (issue #113, docs/adr/0030): a raw string handed straight to fhSetValueAsDate
+-- previously only failed after the Fact item had already been created.
 do
   local indi = makeRecord("INDI")
   local fakeFactPtr = addNode("BIRT")
@@ -196,11 +222,48 @@ do
       return fakeFactPtr
     end,
   }, function()
-    local result = factHelper.createFact(indi, "BIRT", "Someplace", "12 Mar 1895", "1 Some Street", nil, nil)
+    local result = factHelper.createFact(indi, "BIRT", "Someplace", "1895", "1 Some Street", nil, nil)
     check(result == fakeFactPtr, 'createFact returns fhu.createFact\'s own return value unchanged (the new fact\'s live pointer)')
     check(capturedArgs[1] == indi, 'createFact forwards the resolved ptrRecord to fhu.createFact')
-    check(capturedArgs[2] == "BIRT" and capturedArgs[3] == "Someplace" and capturedArgs[4] == "12 Mar 1895" and capturedArgs[5] == "1 Some Street",
-      'createFact forwards sTag/sPlace/dtDate/sAddress straight through to fhu.createFact, unchanged')
+    check(capturedArgs[2] == "BIRT" and capturedArgs[3] == "Someplace" and capturedArgs[5] == "1 Some Street",
+      'createFact forwards sTag/sPlace/sAddress straight through to fhu.createFact, unchanged')
+    local resolvedDate = capturedArgs[4]
+    check(dateObjFields[resolvedDate] ~= nil and dateObjFields[resolvedDate].year == 1895,
+      'createFact resolves a plain dtDate string into a real Date object (via familyHelper.resolveDate) before forwarding it to fhu.createFact')
+  end)
+end
+
+-- An already-built Date object passes through resolveDate unchanged, not re-wrapped --
+-- same familyHelper.resolveDate contract createSourceFromTemplate/citeSource already rely on.
+do
+  local indi = makeRecord("INDI")
+  local fakeFactPtr = addNode("CENS")
+  local capturedArgs
+  local dateObj = fhNewDate(1900, 1, 1)
+  withFakeFhu({
+    createFact = function(...)
+      capturedArgs = { ... }
+      return fakeFactPtr
+    end,
+  }, function()
+    factHelper.createFact(indi, "CENS", nil, dateObj)
+    check(capturedArgs[4] == dateObj, 'an already-built Date object is forwarded unchanged, not re-wrapped')
+  end)
+end
+
+-- An unrecognized dtDate string is rejected by validateCreateFact -- inside M.createFact,
+-- reached before fhu.createFact ever runs -- rather than being forwarded and only failing
+-- (with a real Fact item already created) deep inside fhu.createFact's own implementation.
+do
+  local indi = makeRecord("INDI")
+  local fhuCreateFactCalled = false
+  withFakeFhu({
+    createFact = function() fhuCreateFactCalled = true; return addNode("BIRT") end,
+  }, function()
+    local ok, err = pcall(factHelper.createFact, indi, "BIRT", nil, "not a date")
+    check(not ok, 'an unrecognized dtDate string raises rather than proceeding')
+    check(contains(err, "createFact") and contains(err, "not a date"), 'the rejection names createFact and the offending string')
+    check(not fhuCreateFactCalled, 'fhu.createFact is never called when dtDate fails to resolve')
   end)
 end
 

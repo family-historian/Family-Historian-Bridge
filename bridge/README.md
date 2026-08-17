@@ -583,15 +583,15 @@ tested manually, inside FH:
    still succeeds with the same shape of result — unlike
    `fhBridge.createSourceFromTemplate`/`citeSource`/`logActivity`, these five are not
    gated to Read-write.
-20. `fhBridge.createFact` (issue #113): with a real FH project open, select Read-write,
-   click Start:
+20. `fhBridge.createFact` (issue #113, docs/adr/0030): with a real FH project open, select
+   Read-write, click Start:
    ```bash
    python3 -c "
    import socket
    script = b'''
    local p = fhNewItemPtr()
    p:MoveToFirstRecord(\"INDI\")
-   local fact = fhBridge.createFact(p, \"CENS\", \"Someplace\", fhNewDate(1901))
+   local fact = fhBridge.createFact(p, \"CENS\", \"Someplace\", \"1901\")
    return fhGetTag(fact)
    '''
    s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
@@ -601,15 +601,15 @@ tested manually, inside FH:
    s.close()
    "
    ```
-   `dtDate` MUST be a real Date value (`fhNewDate(...)`), never a plain string — live-confirmed
-   (issue #113): a plain string like `"1901"` raises `bad argument #2 to 'fhSetValueAsDate'
-   (fh.DATE expected, got string)` from inside `fhu.createFact`'s own implementation, but not
-   before the Fact item itself has already been created — a real write, so it ends the Session
-   via the usual rollback flow (step 15) just like any other write-then-error case.
+   `dtDate` accepts a plain string (`"1901"`), a pre-built `fhNewDate(...)` object, or the
+   `{year=, month=, day=[, subtype=]}` table shorthand — all three resolved via
+   `familyHelper.resolveDate` (docs/adr/0030) before `fhu.createFact` ever runs, so an
+   unrecognized string (e.g. `"not a date"`) rejects cleanly up front rather than creating the
+   Fact item first and only failing on the `DATE` subfield write.
    Expected output: `"CENS"`. Confirm in FH's own UI that the first Individual now has a new
    Census fact with Place "Someplace" and Date "1901" (undo with Ctrl-Z to clean up). Then
    repeat with a qualified id string in place of the live pointer (e.g.
-   `fhBridge.createFact("I1", "CENS", "Someplace", fhNewDate(1901))`, substituting a real
-   qualified id from your project) and confirm it creates the fact the same way. Then repeat
-   with Read-only selected instead and confirm the same script now fails calling `fhBridge` as
-   nil (step 11's negative case).
+   `fhBridge.createFact("I1", "CENS", "Someplace", "1901")`, substituting a real qualified id
+   from your project) and confirm it creates the fact the same way. Then repeat with
+   Read-only selected instead and confirm the same script now fails calling `fhBridge` as nil
+   (step 11's negative case).

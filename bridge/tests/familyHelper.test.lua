@@ -245,6 +245,39 @@ fhCallBuiltInFunction = function(strFunctionName, ptrA, ptrB)
   return ptrB.node.name == "Dad Plugin" or ptrB.node.name == "Self Plugin"
 end
 
+-- fhNewDate fake, scoped only for resolveDate's own tests below -- not a real date-parsing
+-- engine. Real FH's fhNewDate returns a Date OBJECT (userdata), a genuinely different Lua
+-- type from a plain table -- exactly what lets resolveDate's own type(value) == "table"
+-- check tell "already a Date object" apart from "the {year=,month=,day=} shorthand table"
+-- (same reasoning, and the same coroutine-as-userdata-stand-in fake, sourceHelper.test.lua
+-- already uses for the same distinction, issue #99). debug.setmetatable on a thread sets
+-- ONE shared metatable for every coroutine in this process (confirmed: Lua only supports a
+-- per-type, not per-value, metatable for threads) -- set once here, so every fhNewDate(...)
+-- call below gets dt:SetValueAsText(...) support without touching type(dt) at all.
+-- SetValueAsText succeeds only for a bare 4-digit-year string (e.g. "1901"), matching
+-- resolveDate's own bAllowPhrase=false call -- anything else fails, just enough to exercise
+-- resolveDate's success/failure branches without modeling FH's real date grammar. Fields
+-- live in a side table keyed weakly by the coroutine, since a thread can't carry its own
+-- named fields directly.
+local dateObjFields = setmetatable({}, { __mode = 'k' })
+debug.setmetatable(coroutine.create(function() end), {
+  __index = {
+    SetValueAsText = function(self, text, allowPhrase)
+      if type(text) == "string" and text:match("^%d%d%d%d$") then
+        dateObjFields[self].year = tonumber(text)
+        dateObjFields[self].parsedFromText = text
+        return true
+      end
+      return false
+    end,
+  },
+})
+fhNewDate = function(year, month, day, subtype)
+  local co = coroutine.create(function() end)
+  dateObjFields[co] = { year = year, month = month, day = day, subtype = subtype }
+  return co
+end
+
 local familyHelper = require('familyHelper')
 
 ------------------------------------------------------------------
@@ -1056,6 +1089,40 @@ do
   check(not okNull, 'checkCreated raises when fhCreateItem returns a NULL pointer')
   check(contains(errNull, "create failed"), 'checkCreated raises exactly the message it was given')
 end
+
+------------------------------------------------------------------
+-- resolveDate (docs/adr/0030): the shared "accept several date shapes" resolver every
+-- write path that sets a Date-typed field now goes through -- moved here from
+-- sourceHelper.lua's own local toDate (issue #113) once factHelper.lua needed the
+-- identical logic too.
+------------------------------------------------------------------
+
+do
+  check(familyHelper.resolveDate(nil, "test") == nil, 'nil passes through unchanged')
+
+  local alreadyADate = fhNewDate(1895)
+  check(familyHelper.resolveDate(alreadyADate, "test") == alreadyADate,
+    'an already-built Date object passes through unchanged, not re-wrapped')
+
+  local fromTable = familyHelper.resolveDate({ year = 1895, month = 3, day = 12 }, "test")
+  local fromTableFields = dateObjFields[fromTable]
+  check(fromTableFields.year == 1895 and fromTableFields.month == 3 and fromTableFields.day == 12 and fromTableFields.subtype == nil,
+    'the {year=,month=,day=} table shorthand converts via fhNewDate with no subtype argument')
+
+  local withSubtype = familyHelper.resolveDate({ year = 1895, subtype = "ABT" }, "test")
+  check(dateObjFields[withSubtype].subtype == "ABT", 'the table shorthand forwards an explicit subtype when given')
+
+  local fromString = familyHelper.resolveDate("1901", "test")
+  local fromStringFields = dateObjFields[fromString]
+  check(fromStringFields.year == 1901 and fromStringFields.parsedFromText == "1901",
+    'a recognized date string is parsed via SetValueAsText(text, false) into a real Date object')
+
+  local okBadString, errBadString = pcall(familyHelper.resolveDate, "not a date at all", "createFact")
+  check(not okBadString, 'an unrecognized date string raises rather than silently proceeding')
+  check(contains(errBadString, "createFact") and contains(errBadString, "not a date at all"),
+    'the rejection names the calling function and the offending string')
+end
+
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

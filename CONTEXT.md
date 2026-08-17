@@ -378,10 +378,12 @@ live item Pointer (not a `qualifiedId` — a Fact is a sub-item of its record, n
 record with one of its own), so a script can chain straight into `citeSource(thatPointer,
 sourceNameOrId, fields)` to cite the new Fact within the same `run_lua` call — see
 `docs/adr/0006-cite-every-fact-a-source-supports.md`. Citing is always a separate, deliberate
-step; `createFact` itself never touches a Source or citation. `dtDate` must be a real Date
-value (`fhNewDate(...)`), never a plain string — live-confirmed (issue #113): a string raises
-`fhSetValueAsDate`'s own type error from inside `fhu.createFact`, after the Fact item has
-already been created, ending the Session via the usual write-then-error rollback flow.
+step; `createFact` itself never touches a Source or citation. `dtDate` accepts a live Date
+object (`fhNewDate(...)`), the `{year=, month=, day=[, subtype=]}` table shorthand, or a
+plain string (e.g. `"1901"`) parsed via FH's own Date object string parser — all resolved by
+the shared `familyHelper.resolveDate` before any write happens, so an unrecognized string
+rejects cleanly up front rather than creating the Fact item first (see
+`docs/adr/0030-shared-resolvedate-accepts-date-object-table-or-string.md`).
 _Avoid_: Add fact (this project's own name for the operation is `createFact`, matching
 `fhUtils.createFact`'s own name)
 

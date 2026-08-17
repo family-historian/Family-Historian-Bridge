@@ -13,12 +13,14 @@
   straight into `fhBridge.citeSource(thatPointer, ...)` to cite it within the same `run_lua`
   call — citing stays a separate, deliberate step
   (`docs/adr/0006-cite-every-fact-a-source-supports.md`).
-- `dtDate` must be a real Date value (`fhNewDate(...)`), never a plain string — live-confirmed
-  against Family Historian Sample Project 8 during end-to-end verification: a plain string
-  raises `fhSetValueAsDate`'s own type error from inside `fhu.createFact`, after the Fact item
-  has already been created, ending the Session via the usual write-then-error rollback flow.
-  Documented in `factHelper.lua`'s own doc comment, `bridge/README.md`'s manual test step, and
-  a new `run_lua guidance` corpus entry.
+- `dtDate` accepts a live Date object (`fhNewDate(...)`), the `{year=, month=, day=[,
+  subtype=]}` table shorthand, or a plain string (e.g. `"1901"`) — all resolved via a new
+  shared `familyHelper.resolveDate(value, callerName)`, which parses a string through FH's
+  own `Date:SetValueAsText(text, false)` and rejects an unrecognized one before any write
+  happens (`docs/adr/0030-shared-resolvedate-accepts-date-object-table-or-string.md`).
+  `resolveDate` replaces `sourceHelper.lua`'s own local `toDate` (used by
+  `createSourceFromTemplate`'s Date-typed template fields and `citeSource`'s `EntryDate`),
+  which gains the same string support, behavior-preserving for its existing inputs.
 
 ## 0.15.0
 
