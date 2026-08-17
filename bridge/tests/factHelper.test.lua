@@ -180,6 +180,12 @@ local function withFakeFhu(fakeFhu, fn)
   package.loaded.fhUtils = nil
 end
 
+-- dtDate here is a plain string purely to prove createFact forwards it byte-for-byte
+-- unchanged (this fake's createFact stub never calls the real fhSetValueAsDate, so it can't
+-- catch the type mismatch a live FH host would) -- NOT a usage example. Real FH requires
+-- dtDate to be a Date object built via fhNewDate(...); a plain string live-confirmed-fails
+-- with "bad argument #2 to 'fhSetValueAsDate' (fh.DATE expected, got string)", see
+-- factHelper.lua's own createFact doc comment (issue #113).
 do
   local indi = makeRecord("INDI")
   local fakeFactPtr = addNode("BIRT")

@@ -51,10 +51,19 @@ end
 -- Creates a new Fact on ptrRecord via fhu.createFact (fhUtils.md's own
 -- "fhUtils.createFact(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue, sAge)" -- Returns:
 -- new fact record pointer), which itself skips any of sPlace/dtDate/sAddress/sValue/sAge
--- that are nil. sAge only applies to an Individual attribute fact per fhUtils' own docs --
--- not enforced here, same "trust the caller, let FH itself reject a genuinely nonsensical
--- combination" stance as every other field this project passes straight through to a raw
--- fh*/fhu call.
+-- that are nil. dtDate must be a real Date value (fhNewDate(...), the same "dt" Hungarian
+-- prefix convention sourceHelper.lua's own toDate() already honors for Date-typed template
+-- fields) -- NOT a plain date string. Confirmed live (issue #113, Family Historian Sample
+-- Project 8): fhu.createFact(ptr, "CENS", "Testville", "1901") raised "bad argument #2 to
+-- 'fhSetValueAsDate' (fh.DATE expected, got string)" from inside fhu.createFact's own
+-- implementation, after already creating the Fact item -- a real write, so it armed ADR
+-- 0005's rollback path and ended the Session. This module doesn't convert dtDate the way
+-- sourceHelper.lua's toDate() does for template fields (no {year=,month=,day=} shorthand
+-- accepted here either) -- pass a pre-built fhNewDate(...) object directly, same "trust the
+-- caller, let FH itself reject a genuinely nonsensical combination" stance as every other
+-- field this project passes straight through to a raw fh*/fhu call.
+-- sAge only applies to an Individual attribute fact per fhUtils' own docs -- not enforced
+-- here, same stance.
 --
 -- Returns the new Fact's own live item Pointer -- fhu.createFact's own documented return
 -- value, passed straight through, not a qualifiedId, since a Fact is a sub-item of its
