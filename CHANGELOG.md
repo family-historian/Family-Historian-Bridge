@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### New fhBridge.createFact helper (issue #113)
+- New `bridge/factHelper.lua`, wired read-write-only: `fhBridge.createFact(ptrRecord, sTag,
+  sPlace, dtDate, sAddress, sValue, sAge)` creates a Fact on an `INDI`/`FAM` record via
+  `fhu.createFact` in one call, instead of hand-assembling `fhCreateItem` +
+  `fhSetValueAsText`/`Date`/etc. per field. `ptrRecord` accepts a live Item Pointer or a
+  qualified id string, but never a bare number — `createFact` spans both `INDI` and `FAM`,
+  so a number alone can't disambiguate (same rule `getAllDetails`/`getFactsByTag` already
+  apply, issue #65). Returns the new Fact's own live item Pointer so a script can chain
+  straight into `fhBridge.citeSource(thatPointer, ...)` to cite it within the same `run_lua`
+  call — citing stays a separate, deliberate step
+  (`docs/adr/0006-cite-every-fact-a-source-supports.md`).
+
 ## 0.15.0
 
 ### logActivity's session-log note gets a labelled Title/Type/Status/Date header (issue #112)

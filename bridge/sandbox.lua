@@ -514,7 +514,12 @@ function M.build(accessMode)
     -- richTextHelper.lua's setTftfText (issue #107, docs/adr/0025) is the same shape --
     -- validateSetTftfText re-checks for citations right before the real write, gated the
     -- same validatedTrackedWrite way as createSourceFromTemplate/citeSource.
+    -- factHelper.lua's createFact (issue #113) is the same shape too -- fhu.createFact fills
+    -- the last gap fhUtils itself doesn't cover with a validated, checked wrapper (a bare
+    -- fhu.createFact is still separately reachable via env.fhu, see FHU_WRITE_METHOD_NAMES
+    -- above, but without the pointer/tag validation or checkCreated failure check this gives).
     local realSessionLogHelper = require('sessionLogHelper')
+    local realFactHelper = require('factHelper')
     env.fhBridge.createSourceFromTemplate = validatedTrackedWrite(
       realSourceHelper.validateCreateSourceFromTemplate, realSourceHelper.createSourceFromTemplate)
     env.fhBridge.citeSource = validatedTrackedWrite(
@@ -523,6 +528,8 @@ function M.build(accessMode)
       realSessionLogHelper.validateLogActivity, realSessionLogHelper.logActivity)
     env.fhBridge.setTftfText = validatedTrackedWrite(
       realRichTextHelper.validateSetTftfText, realRichTextHelper.setTftfText)
+    env.fhBridge.createFact = validatedTrackedWrite(
+      realFactHelper.validateCreateFact, realFactHelper.createFact)
   end
 
   return env, tracker

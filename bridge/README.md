@@ -74,6 +74,17 @@ implements.
   `BIRT` plus a dated `OCCU`") without a second helper call. Errors on a field code the
   template doesn't define at all, same validation as `createSourceFromTemplate`; a field
   that's merely unpopulated on a given candidate source just fails to match, not an error.
+- `factHelper.lua` — `fhBridge.createFact(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue,
+  sAge)` (issue #113), a read-write-only helper that creates a Fact on an `INDI`/`FAM` record
+  via `fhu.createFact` in one call instead of hand-assembling `fhCreateItem` +
+  `fhSetValueAsText`/`Date`/etc. per field. `ptrRecord` accepts a live Item Pointer or a
+  qualified id string (e.g. `"I219"`, `"F3"`), same as `familyHelper.lua`'s query helpers —
+  but never a bare number, since `createFact` spans both `INDI` and `FAM` and a number alone
+  can't disambiguate (same reasoning as `getAllDetails`/`getFactsByTag`, issue #65). Returns
+  the new Fact's own live item Pointer, not a `qualifiedId`, so a script can chain straight
+  into `fhBridge.citeSource(thatPointer, sourceNameOrId, fields)` to cite it within the same
+  `run_lua` call — see `docs/adr/0006-cite-every-fact-a-source-supports.md`. Citing is a
+  deliberate separate step; `createFact` itself never touches a Source or citation.
 - `sessionLogHelper.lua` — `fhBridge.logActivity(ptrRecord, action, media)` (issue #36; the
   optional `media` param from issue #39), a read-write-only helper that logs a Session's
   record-creating activity into one Research Note (`_RNOT`) per Session: the first call in
@@ -572,3 +583,28 @@ tested manually, inside FH:
    still succeeds with the same shape of result — unlike
    `fhBridge.createSourceFromTemplate`/`citeSource`/`logActivity`, these five are not
    gated to Read-write.
+20. `fhBridge.createFact` (issue #113): with a real FH project open, select Read-write,
+   click Start:
+   ```bash
+   python3 -c "
+   import socket
+   script = b'''
+   local p = fhNewItemPtr()
+   p:MoveToFirstRecord(\"INDI\")
+   local fact = fhBridge.createFact(p, \"CENS\", \"Someplace\", \"1901\")
+   return fhGetTag(fact)
+   '''
+   s = socket.create_connection(('127.0.0.1', 8734), timeout=15)
+   s.sendall(('LUA %d\n' % len(script)).encode() + script)
+   s.shutdown(socket.SHUT_WR)
+   print(s.recv(4096).decode())
+   s.close()
+   "
+   ```
+   Expected output: `"CENS"`. Confirm in FH's own UI that the first Individual now has a new
+   Census fact with Place "Someplace" and Date "1901" (undo with Ctrl-Z to clean up). Then
+   repeat with a qualified id string in place of the live pointer (e.g.
+   `fhBridge.createFact("I1", "CENS", "Someplace", "1901")`, substituting a real qualified id
+   from your project) and confirm it creates the fact the same way. Then repeat with
+   Read-only selected instead and confirm the same script now fails calling `fhBridge` as
+   nil (step 11's negative case).

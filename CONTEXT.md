@@ -367,6 +367,21 @@ working on it directly within the same `run_lua` call.
 _Avoid_: Add source, link source (this project's own name for the operation is
 `citeSource`, matching the domain term "citation")
 
+**createFact**:
+The `fhBridge` helper (`factHelper.lua`, issue #113) that creates a Fact (an event or
+attribute — `BIRT`, `CENS`, `OCCU`, etc.) on an `INDI` or `FAM` record via `fhu.createFact`,
+instead of hand-assembling `fhCreateItem` + `fhSetValueAsText`/`Date`/etc. per field. Accepts
+`ptrRecord` as a live Item Pointer or a qualified id string (e.g. `"I219"`, `"F3"`) — never a
+bare number, since it spans both `INDI` and `FAM` and a number alone can't disambiguate which
+(same reasoning as `getAllDetails`/`getFactsByTag`, issue #65). Returns the new Fact's own
+live item Pointer (not a `qualifiedId` — a Fact is a sub-item of its record, not a standalone
+record with one of its own), so a script can chain straight into `citeSource(thatPointer,
+sourceNameOrId, fields)` to cite the new Fact within the same `run_lua` call — see
+`docs/adr/0006-cite-every-fact-a-source-supports.md`. Citing is always a separate, deliberate
+step; `createFact` itself never touches a Source or citation.
+_Avoid_: Add fact (this project's own name for the operation is `createFact`, matching
+`fhUtils.createFact`'s own name)
+
 **Standard citation field**:
 One of the 4 generic citation-specific fields FH's own help documents as available on
 every `SOUR` citation, templated source or not (`sourcesandsourcetemplates.html`): Entry
