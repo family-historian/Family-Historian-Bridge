@@ -269,6 +269,25 @@ local fakeFamilyHelper = {
 }
 package.loaded.familyHelper = fakeFamilyHelper
 
+-- factHelper.lua (issue #113) is stubbed the same way, for the same reason: this test
+-- stays a pure allowlist check, independent of factHelper.lua's own behavior (covered by
+-- factHelper.test.lua). validateCreateFact/createFact's fake signatures match the real
+-- module's own (ptrRecord, sTag, sPlace, dtDate) positional order deliberately -- this
+-- test proves sandbox.lua's own wiring/gating is correct, not factHelper.lua's internal
+-- argument handling (a real positional mismatch there was live-caught and is covered by
+-- factHelper.test.lua's own dedicated regression test instead).
+local fakeFactHelper = {
+  validateCreateFact = function(ptrRecord, sTag, sPlace, dtDate)
+    table.insert(helperCallLog, { 'validateCreateFact', ptrRecord })
+    if ptrRecord == 'BAD' then error('validateCreateFact rejected it') end
+  end,
+  createFact = function(ptrRecord, sTag, sPlace, dtDate)
+    table.insert(helperCallLog, { 'createFact', ptrRecord })
+    return 'fact:' .. tostring(ptrRecord) .. ':' .. tostring(sTag)
+  end,
+}
+package.loaded.factHelper = fakeFactHelper
+
 local env, tracker = sandbox.build()
 
 -- Allowed basics are present and are the real thing (not stand-ins).
@@ -399,6 +418,7 @@ check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTe
 check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
 check(env.fhBridge.setTftfText == nil, 'fhBridge.setTftfText absent under read-only (calls the real fhSetValueAsRichText write global directly — must not be reachable without the write gate)')
+check(env.fhBridge.createFact == nil, 'fhBridge.createFact absent under read-only (calls the real fhUtils.createFact write path directly — must not be reachable without the write gate)')
 
 -- Write tracker (issue #15): present on every build(), starts false, independent of
 -- accessMode (a read-only script can never flip it, since it has no write functions).
@@ -631,6 +651,25 @@ check(#helperCallLog == 1 and helperCallLog[1][1] == 'validateSetTftfText',
 check(trackerRejectSetTftf.wrote == false,
   'a setTftfText call rejected by validation leaves tracker.wrote false')
 
+-- fhBridge.createFact (require('factHelper'), issue #113): same validatedTrackedWrite
+-- shape as createSourceFromTemplate/citeSource/setTftfText above -- validate runs before
+-- mutate, and a rejected validate call never reaches mutate or flips the tracker.
+helperCallLog = {}
+local envValidateCreateFact, trackerValidateCreateFact = sandbox.build("read-write")
+envValidateCreateFact.fhBridge.createFact('I1', 'CENS', 'Someplace', 'Jan 1901')
+check(#helperCallLog == 2 and helperCallLog[1][1] == 'validateCreateFact' and helperCallLog[2][1] == 'createFact',
+  'a valid createFact call runs validate before mutate, in that order')
+check(trackerValidateCreateFact.wrote == true, 'a valid createFact call still flips tracker.wrote')
+
+helperCallLog = {}
+local envRejectCreateFact, trackerRejectCreateFact = sandbox.build("read-write")
+local okRejectCreateFact = pcall(envRejectCreateFact.fhBridge.createFact, 'BAD', 'CENS')
+check(okRejectCreateFact == false, 'a createFact call rejected by validation raises an error')
+check(#helperCallLog == 1 and helperCallLog[1][1] == 'validateCreateFact',
+  'the rejected createFact call never reached the real createFact (mutate) at all')
+check(trackerRejectCreateFact.wrote == false,
+  'a createFact call rejected by validation leaves tracker.wrote false -- nothing was written, so ADR 0005 rollback never arms')
+
 -- fhBridge's read-only members (familyHelper.lua) are still present under read-write too,
 -- by reference (not tracked-write) — env.fhBridge gains members going into read-write, it
 -- never gets rebuilt from scratch.
@@ -668,6 +707,17 @@ check(type(envReadWriteSetTftf.fhBridge.setTftfText) == 'function' and envReadWr
 check(envReadWriteSetTftf.fhBridge.setTftfText('ptr', 'some text') == 'settftf:ptr', 'wrapped fhBridge.setTftfText forwards through to the real richTextHelper.setTftfText')
 check(trackerReadWriteSetTftf.wrote == true, 'calling a wrapped fhBridge.setTftfText flips the tracker too')
 check(trackerReadWriteSetTftf.logged == false, 'calling fhBridge.setTftfText (not logActivity) leaves tracker.logged false')
+
+-- fhBridge.createFact (require('factHelper'), issue #113): present, wrapped, forwards
+-- through and flips the tracker the same way createSourceFromTemplate/citeSource/
+-- logActivity/setTftfText do above.
+helperCallLog = {}
+local envReadWriteCreateFact, trackerReadWriteCreateFact = sandbox.build("read-write")
+check(type(envReadWriteCreateFact.fhBridge.createFact) == 'function' and envReadWriteCreateFact.fhBridge.createFact ~= fakeFactHelper.createFact,
+  'read-write fhBridge.createFact is wrapped, not the raw function')
+check(envReadWriteCreateFact.fhBridge.createFact('I1', 'CENS') == 'fact:I1:CENS', 'wrapped fhBridge.createFact forwards through to the real factHelper.createFact')
+check(trackerReadWriteCreateFact.wrote == true, 'calling a wrapped fhBridge.createFact flips the tracker too')
+check(trackerReadWriteCreateFact.logged == false, 'calling fhBridge.createFact (not logActivity) leaves tracker.logged false')
 
 local envReadWrite7, trackerReadWrite7 = sandbox.build("read-write")
 check(envReadWrite7.fhCreateItem('INDI') == 'created:INDI', 'wrapped fhCreateItem still forwards through')

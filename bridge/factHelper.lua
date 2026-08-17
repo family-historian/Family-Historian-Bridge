@@ -18,7 +18,7 @@ local M = {}
 
 local familyHelper = require('familyHelper')
 
--- factHelper.validateCreateFact(ptrRecord, sTag, dtDate)
+-- factHelper.validateCreateFact(ptrRecord, sTag, sPlace, dtDate)
 -- The pure validation half of M.createFact below (issue #97 pattern: sandbox.lua calls this
 -- on its own, untracked, before arming the write tracker, so a rejected call never arms ADR
 -- 0005's rollback path). ptrRecord may be a live Item Pointer or a qualified id string (e.g.
@@ -27,25 +27,33 @@ local familyHelper = require('familyHelper')
 -- ambiguity familyHelper.getAllDetails/getFactsByTag already reject, issue #65) --
 -- resolvePointer's own bare-number rejection covers this, no separate check needed here.
 --
+-- sPlace is declared here purely for positional alignment with M.createFact's own call
+-- signature, NOT because it's validated -- sandbox.lua's validatedTrackedWrite calls this
+-- with the SAME raw args a real fhBridge.createFact(...) call receives (positionally, not
+-- by name), so dtDate MUST sit at the same 4th-argument position here as it does in
+-- M.createFact's own signature below, or it silently binds to sPlace's value instead (a
+-- real bug this project shipped and live-caught, Family Historian Sample Project 8, issue
+-- #113: fhBridge.createFact(p, "CENS", "Newtown", "1905") validated "Newtown" as dtDate and
+-- silently dropped "1905" entirely, before this fix added the sPlace placeholder).
+--
 -- dtDate (docs/adr/0030) goes through familyHelper.resolveDate -- accepts a Date object, the
 -- {year=,month=,day=[,subtype=]} table shorthand, or a plain string (parsed via FH's own
 -- Date object string parser, fhNewDate():SetValueAsText) -- resolved and validated here,
 -- before M.createFact ever calls fhu.createFact, so a malformed date rejects cleanly instead
 -- of creating the Fact item first and only failing (and rolling back) on the DATE subfield
--- write, which is what a raw string used to do (live-confirmed, Family Historian Sample
--- Project 8, before this fix).
+-- write, which is what a raw string used to do (live-confirmed, before docs/adr/0030's fix).
 --
 -- Returns the resolved pointer and the resolved Date value, both of which M.createFact
 -- itself also needs -- same "validate once, mutate reuses the result" contract as
 -- sourceHelper.lua's validateCreateSourceFromTemplate/validateCiteSource.
 --
--- Doesn't take M.createFact's remaining sPlace/sAddress/sValue/sAge -- there's nothing to
--- validate about them (fhu.createFact itself skips any that are nil, and this project's own
--- stance is to trust the caller and let FH reject a genuinely nonsensical value). sandbox.lua's
+-- Doesn't take M.createFact's remaining sAddress/sValue/sAge -- there's nothing to validate
+-- about them (fhu.createFact itself skips any that are nil, and this project's own stance is
+-- to trust the caller and let FH reject a genuinely nonsensical value). sandbox.lua's
 -- validatedTrackedWrite still calls this with all 7 args every real call passes -- Lua
--- silently ignores the extra ones, same as any function called with more args than it
--- declares.
-function M.validateCreateFact(ptrRecord, sTag, dtDate)
+-- silently ignores the extra ones past sPlace/dtDate, same as any function called with more
+-- args than it declares.
+function M.validateCreateFact(ptrRecord, sTag, sPlace, dtDate)
   local ptr = familyHelper.resolvePointer(ptrRecord)
   local problem = familyHelper.pointerProblem(ptr)
   if problem then
@@ -85,7 +93,7 @@ end
 -- (familyHelper.lua's own pointerProblem comment) -- so it degrades to a clear error under
 -- any of those shapes, not just the one fhCreateItem itself documents.
 function M.createFact(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue, sAge)
-  local ptr, resolvedDate = M.validateCreateFact(ptrRecord, sTag, dtDate)
+  local ptr, resolvedDate = M.validateCreateFact(ptrRecord, sTag, sPlace, dtDate)
   local fhu = require('fhUtils')
   local fact = fhu.createFact(ptr, sTag, sPlace, resolvedDate, sAddress, sValue, sAge)
   familyHelper.checkCreated(fact, "createFact: fhu.createFact failed to create a " .. sTag ..

@@ -233,6 +233,41 @@ do
   end)
 end
 
+-- Regression test (live-caught, Family Historian Sample Project 8): sandbox.lua's
+-- validatedTrackedWrite wrapper calls validateFn(...) and fn(...) with the SAME raw
+-- positional args a real fhBridge.createFact(...) call receives -- NOT via M.createFact's
+-- own internal call, which always had dtDate correctly bound to its own local variable
+-- regardless of validateCreateFact's declared parameter positions. A real call once bound
+-- dtDate to sPlace's value instead (M.validateCreateFact's old (ptrRecord, sTag, dtDate)
+-- signature put dtDate at position 3, but the real call signature has sPlace there and
+-- dtDate at position 4) -- silently validating "Newtown" as a date and dropping "1905"
+-- entirely, undetected by every other test in this file since none of them called
+-- M.validateCreateFact with the full raw 7-argument list the way the real wrapper does.
+-- This test exists specifically to catch any future positional drift between
+-- M.validateCreateFact's and M.createFact's own signatures the same way.
+do
+  local indi = makeRecord("INDI")
+  local fakeFactPtr = addNode("BIRT")
+  local capturedArgs
+  withFakeFhu({
+    createFact = function(...)
+      capturedArgs = { ... }
+      return fakeFactPtr
+    end,
+  }, function()
+    -- Mirrors sandbox.lua's validatedTrackedWrite(validateFn, fn) exactly: both called with
+    -- the identical raw args, positionally -- not routed through M.createFact's own call.
+    local rawArgs = { indi, "CENS", "Newtown", "1905" }
+    factHelper.validateCreateFact(table.unpack(rawArgs))
+    local result = factHelper.createFact(table.unpack(rawArgs))
+    check(result == fakeFactPtr, 'the wrapper-simulated call still succeeds')
+    check(capturedArgs[3] == "Newtown", 'sPlace ("Newtown") is forwarded to fhu.createFact as sPlace, not consumed as dtDate')
+    local resolvedDate = capturedArgs[4]
+    check(dateObjFields[resolvedDate] ~= nil and dateObjFields[resolvedDate].year == 1905,
+      'dtDate ("1905") resolves from its real 4th-argument position, not sPlace\'s 3rd-argument position')
+  end)
+end
+
 -- An already-built Date object passes through resolveDate unchanged, not re-wrapped --
 -- same familyHelper.resolveDate contract createSourceFromTemplate/citeSource already rely on.
 do
