@@ -31,20 +31,6 @@ local function currentText(ptr)
   return fhGetItemText(ptr, "~")
 end
 
--- Walks tag-typed records (e.g. "_SRCT"), returning a pointer positioned at the first one
--- where predicate(ptr) is true, or nil if none match.
-local function findRecord(tag, predicate)
-  local ptr = fhNewItemPtr()
-  ptr:MoveToFirstRecord(tag)
-  while ptr:IsNotNull() do
-    if predicate(ptr) then
-      return ptr
-    end
-    ptr:MoveNext()
-  end
-  return nil
-end
-
 -- Reads the text value of the first direct child of parentPtr tagged wantedTag, or nil if
 -- there is none. Used for the NAME/CODE/TYPE/PROM subfields on _SRCT and FDEF items.
 local function readChildText(parentPtr, wantedTag)
@@ -103,14 +89,27 @@ local function fieldDefs(srctPtr)
   return defs
 end
 
+-- Resolves a tag+id pair to the one record via MoveToRecordById directly -- confirmed
+-- (issue #118, live against the Sample Project: 40/40 SOUR + 18/18 _SRCT ids, zero
+-- mismatches) equivalent to the O(n) tag-walk-and-compare this used to do, since FH's own
+-- docs (MoveToRecordById.htm, fhGetRecordId.htm) both scope record ids the same way -- "only
+-- unique within a given record type". label names the record kind in error messages (e.g.
+-- "_SRCT template", "SOUR source").
+local function resolveById(tag, label, id)
+  local ptr = fhNewItemPtr()
+  ptr:MoveToRecordById(tag, id)
+  if ptr:IsNull() then
+    error("no " .. label .. " record with id " .. tostring(id))
+  end
+  return ptr
+end
+
 -- Resolves nameOrId to the one record: tag whose readChildText(ptr, nameFieldTag) matches
 -- nameOrId case-insensitively (string form, not shaped like this tag's own qualified id),
 -- or whose fhGetRecordId matches exactly (number form, or a qualified-id-shaped string
--- form -- issue #100, e.g. "S1186" for a SOUR lookup). Errors on zero or multiple Title/
--- NAME matches, or on an id (either form) that doesn't exist. Deliberately walks records
--- by tag rather than using MoveToRecordById, since an id here means "match this id among
--- tag records specifically", not "any record with this id". label names the record kind
--- in error messages (e.g. "_SRCT template", "SOUR source").
+-- form -- issue #100, e.g. "S1186" for a SOUR lookup), via resolveById above. Errors on
+-- zero or multiple Title/NAME matches, or on an id (either form) that doesn't exist. label
+-- names the record kind in error messages (e.g. "_SRCT template", "SOUR source").
 --
 -- Precedence (issue #100): a string shaped like THIS tag's own qualified id
 -- (familyHelper.parseQualifiedId(tag, nameOrId) returning non-nil) always resolves as an
@@ -122,15 +121,6 @@ end
 -- passed to a SOUR lookup) is not recognized as an id at all here -- parseQualifiedId is
 -- tag-scoped and returns nil -- so it falls through to the Title/NAME match below the
 -- same as any other non-matching string, rather than silently resolving the wrong tag.
-local function resolveById(tag, label, id)
-  local match = findRecord(tag, function(ptr)
-    return fhGetRecordId(ptr) == id
-  end)
-  if not match then
-    error("no " .. label .. " record with id " .. tostring(id))
-  end
-  return match
-end
 
 local function resolveByNameOrId(tag, nameFieldTag, label, nameOrId)
   if type(nameOrId) == "number" then

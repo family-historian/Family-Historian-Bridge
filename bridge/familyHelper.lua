@@ -811,10 +811,10 @@ end
 -- Returns an array of indiDescriptor -- the same {id, qualifiedId, name, sex} shape
 -- as getFamilyGroup/getAncestors' own .individual field -- in FH's own record order
 -- (creation order, not sorted alphabetically). Walks every Individual record in the
--- project once (MoveToFirstRecord("INDI") + MoveNext(), the same record-iteration
--- shape as sourceHelper.lua's own findRecord), so cost scales with the project's
--- total Individual count -- fine for an interactive lookup, not meant for a tight
--- loop calling it repeatedly.
+-- project once (MoveToFirstRecord("INDI") + MoveNext(), a plain tag-walk, not an id
+-- lookup -- MoveToRecordById doesn't apply here since there's no id to look up, just a
+-- name to match), so cost scales with the project's total Individual count -- fine for
+-- an interactive lookup, not meant for a tight loop calling it repeatedly.
 function M.searchByName(forename, surname)
   if (forename == nil or forename == "") and (surname == nil or surname == "") then
     error("searchByName: supply at least one of forename or surname to search on")
