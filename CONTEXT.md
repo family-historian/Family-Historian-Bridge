@@ -245,22 +245,28 @@ fields, Sentence templates — plus, under its own `"Bridge project conventions"
 breadcrumb (distinct from the domain-facts entries above), this project's own first-party
 operational guidance: the `"run_lua guidance"` family gathers behavioral gotchas moved out of
 `RUN_LUA_DESCRIPTION` once it outgrew the ~2KB safe zone (docs/adr/0011), and the
-`"fhBridge API reference"` family (issue #102, docs/adr/0024) sits alongside it — one compact
-entry per `fhBridge.*` function (Description/Parameters/Returns only; no design history or
-issue numbers — that stays in this file's own per-function entries and in bridge/README.md).
-Despite this file's name, it is not GEDCOM-domain-scoped only — "GEDCOM knowledge" describes
-its original seed content, not a hard boundary on what it now holds. Each entry carries a
-confidence tag (Verified / Confirmed / Documented / Likely) and a citation back to its source
-(an FH help page, a specific line in the family_historian_mobile project's tag-mapping specs,
-or — for the Bridge-project-conventions family — this repo's own source/ADRs, always tagged
-Verified) — entries inherited from that sibling project describe its raw exported-GEDCOM-file
-findings, not FH's live API, so each is cross-checked against FH's own help before being
-trusted here. Deliberately excludes anything that only describes the exported-file wire format
-(e.g. `_LINK_*`/`_LKID` mechanics, the `_PLAC`/`_ADDR` gazetteer, encoding options) since
-`run_lua`'s sandbox never reads or writes a `.ged` file directly — see
-docs/adr/0003-gedcom-corpus-scope-live-api-only.md; that exclusion is about the exported-file
-format specifically, not a bar on first-party Bridge content generally (the
-`"Bridge project conventions"` family predates and sits outside it). `_SRCT` itself is *not*
+`"fhBridge API reference"` family sits alongside it — one compact entry per `fhBridge.*`
+function (Description/Parameters/Returns only; no design history or issue numbers — that
+stays in this file's own per-function entries and in bridge/README.md). This "no design
+history or issue/ADR numbers" rule holds for every entry in the corpus, not just this family
+(issue #119): the corpus is a live MCP tool result an agent-only session pays real tokens for
+and can never open a tracker link from, unlike this file — Git history is the record of when
+and why a fact was added, so the corpus itself only states what's true, how confident the
+entry is, and — in `source` — how it's known (an FH help page, a live-tested project, a code
+location), never an internal issue/ADR pointer. Despite this file's name, it is not
+GEDCOM-domain-scoped only — "GEDCOM knowledge" describes its original seed content, not a hard
+boundary on what it now holds. Each entry carries a confidence tag (Verified / Confirmed /
+Documented / Likely) and a citation back to its source (an FH help page, a specific line in
+the family_historian_mobile project's tag-mapping specs, or — for the Bridge-project-conventions
+family — this repo's own source, always tagged Verified) — entries inherited from that sibling
+project describe its raw exported-GEDCOM-file findings, not FH's live API, so each is
+cross-checked against FH's own help before being trusted here. Deliberately excludes anything
+that only describes the exported-file wire format (e.g. `_LINK_*`/`_LKID` mechanics, the
+`_PLAC`/`_ADDR` gazetteer, encoding options) since `run_lua`'s sandbox never reads or writes a
+`.ged` file directly — see docs/adr/0003-gedcom-corpus-scope-live-api-only.md; that exclusion
+is about the exported-file format specifically, not a bar on first-party Bridge content
+generally (the `"Bridge project conventions"` family predates and sits outside it). `_SRCT`
+itself is *not*
 one of the exported-file-format exclusions — it's also a live record-type tag (Source Template
 record), reachable the same way as INDI/FAM/SOUR; see **Source template** below and the
 corpus's "Creating a templated Source record" entry for how a Source record links to one and
