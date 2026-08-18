@@ -387,6 +387,21 @@ rejects cleanly up front rather than creating the Fact item first (see
 _Avoid_: Add fact (this project's own name for the operation is `createFact`, matching
 `fhUtils.createFact`'s own name)
 
+**Qualified id string**:
+A letter-prefixed record identifier (e.g. `"I219"`, `"F3"`, `"S1186"`) combining a record's
+tag prefix (`F`=FAM, `I`=INDI, `O`=OBJE, `N`=NOTE, `R`=REPO, `S`=SOUR, `U`=SUBM, `B`=SUBN,
+`P`=`_PLAC`, `E`=`_RNOT`, `T`=`_SRCT` — `fhGetQualifiedRecordId`'s own table) with its numeric
+`fhGetRecordId`. Distinct from a bare `id` number, which carries no tag and can't disambiguate
+a record type on its own. `familyHelper.resolveQualifiedId`/`resolvePointer` resolve one to a
+live pointer via `MoveToRecordById`; `sourceHelper.resolveByNameOrId` recognizes the shape via
+`familyHelper.parseQualifiedId` before falling through to a Title/NAME match. Most `fhBridge`
+helpers that take a record accept a qualified id string as an alternative to a live Item
+Pointer — it's exactly the form `fhGetQualifiedRecordId`/every `.qualifiedId` descriptor field
+already returns, closing the loop on a result crossing the JSON boundary without a caller
+resolving it back to a pointer by hand. A string shaped like a qualified id is always resolved
+as an id, never attempted against Title/NAME, even on the coincidence of a Title reading the
+same way (issue #100).
+
 **Standard citation field**:
 One of the 4 generic citation-specific fields FH's own help documents as available on
 every `SOUR` citation, templated source or not (`sourcesandsourcetemplates.html`): Entry
