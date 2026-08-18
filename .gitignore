@@ -11,6 +11,8 @@
 
 # Project-specific session handoff notes -- not part of the repo's own history/docs
 /E40-HANDOFF.md
+# Agent scratch files -- not part of the repo's own history/docs
+/scratchpad/
 # Added by code-review-graph
 .code-review-graph/
 .envrc
