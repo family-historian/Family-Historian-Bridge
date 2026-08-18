@@ -468,7 +468,21 @@ the point of the term is the *citation* side of the distinction)
 The `fhBridge` helper (`sessionLogHelper.lua`) that logs a Read-write Session's
 record-creating activity into one Research Note (`_RNOT` record) per Session — creating it
 on the first call in a Session, titled with a creation timestamp, and appending a further
-entry to that same note on every subsequent call in the same Session. Distinct from a
+entry to that same note on every subsequent call in the same Session. `ptrRecord` accepts a
+Fact or other sub-item pointer as a convenience, not just a live record pointer or a
+qualified id string (issue #117, docs/adr/0031-logactivity-auto-corrects-fact-pointer-to-owning
+-record.md): `validateLogActivity` silently climbs it to its owning record via
+`ptr:MoveToRecordItem(ptr)` rather than erroring, at any depth. This reverses ADR 0027's own
+addendum (rejecting a Fact/sub-item pointer outright) after a live incident where that rejection
+landed on the very last call of a multi-step write and, via the write-then-log invariant's
+rollback path, undid everything already written for what was really just a targeting mistake —
+`MoveToRecordItem` can only ever resolve to the passed item's own real owning record, never a
+different one, so the correction can't mask a "wrong record entirely" mistake, only a "right
+record, wrong item within it" one — with one known exception, deferred rather than fixed
+(docs/adr/0031's own "Known limitation" section): a Shared Fact's `_SHAR`/`_SHAN` witness item
+belongs, structurally, to the fact's principal, not the witness, so a pointer into that
+structure obtained while working with the witness would climb to the wrong Individual. Distinct
+from a
 Whole-record citation or any other `SOUR`-citation concept above: a Research Note here is a
 Claude-authored activity log for the user to review, not a source attached to the data
 itself. Optionally takes a still-needs-media detail (a name and, if mentioned, a location),

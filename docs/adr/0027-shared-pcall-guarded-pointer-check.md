@@ -83,6 +83,15 @@ noise, not diagnostic value.
 
 ## Addendum: `logActivity`'s `ptrRecord` must be a record, not a Fact/sub-item
 
+**Superseded in part by docs/adr/0031-logactivity-auto-corrects-fact-pointer-to-owning-record.md**:
+a live incident (issue #117) showed this addendum's outright rejection landing on the very last
+call of a multi-step write, triggering ADR 0005's full rollback for what was really just a
+targeting mistake. ADR 0031 replaces the `error(...)` this addendum added with a silent climb to
+the owning record via `ptr:MoveToRecordItem(ptr)`. The rest of this addendum — *why* a bare pointer
+check isn't the whole contract, and `fhHasParentItem`'s role in telling a record apart from a
+Fact/sub-item — still describes the mechanism ADR 0031 builds on, so it's left as history below
+rather than rewritten.
+
 A live pointer isn't the whole contract for `sessionLogHelper.logActivity(ptrRecord, ...)` —
 its own doc comment already said `ptrRecord` is always "the record" an action concerns (a Fact
 goes in the `action` string instead, e.g. `action = "fact added " ..

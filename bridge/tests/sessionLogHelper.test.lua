@@ -108,11 +108,11 @@ function PtrMethods:MoveToRecordById(tag, id)
 end
 
 
--- ptrRecord must be a top-level record, not a Fact/sub-item (issue #110 follow-up):
--- fhHasParentItem is FH's own documented way to tell them apart ("record items do not
--- have parent items, but all other items (i.e. field items) do"). Nodes get an optional
--- .parent field for this -- fhCreateItem above never sets one (every node it creates is
--- top-level), so a "has a parent" fixture is built directly in the test that needs one.
+-- A record item has no .parent; a Fact/field/citation item does (fhHasParentItem is FH's
+-- own documented way to tell them apart: "record items do not have parent items, but all
+-- other items (i.e. field items) do"). Nodes get an optional .parent field for this --
+-- fhCreateItem above never sets one (every node it creates is top-level), so a "has a
+-- parent" fixture is built directly in the test that needs one.
 fhHasParentItem = function(ptr)
   local node = currentNode(ptr)
   return node ~= nil and node.parent ~= nil
@@ -123,6 +123,31 @@ fhGetTag = function(ptr)
   return node and node.tag
 end
 fhNewItemPtr = newPtr
+
+-- Needed for validateLogActivity's auto-correct climb (issue #117): moves self to point at
+-- ptrRef's owning record, walking the .parent chain as far as needed (a Fact, or something
+-- nested even deeper under it) the same way real MoveToRecordItem climbs regardless of
+-- depth. If the climb doesn't land on a node this fake tree actually has on record (the
+-- defensive-backstop test's orphan fixture), self ends up unpositioned/IsNull(), the same
+-- shape real FH's own "couldn't resolve" case has.
+function PtrMethods:MoveToRecordItem(ptrRef)
+  local node = currentNode(ptrRef)
+  while node and node.parent do
+    node = node.parent
+  end
+  if node then
+    local list = recordsByTag[node.tag] or {}
+    for i, n in ipairs(list) do
+      if n == node then
+        self.list = list
+        self.index = i
+        return
+      end
+    end
+  end
+  self.list = nil
+  self.index = nil
+end
 
 ------------------------------------------------------------------
 -- Fake RichText object: records an ordered list of segments, either plain-text
@@ -359,6 +384,9 @@ check(#lastSaveAfterBadMedia.richText.segments == segmentCountBeforeBadMedia + 4
 -- rollback/Session-death chain that a caught-early error here now avoids). Each case here
 -- must fail before fhCreateItem/the buffer are ever touched, not just fail eventually.
 ------------------------------------------------------------------
+-- Note: a Fact/sub-item ptrRecord is NOT one of these invalid cases (issue #117) -- see the
+-- auto-correct section below, after this block.
+------------------------------------------------------------------
 
 local rnotBeforeInvalid = #(recordsByTag["_RNOT"] or {})
 local setValueCallCountBeforeInvalid = #setValueCalls
@@ -380,17 +408,6 @@ check(contains(errStringPtr, "could not resolve qualified id"),
 check(not contains(errStringPtr, "IsNull"),
   'the error is a named error(), not a raw "attempt to call ... IsNull" crash')
 
-local factNode = { tag = 'BIRT', id = 99999, parent = indiG }
-local factPtr = newPtr()
-factPtr.list = { factNode }
-factPtr.index = 1
-
-local okFactPtr, errFactPtr = pcall(freshSessionLogHelper.logActivity, factPtr, "created")
-check(okFactPtr == false,
-  'a Fact/sub-item ptrRecord (not a top-level record) raises an error rather than silently creating a misleading record link')
-check(contains(errFactPtr, "ptrRecord"), 'the error names ptrRecord specifically')
-check(contains(errFactPtr, "BIRT"), 'the error names the actual tag found, same style as getFamilyGroup\'s wrong-record-type error')
-
 local okNilAction, errNilAction = pcall(freshSessionLogHelper.logActivity, indiG, nil)
 check(okNilAction == false, 'a nil action raises an error rather than proceeding')
 check(contains(errNilAction, "action"), 'the nil-action error names action specifically')
@@ -399,9 +416,78 @@ local okEmptyAction = pcall(freshSessionLogHelper.logActivity, indiG, "")
 check(okEmptyAction == false, 'an empty-string action also raises an error rather than proceeding')
 
 check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeInvalid,
-  'none of the six invalid calls above created a _RNOT record')
+  'none of the five invalid calls above created a _RNOT record')
 check(#setValueCalls == setValueCallCountBeforeInvalid,
-  'none of the six invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
+  'none of the five invalid calls above wrote anything to the note -- caught before fhCreateItem/the buffer, not just eventually')
+
+------------------------------------------------------------------
+-- ptrRecord may also be a Fact/sub-item pointer (issue #117, 2026-08-18 grilling session --
+-- reverses issue #110's own decision to reject one): validateLogActivity now climbs to the
+-- item's owning record via ptr:MoveToRecordItem(ptr) instead of erroring, so a caller's
+-- targeting mistake on logActivity's own call -- reported live as the very last call of a
+-- multi-step write -- no longer triggers ADR 0005's full write-then-error rollback and
+-- undoes everything already written for what was really just a targeting mistake, not a
+-- data mistake. The correction is silent: the record link lands on the owning record
+-- exactly as if the caller had passed it directly; nothing in the note or return value
+-- marks that a correction happened.
+------------------------------------------------------------------
+
+local factNode = { tag = 'BIRT', id = 99999, parent = currentNode(indiG) }
+local factPtr = newPtr()
+factPtr.list = { factNode }
+factPtr.index = 1
+
+local rnotBeforeFactPtr = #(recordsByTag["_RNOT"] or {})
+freshSessionLogHelper.logActivity(factPtr, "created")
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeFactPtr,
+  'a Fact/sub-item ptrRecord no longer raises an error -- it appends to the same Session note as every other call in this block, creating no new _RNOT record')
+
+local factPtrSave = setValueCalls[#setValueCalls]
+local factPtrLink = factPtrSave.richText.segments[#factPtrSave.richText.segments]
+check(factPtrLink.kind == 'reclink' and factPtrLink.node == currentNode(indiG),
+  'the record link lands on the Fact\'s own owning record (indiG), not the Fact item itself')
+
+-- Climbs through more than one level too -- MoveToRecordItem climbs all the way up
+-- regardless of depth (issue #117: "if passed a source link for example you will get the
+-- owning individual or family record").
+local citationNode = { tag = 'SOUR', id = 88888, parent = factNode }
+local citationPtr = newPtr()
+citationPtr.list = { citationNode }
+citationPtr.index = 1
+
+freshSessionLogHelper.logActivity(citationPtr, "created")
+local citationSave = setValueCalls[#setValueCalls]
+local citationLink = citationSave.richText.segments[#citationSave.richText.segments]
+check(citationLink.kind == 'reclink' and citationLink.node == currentNode(indiG),
+  'a pointer nested two levels deep (a citation under a Fact) still climbs all the way to the owning record')
+
+-- Defensive backstop: if the climb doesn't land on a record this fake tree actually has on
+-- file (modelling a real-world "MoveToRecordItem couldn't resolve to anything usable" case),
+-- validateLogActivity's re-check after climbing still catches it as a bad pointer instead of
+-- reaching AddRecordLink with a broken one.
+local orphanNode = { tag = 'DATA', id = 77777, parent = { tag = 'GHOST', id = 66666 } }
+local orphanPtr = newPtr()
+orphanPtr.list = { orphanNode }
+orphanPtr.index = 1
+
+local okOrphan, errOrphan = pcall(freshSessionLogHelper.logActivity, orphanPtr, "created")
+check(okOrphan == false,
+  'a pointer whose climb lands on something this fake tree has no record of raises an error rather than reaching AddRecordLink with a broken pointer')
+check(contains(errOrphan, "DATA") and contains(errOrphan, "MoveToRecordItem"),
+  'the error names the original item\'s own tag and that a climb was attempted (code review finding on issue #117: this backstop must stay as diagnosable as the nil-ptrRecord case it would otherwise be indistinguishable from, per ADR 0027)')
+
+-- The climb only ever runs once action/media have already been validated (issue #117 code
+-- review): MoveToRecordItem mutates its receiver in place, a caller-visible side effect on
+-- an object the caller owns, so a call that's going to error on a bad action anyway must
+-- leave the caller's own Fact pointer untouched, not climb it first and still fail.
+local factPtrBadAction = newPtr()
+factPtrBadAction.list = { factNode }
+factPtrBadAction.index = 1
+
+local okBadActionFactPtr = pcall(freshSessionLogHelper.logActivity, factPtrBadAction, nil)
+check(okBadActionFactPtr == false, 'a Fact ptrRecord paired with a nil action still raises (the action check, not the pointer)')
+check(fhGetTag(factPtrBadAction) == 'BIRT',
+  'the Fact pointer itself is left untouched by the failed call -- the climb never ran, since action was invalid first')
 
 ------------------------------------------------------------------
 -- ptrRecord accepts a qualified id string too (issue #114, grilling session 2026-08-17):
@@ -486,9 +572,17 @@ check(okValidateOnlyBadType == false, 'validateLogActivity rejects a wrong-typed
 check(contains(errValidateOnlyBadType, "number") and contains(errValidateOnlyBadType, "42"),
   'the rejection names both the type and the value actually given')
 
-local okValidateOnlyFactPtr, errValidateOnlyFactPtr = pcall(freshSessionLogHelper.validateLogActivity, factPtr, "created")
-check(okValidateOnlyFactPtr == false, 'validateLogActivity rejects a Fact/sub-item ptrRecord too, same as logActivity')
-check(contains(errValidateOnlyFactPtr, "BIRT"), 'the rejection names the actual tag found')
+-- A fresh Fact fixture, not the module-level factPtr above -- that one was already climbed
+-- (and so mutated in place, matching MoveToRecordItem's real "moves this pointer" contract)
+-- by the earlier logActivity(factPtr, ...) call, so by now it points at indiG, not the Fact.
+local factPtr2 = newPtr()
+factPtr2.list = { factNode }
+factPtr2.index = 1
+
+local okValidateOnlyFactPtr, resolvedValidateOnlyFactPtr = pcall(freshSessionLogHelper.validateLogActivity, factPtr2, "created")
+check(okValidateOnlyFactPtr == true, 'validateLogActivity also auto-corrects a Fact/sub-item ptrRecord (issue #117), same as logActivity')
+check(resolvedValidateOnlyFactPtr == factPtr2 and currentNode(resolvedValidateOnlyFactPtr) == currentNode(indiG),
+  'the returned pointer is the same object, now climbed to point at the Fact\'s owning record')
 
 ------------------------------------------------------------------
 -- Write-result checks (issue #111, docs/adr/0028): a bOK=false/NULL-pointer failure from

@@ -137,20 +137,58 @@ function M.validateLogActivity(ptrRecord, action, media)
   end
   -- fhHasParentItem is FH's own documented way to tell a record item apart from a
   -- field/Fact item ("record items do not have parent items, but all other items... do")
-  -- -- ptrRecord must always be the record itself (e.g. the Individual just created, or
-  -- the one a fact was just added to -- never the fact), matching this function's own
-  -- doc comment above and the AddRecordLink call this feeds: an unnoticed Fact pointer
-  -- here would still create a "successful" record link, just to the wrong (or a
-  -- meaningless) thing, with nothing to signal the mistake (issue #110 follow-up,
-  -- grilling session).
-  if fhHasParentItem(ptrRecord) then
-    error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ptrRecord)) .. "' item")
-  end
+  -- -- ptrRecord must ultimately be the record itself (e.g. the Individual just created,
+  -- or the one a fact was just added to), matching the AddRecordLink call this feeds
+  -- ("must point to a record", per FH's own AddRecordLink docs).
+  --
+  -- Issue #110 originally rejected a Fact/sub-item pointer outright here: an unnoticed one
+  -- would still create a "successful" record link, just to the wrong (or a meaningless)
+  -- thing, with nothing to signal the mistake. Issue #117 (2026-08-18 grilling session)
+  -- reverses that in favour of silently climbing to the owning record instead of erroring --
+  -- confirmed live: a script that had already done the real work of a multi-step write (new
+  -- Individual, family link, census fact) lost all of it to ADR 0005's write-then-error
+  -- rollback because this was the write's very last call and it passed the just-created
+  -- Fact, not its owning record -- a targeting mistake, not a data mistake, and the log call
+  -- is exactly the wrong place for that to be fatal. ptr:MoveToRecordItem(ptrRef) is FH's
+  -- own documented way to climb from any item to its owning record, at whatever depth (a
+  -- Fact, a citation, a DATA subfield) -- safe to do silently here because it can only ever
+  -- resolve to that item's own real owning record, never a different one, so it can't paper
+  -- over a "wrong record entirely" mistake, only a "right record, wrong item within it" one.
+  -- See docs/adr/0031-logactivity-auto-corrects-fact-pointer-to-owning-record.md.
+  --
+  -- The climb is deliberately ordered after the action/media checks below (not right here,
+  -- where the Fact-vs-record distinction is actually explained) -- MoveToRecordItem mutates
+  -- ptrRecord in place, a caller-visible side effect on an object the caller owns, and this
+  -- function's own long-standing contract is to validate everything up front before touching
+  -- anything (see M.logActivity's doc comment: "the buffer is module-level state..."). A call
+  -- that's going to error on a bad action/media anyway should leave the caller's own pointer
+  -- object untouched, not climb it first and then still fail.
   if type(action) ~= "string" or action == "" then
     error("logActivity: action must be a non-empty string describing what happened")
   end
   if media and not media.name then
     error("media.name is required when a media detail is given")
+  end
+  if fhHasParentItem(ptrRecord) then
+    -- Captured before the climb specifically so the backstop errors below can still name
+    -- what was actually passed -- pointerProblem's own "" case (a genuinely-null pointer)
+    -- would otherwise be indistinguishable from the plain nil/IsNull() ptrRecord case
+    -- (issue #95) once ptrRecord itself has already been climbed away from the original
+    -- item, the exact "can't tell this apart from an internal crash" failure ADR 0027 was
+    -- written to close (code review finding on issue #117).
+    local originalTag = tostring(fhGetTag(ptrRecord))
+    ptrRecord:MoveToRecordItem(ptrRecord)
+    -- Defensive backstop, not the expected path -- MoveToRecordItem should always resolve
+    -- to a real record for any genuine item. Re-running the same two checks turns a
+    -- genuinely bizarre item shape into this function's own clear error instead of a
+    -- confusing downstream AddRecordLink failure.
+    problem = familyHelper.pointerProblem(ptrRecord)
+    if problem then
+      error("logActivity: ptrRecord's owning record could not be resolved via MoveToRecordItem from a '" .. originalTag .. "' item" .. problem)
+    end
+    if fhHasParentItem(ptrRecord) then
+      error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ptrRecord)) .. "' item (climbed from a '" .. originalTag .. "' item)")
+    end
   end
   return ptrRecord
 end
