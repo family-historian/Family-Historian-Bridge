@@ -919,9 +919,9 @@ do
   for _, child in ipairs(currentNode(target2).children) do
     if child.tag == "SOUR" then sourCountBefore = sourCountBefore + 1 end
   end
-  local okBadDate, errBadDate = pcall(sourceHelper.citeSource, target2, certSourceId, { EntryDate = "not a date" })
-  check(not okBadDate, 'an unrecognized EntryDate string raises rather than proceeding')
-  check(contains(errBadDate, "not a date"), 'the rejection names the offending string')
+  local okBadEntryDate, errBadEntryDate = pcall(sourceHelper.citeSource, target2, certSourceId, { EntryDate = "not a date" })
+  check(not okBadEntryDate, 'an unrecognized EntryDate string raises rather than proceeding')
+  check(contains(errBadEntryDate, "not a date"), 'the rejection names the offending string')
   local sourCountAfter = 0
   for _, child in ipairs(currentNode(target2).children) do
     if child.tag == "SOUR" then sourCountAfter = sourCountAfter + 1 end

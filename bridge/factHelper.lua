@@ -27,14 +27,16 @@ local familyHelper = require('familyHelper')
 -- ambiguity familyHelper.getAllDetails/getFactsByTag already reject, issue #65) --
 -- resolvePointer's own bare-number rejection covers this, no separate check needed here.
 --
--- sPlace is declared here purely for positional alignment with M.createFact's own call
--- signature, NOT because it's validated -- sandbox.lua's validatedTrackedWrite calls this
--- with the SAME raw args a real fhBridge.createFact(...) call receives (positionally, not
--- by name), so dtDate MUST sit at the same 4th-argument position here as it does in
--- M.createFact's own signature below, or it silently binds to sPlace's value instead (a
--- real bug this project shipped and live-caught, Family Historian Sample Project 8, issue
--- #113: fhBridge.createFact(p, "CENS", "Newtown", "1905") validated "Newtown" as dtDate and
--- silently dropped "1905" entirely, before this fix added the sPlace placeholder).
+-- _sPlace (leading underscore -- luacheck's own convention for "deliberately unused",
+-- .luacheckrc doesn't need to know about it) is declared here purely for positional
+-- alignment with M.createFact's own call signature, NOT because it's validated --
+-- sandbox.lua's validatedTrackedWrite calls this with the SAME raw args a real
+-- fhBridge.createFact(...) call receives (positionally, not by name), so dtDate MUST sit
+-- at the same 4th-argument position here as it does in M.createFact's own signature below,
+-- or it silently binds to _sPlace's value instead (a real bug this project shipped and
+-- live-caught, Family Historian Sample Project 8, issue #113:
+-- fhBridge.createFact(p, "CENS", "Newtown", "1905") validated "Newtown" as dtDate and
+-- silently dropped "1905" entirely, before this fix added the _sPlace placeholder).
 --
 -- dtDate (docs/adr/0030) goes through familyHelper.resolveDate -- accepts a Date object, the
 -- {year=,month=,day=[,subtype=]} table shorthand, or a plain string (parsed via FH's own
@@ -53,7 +55,7 @@ local familyHelper = require('familyHelper')
 -- validatedTrackedWrite still calls this with all 7 args every real call passes -- Lua
 -- silently ignores the extra ones past sPlace/dtDate, same as any function called with more
 -- args than it declares.
-function M.validateCreateFact(ptrRecord, sTag, sPlace, dtDate)
+function M.validateCreateFact(ptrRecord, sTag, _sPlace, dtDate)
   local ptr = familyHelper.resolvePointer(ptrRecord)
   local problem = familyHelper.pointerProblem(ptr)
   if problem then
