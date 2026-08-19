@@ -1,9 +1,10 @@
 # Conventions
 
-- **Terminology discipline**: `CONTEXT.md` defines exact preferred terms with explicit
-  `_Avoid_:` notes per entry (e.g. say "Bridge plugin" not "Plugin"/"server" when the Lua
-  plugin specifically is meant; "Session" not "Connection"; "Access mode" not "Permission
-  level"). Match these exactly in code, comments, commits, and issues.
+- **Terminology discipline**: the `domain/*` memories (see `mem:core`) define exact
+  preferred terms with explicit avoid-notes per entry (e.g. say "Bridge plugin" not
+  "Plugin"/"server" when the Lua plugin specifically is meant; "Session" not "Connection";
+  "Access mode" not "Permission level"). Match these exactly in code, comments, commits,
+  and issues.
 - **ADR-per-decision**: any non-obvious design choice gets its own
   `docs/adr/NNNN-slug.md`. Check for a relevant one before re-deciding something; if new
   work contradicts an existing ADR, say so explicitly rather than silently overriding it.

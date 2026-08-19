@@ -10,12 +10,30 @@ Solo project (Jane_t), self-hosted Forgejo issue tracker, pre-1.0 (currently 0.1
 - `installer/` — packages both into a Windows .exe / .mcpb bundle. Not yet memoried in
   depth; see `installer/README.md` and `docs/release.md` if touching it.
 
-## Canonical docs (read before non-trivial work)
-- `CONTEXT.md` (repo root) — full domain glossary, one entry per term (Session, Access
-  mode, Sandbox, run_lua, describe_project, Source template, FTF, Shared Fact, Fact/Record
-  Flag, findSources, getTemplateFieldCensus, logActivity, etc.). Authoritative vocabulary —
-  match it exactly in issues/commits/code, don't drift to synonyms it explicitly avoids.
-- `docs/adr/00NN-*.md` — one ADR per non-obvious design decision (22 so far). Check for a
+## Domain glossary (moved from CONTEXT.md into memories, split by topic — read only the
+cluster relevant to what you're touching, not all of them)
+- `mem:domain/naming` — the 3 distinct product/component names (Bridge plugin / Family
+  Historian Bridge / FH MCP Bridge). Read when writing anything user-facing or renaming.
+- `mem:domain/session_lifecycle` — Session, Exit vs Stop, Access mode, Sandbox, FH
+  auto-undo, Version check. Read when touching Session/dialog/sandbox behavior in `bridge/`.
+- `mem:domain/mcp_tools` — domain semantics of run_lua/describe_project/author_fh_plugin/
+  install_fh_plugin (file layout is in `mem:server` instead). Read when changing what a
+  tool returns or its trust boundary.
+- `mem:domain/sources` — Source template, citeSource, findSources,
+  getTemplateFieldCensus, citation field vocabulary. Read when touching
+  `sourceHelper.lua` or any SOUR/template work.
+- `mem:domain/facts` — createFact, Shared Fact, Fact/Record Flag, Direct ancestor,
+  Qualified id string, Clarifying question. Read when touching `factHelper.lua`/
+  `familyHelper.lua` or Fact-shaped queries.
+- `mem:domain/richtext_logging` — FTF/tFTF, getTftfText/setTftfText, logActivity,
+  run_lua-guidance corpus entries. Read when touching `richTextHelper.lua`/
+  `sessionLogHelper.lua`.
+
+`CONTEXT.md` at the repo root is now a stub pointing here — new terms get memoried
+directly (topic `domain/*`), not re-grown in CONTEXT.md.
+
+## Other canonical docs (read before non-trivial work)
+- `docs/adr/00NN-*.md` — one ADR per non-obvious design decision (30+ so far). Check for a
   relevant ADR before overriding past reasoning; flag contradictions rather than silently
   overriding.
 - `.ua/knowledge-graph.json` — understand-anything graph; project CLAUDE.md says to prefer
@@ -24,8 +42,8 @@ Solo project (Jane_t), self-hosted Forgejo issue tracker, pre-1.0 (currently 0.1
   user-level CLAUDE.md at `~/CLAUDE.md`).
 - `docs/agents/issue-tracker.md` — Forgejo (self-hosted, Gitea-compatible) issue tracker,
   no `gh`/`glab`/`tea` CLI; raw `curl` + `FORGEJO_TOKEN`. See `mem:issue_tracker`.
-- `docs/agents/domain.md` — how to consume `CONTEXT.md`/ADRs when exploring (single-context
-  repo layout here, no `CONTEXT-MAP.md`).
+- `docs/agents/domain.md` — how to consume CONTEXT.md/ADRs when exploring (single-context
+  repo layout here, no `CONTEXT-MAP.md`) — updated to point at `domain/*` memories.
 
 ## Project-wide invariants
 - Everything runs local-only except one explicit user-triggered `check_fh_help_updates`
