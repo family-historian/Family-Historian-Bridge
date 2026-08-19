@@ -37,3 +37,6 @@ Contract (what/params/returns) + load-bearing gotchas only. Drop bare issue-numb
 
 ## File Handling Rules
 - **changelog.md**: Do not read or pull the existing contents of `changelog.md` into your active context or reasoning. Treat it as a write-only file. Only open or write to `changelog.md` when you need to append a new entry for changes you have just completed.
+
+## Git workflow
+Commit straight to the current branch (usually `main`) — don't create a feature branch before committing unless the user explicitly asks for one.
