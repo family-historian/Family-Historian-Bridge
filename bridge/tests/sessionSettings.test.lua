@@ -34,14 +34,16 @@ end
 withFakeFhu({
   loadOptions = function(defaults, scope)
     check(scope == 'LOCAL_MACHINE', 'load() calls fhu.loadOptions with LOCAL_MACHINE scope')
-    check(type(defaults) == 'table' and defaults.accessMode == 'read-only' and defaults.idleTimeoutMinutes == 15,
-      'load() passes today\'s hardcoded values (read-only, 15) as the defaults argument')
-    return { accessMode = 'read-write', idleTimeoutMinutes = 45 }
+    check(type(defaults) == 'table' and defaults.accessMode == 'read-only' and defaults.idleTimeoutMinutes == 15
+      and defaults.debugLogging == false,
+      'load() passes today\'s hardcoded values (read-only, 15, debug logging off) as the defaults argument')
+    return { accessMode = 'read-write', idleTimeoutMinutes = 45, debugLogging = true }
   end,
 }, function(sessionSettings)
   local settings = sessionSettings.load()
   check(settings.accessMode == 'read-write', 'a valid stored accessMode passes through unchanged')
   check(settings.idleTimeoutMinutes == 45, 'an in-range stored idleTimeoutMinutes passes through unchanged')
+  check(settings.debugLogging == true, 'a stored debugLogging of true passes through unchanged')
 end)
 
 -- 2. First run / missing file: fhu.loadOptions itself returns the defaults table it was
@@ -52,6 +54,22 @@ withFakeFhu({
   local settings = sessionSettings.load()
   check(settings.accessMode == 'read-only', 'first run defaults to read-only, matching today\'s hardcoded default')
   check(settings.idleTimeoutMinutes == 15, 'first run defaults to 15 minutes, matching today\'s hardcoded default')
+  check(settings.debugLogging == false, 'first run defaults to debug logging off, matching today\'s hardcoded default')
+end)
+
+-- 2b. Stored debugLogging isn't a real boolean (pre-#122 settings file missing the field
+-- entirely, or hand-edited junk) -- falls back to off.
+withFakeFhu({
+  loadOptions = function() return { accessMode = 'read-only', idleTimeoutMinutes = 15 } end,
+}, function(sessionSettings)
+  local settings = sessionSettings.load()
+  check(settings.debugLogging == false, 'a missing debugLogging field falls back to off')
+end)
+withFakeFhu({
+  loadOptions = function() return { accessMode = 'read-only', idleTimeoutMinutes = 15, debugLogging = 'yes' } end,
+}, function(sessionSettings)
+  local settings = sessionSettings.load()
+  check(settings.debugLogging == false, 'a non-boolean debugLogging value falls back to off')
 end)
 
 -- 3. fhu.loadOptions raises (corrupt file, read error) -- falls back to defaults silently,

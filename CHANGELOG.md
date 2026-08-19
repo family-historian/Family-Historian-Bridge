@@ -1115,3 +1115,9 @@
 First packaged release. Bridge plugin + MCP server (`run_lua`,
 `describe_project`, FH help search/update-check), sandboxed script
 execution, Session Access-mode selector and idle-timeout auto-Stop.
+
+## 2026-08-19
+- Added debug logging mode (issue #122): an off-by-default checkbox alongside Access mode
+  in the Session dialog, recording every `run_lua` script and result to a plain-text log
+  under the project's public folder for that Session's lifetime. New `bridge/debugLog.lua`
+  module; see ADR 0033 for the file-write design.

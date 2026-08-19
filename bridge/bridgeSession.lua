@@ -28,11 +28,16 @@
 -- describe_project's fixed script instead always forces the Read-only sandbox, via the
 -- LUA_RO request form -- see requestFraming.lua.
 --
--- The Access-mode and idle-timeout selections a Start succeeds with are persisted
--- (sessionSettings.lua) via fhu.loadOptions/saveOptions, so the dialog reopens with last
--- time's choices. This is a different code path from bridge/sandbox.lua's block on those
--- same fhu functions for run_lua-submitted scripts -- that block is about keeping
+-- The Access-mode, idle-timeout and Debug logging selections a Start succeeds with are
+-- persisted (sessionSettings.lua) via fhu.loadOptions/saveOptions, so the dialog reopens
+-- with last time's choices. This is a different code path from bridge/sandbox.lua's block
+-- on those same fhu functions for run_lua-submitted scripts -- that block is about keeping
 -- filesystem access out of Claude-authored scripts, not this file's own dialog code.
+--
+-- Debug logging (debugLog.lua) records every run_lua call's script/result to a log file
+-- under the project's public folder, for the Session's own lifetime -- entirely
+-- outside runScript.lua's sandbox, same "not the sandboxed script's own I/O" distinction as
+-- sessionSettings.lua above.
 
 local socket = require("socket")
 require("iuplua")
@@ -45,6 +50,7 @@ local sessionPolicy = require("sessionPolicy")
 local timeoutDisplay = require("timeoutDisplay")
 local versionCompare = require("versionCompare")
 local sessionSettings = require("sessionSettings")
+local debugLog = require("debugLog")
 
 local PORT = 8734
 -- Last-used Access mode and idle-timeout minutes, loaded once here so the widgets below
@@ -85,6 +91,10 @@ local lblStatus = iup.label{title="Not listening.", padding="10x10"}
 local togReadOnly  = iup.toggle{title="Read-only", value=(lastSettings.accessMode == "read-only") and "ON" or "OFF"}
 local togReadWrite = iup.toggle{title="Read-write", value=(lastSettings.accessMode == "read-write") and "ON" or "OFF"}
 local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
+-- Debug logging: records every run_lua script/result to a log file under the project's
+-- public folder for the Session's lifetime. Off by default, editable only while
+-- stopped -- same rule as Access mode/idle timeout -- and persisted the same way.
+local togDebugLogging = iup.toggle{title="Debug logging", value=lastSettings.debugLogging and "ON" or "OFF"}
 -- Idle-timeout control: minutes, 5-120, editable only while the Session is stopped.
 -- SPINMIN/SPINMAX are the widget's own guard; timeoutDisplay.clampMinutes is a second,
 -- defensive clamp applied when the value is read, in case a manually typed value slips
@@ -113,7 +123,7 @@ local dlg = iup.dialog{
         -- two, i.e. Mode's), so the row reads as one balanced settings panel rather than
         -- two mismatched boxes.
         iup.hbox{
-            iup.frame{radAccessMode, title="Mode", padding="8x8"},
+            iup.frame{iup.vbox{radAccessMode, togDebugLogging, gap="8"}, title="Mode", padding="8x8"},
             iup.frame{
                 iup.hbox{iup.label{title="Minutes:"}, txtIdleTimeout, gap="8"},
                 title="Idle timeout", padding="8x8"
@@ -143,6 +153,15 @@ dlg.minsize = dlg.rastersize
 local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"
 end
+
+local function currentDebugLogging()
+    return togDebugLogging.value == "ON"
+end
+
+-- The active debug-log session -- see debugLog.lua. Always a Session object once a Session
+-- has started (never nil then), including when Debug logging is off: Session:logRunLua is a
+-- no-op on a disabled session, so callers below never need to check this for nil.
+local debugLogSession = nil
 
 -- dlg's bgcolor while listening -- lives in sessionPolicy.lua so it's testable standalone
 -- (this file can't be require()'d from a plain-lua test).
@@ -252,6 +271,12 @@ function timPoll:action_cb()
     client:send(response .. "\n")
     client:close()
 
+    -- Only a plain "LUA <n>" request is run_lua's own -- "LUA_RO <n>"
+    -- (describe_project/install_fh_plugin's fixed, internal scripts) is never logged.
+    if debugLogSession and not request.forceReadOnly then
+        debugLogSession:logRunLua(script, response, currentAccessMode())
+    end
+
     -- Give FH a chance to redraw anything a write script changed -- unconditional,
     -- regardless of access mode or whether this particular script actually wrote
     -- anything: cheap when nothing changed, per fhUpdateDisplay's own docs.
@@ -294,12 +319,17 @@ function btnStart:action()
     sessionSettings.save({
         accessMode = currentAccessMode(),
         idleTimeoutMinutes = timeoutDisplay.clampMinutes(txtIdleTimeout.value),
+        debugLogging = currentDebugLogging(),
     })
+    -- CI_PROJECT_PUBLIC_FOLDER queried once here, not re-queried per script.
+    -- debugLog.start is itself a no-op (a disabled session) when Debug logging is off.
+    debugLogSession = debugLog.start(currentDebugLogging(), fhGetContextInfo("CI_PROJECT_PUBLIC_FOLDER"), currentAccessMode())
     timPoll.run = "YES"
     btnStart.active = "NO"
     btnStop.active = "YES"
     togReadOnly.active = "NO"
     togReadWrite.active = "NO"
+    togDebugLogging.active = "NO"
     txtIdleTimeout.active = "NO"
     updateTimeLeftLabel(currentIdleTimeoutSeconds())
     dlg.bgcolor = statusColorForMode(currentAccessMode())
@@ -319,6 +349,7 @@ local function stopSessionIfRunning()
     end
     lastActivityTime = nil
     lastRequestHandledTime = nil
+    debugLogSession = nil
 end
 
 function btnStop:action()
@@ -327,6 +358,7 @@ function btnStop:action()
     btnStop.active = "NO"
     togReadOnly.active = "YES"
     togReadWrite.active = "YES"
+    togDebugLogging.active = "YES"
     txtIdleTimeout.active = "YES"
     lblTimeLeft.title = ""
     dlg.bgcolor = STATUS_COLOR_STOPPED

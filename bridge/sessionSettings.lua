@@ -1,6 +1,6 @@
--- Persists the bridge Session's last-used Access mode and idle-timeout minutes across
--- plugin reloads, via FH's supported fhUtils settings-file API (fhu.loadOptions/
--- saveOptions, LOCAL_MACHINE scope) rather than a hand-rolled file format.
+-- Persists the bridge Session's last-used Access mode, idle-timeout minutes, and Debug
+-- logging toggle across plugin reloads, via FH's supported fhUtils settings-file API
+-- (fhu.loadOptions/saveOptions, LOCAL_MACHINE scope) rather than a hand-rolled file format.
 --
 -- Distinct from bridge/sandbox.lua's block on fhu.saveOptions/loadOptions/resetOptions:
 -- that block only applies to the sandboxed proxy handed to run_lua-submitted scripts, to
@@ -22,11 +22,12 @@ local M = {}
 M.SCOPE = 'LOCAL_MACHINE'
 
 -- Matches bridgeSession.lua's own hardcoded defaults (togReadOnly starts ON,
--- DEFAULT_IDLE_TIMEOUT_MINUTES = 15) -- first-run/missing-file behaviour must stay
--- identical to what it was before this module existed. A fresh table each call so a
--- caller mutating the returned defaults can't corrupt a shared one.
+-- DEFAULT_IDLE_TIMEOUT_MINUTES = 15, Debug logging starts OFF) -- first-run/
+-- missing-file behaviour must stay identical to what it was before this module existed. A
+-- fresh table each call so a caller mutating the returned defaults can't corrupt a shared
+-- one.
 local function defaults()
-  return { accessMode = "read-only", idleTimeoutMinutes = 15 }
+  return { accessMode = "read-only", idleTimeoutMinutes = 15, debugLogging = false }
 end
 
 -- Loads the last-saved Access mode and idle-timeout minutes. Falls back silently to
@@ -50,6 +51,9 @@ function M.load()
   return {
     accessMode = accessMode,
     idleTimeoutMinutes = timeoutDisplay.clampMinutes(loaded.idleTimeoutMinutes),
+    -- Anything other than a real boolean (missing field from a pre-#122 settings file,
+    -- hand-edited junk) falls back to the off-by-default (defaults() above).
+    debugLogging = loaded.debugLogging == true,
   }
 end
 
