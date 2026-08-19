@@ -210,6 +210,31 @@ do
   end)
 end
 
+-- 10. Regression: the public folder itself doesn't exist yet (FH only creates it on
+-- demand) -- start() must create it before attempting the debug subfolder, since
+-- createFolder is not recursive (errors 'Parent folder not found' if the parent is
+-- missing). Modelled here by having the fake createFolder fail for the debug path unless
+-- the public folder was created first.
+do
+  local publicFolderCreated = false
+  withFakes({
+    folderExists = function() return false end,
+    createFolder = function(path)
+      if path == 'C:\\Trees\\MyTree' then
+        publicFolderCreated = true
+        return true
+      end
+      -- path == 'C:\Trees\MyTree\debug': only succeeds once the parent exists.
+      return publicFolderCreated
+    end,
+    fileExists = function() return false end,
+  }, function() return true end, function(debugLog)
+    local session = debugLog.start(true, 'C:\\Trees\\MyTree', 'read-only')
+    check(session.enabled == true,
+      'start() creates a missing public folder before the debug subfolder, so both succeed')
+  end)
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

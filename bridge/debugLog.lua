@@ -102,6 +102,12 @@ function M.start(enabled, publicFolder, accessMode, now)
     -- let a clock tick between them put a different second in each.
     local startTime = now()
     local fhfu = require('fhFileUtils')
+    -- createFolder is not recursive -- it errors 'Parent folder not found' if the parent
+    -- doesn't already exist -- and a project's public folder is only created on demand by
+    -- FH itself, so it can't be assumed to exist yet. Create it first if missing.
+    if not fhfu.folderExists(publicFolder) and not fhfu.createFolder(publicFolder) then
+      error('failed to create public folder')
+    end
     local debugFolder = publicFolder .. '\\debug'
     if not fhfu.folderExists(debugFolder) and not fhfu.createFolder(debugFolder) then
       error('failed to create debug folder')
