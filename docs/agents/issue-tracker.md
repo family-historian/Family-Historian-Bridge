@@ -85,8 +85,8 @@ Create a Forgejo issue via the `POST $API/issues` call above.
 ## Wayfinding operations
 
 This Forgejo instance (v15.0.4) has issue *dependencies* enabled but no sub-issue/parent-child
-API (`/issues/<n>/sub_issues` 404s even though the web UI may show a sub-issues feature) — so
-the wayfinder skill's constructs map onto plain issues, labels, and the dependencies API:
+API (`/issues/<n>/sub_issues` 404s) — so the wayfinder skill's constructs map onto plain
+issues, labels, and the dependencies API:
 
 - **Map**: an issue labelled `wayfinder:map`.
 - **Ticket**: a child issue of a map. Since there's no native parent/child link, a ticket's body
@@ -103,8 +103,8 @@ the wayfinder skill's constructs map onto plain issues, labels, and the dependen
   every entry there has `"state": "closed"`.
 - **Claim**: `PATCH $API/issues/<ticket>` with `{"assignees": ["<username>"]}`.
 - **Frontier query**: the `labels=` filter on `GET $API/issues` does **not** actually filter
-  on this Forgejo instance (v15.0.4) — confirmed 2026-07-31: `?state=open&type=issue&labels=14`
-  returned every open issue in the repo, including ones with no such label. Don't rely on it.
+  on this Forgejo instance (v15.0.4): `?state=open&type=issue&labels=14` returns every open
+  issue in the repo, including ones with no such label. Don't rely on it.
   Instead: `GET $API/issues?state=open&type=issue` (all open issues), then filter client-side
   for `wayfinder:ticket` in each issue's own `labels` array. From that set, a ticket is on the
   frontier if `assignees` is empty/null and `GET $API/issues/<n>/dependencies` comes back empty
