@@ -1,50 +1,38 @@
--- The Bridge plugin's dialog UI and Session lifecycle (issue #75, docs/adr/0018): the IUP
--- dialog (Access-mode selector, idle-timeout spin-box and countdown, Start/Stop), the TCP
--- listener and its poll-timer callback, and request-framing dispatch. Split out of
--- `Claude MCP Bridge.fh_lua` itself so Serena's symbol tools (find_symbol,
--- find_referencing_symbols, etc.) can cover it — `.fh_lua` files can't be recognized by
--- Serena's installed Lua language server integration, `.lua` files can. See CONTEXT.md's
--- "Session" and "Bridge plugin" entries.
+-- The Bridge plugin's dialog UI and Session lifecycle: the IUP dialog (Access-mode
+-- selector, idle-timeout spin-box and countdown, Start/Stop), the TCP listener and its
+-- poll-timer callback, and request-framing dispatch. Split out of `Claude MCP Bridge.fh_lua`
+-- itself so Serena's symbol tools can cover it -- `.fh_lua` files aren't recognized by
+-- Serena's Lua language server, `.lua` files are. See CONTEXT.md's "Session" and "Bridge
+-- plugin" entries.
 --
--- Required, not run standalone: the entry file (`Claude MCP Bridge.fh_lua`) calls
--- `fhInitialise(...)` and `fhSetStringEncoding("UTF-8")` itself, before requiring this
--- module — both must stay direct calls in the entry file, never inside a required module
--- (fhSetStringEncoding: FH's own docs say it "should never be used by modules"; fhInitialise:
--- FH's own docs say it "should be the first function called in the plugin"). This module
--- inherits the current string encoding fhSetStringEncoding already set, per FH's "Special
--- Handling for Modules".
+-- Required, not run standalone: the entry file calls fhInitialise(...) and
+-- fhSetStringEncoding("UTF-8") itself before requiring this module -- both must stay
+-- direct calls in the entry file, never inside a required module (FH's own docs:
+-- fhSetStringEncoding "should never be used by modules"; fhInitialise "should be the
+-- first function called in the plugin").
 --
--- Has no automatable seam, same as the entry file did before this split — FH is proprietary
--- and Windows/CrossOver-only, so this is tested manually inside FH (see bridge/README.md's
--- "Manual test" section), not with a *.test.lua file like the rest of bridge/.
+-- No automatable test -- FH is proprietary and Windows/CrossOver-only, so this is tested
+-- manually inside FH (see bridge/README.md's "Manual test" section).
 --
--- IUP dialog with an Access-mode selector, an idle-timeout spin-box (issue #34), and
--- Start/Stop buttons. Start binds a local TCP listener and polls it via an IUP timer (not
--- a manual while-loop — see docs/adr's prototype-era findings on why
--- fhExhibitResponsiveness()+while-loop doesn't work). Stop unbinds it. Closing the dialog
--- window ends the plugin and cleans up. The same poll timer also watches for an idle
--- Session (no accepted request for the configured idle-timeout, see
--- currentIdleTimeoutSeconds() below) and auto-Stops it, so a forgotten Session doesn't
--- lock FH indefinitely; a live countdown to that auto-Stop is shown in lblTimeLeft.
+-- Start binds a local TCP listener and polls it via an IUP timer (not a manual while-loop
+-- -- fhExhibitResponsiveness()+while-loop doesn't work, per the prototype-era ADR
+-- findings). Stop unbinds it. Closing the dialog ends the plugin and cleans up. The same
+-- poll timer also watches for an idle Session (no accepted request for the configured
+-- idle-timeout) and auto-Stops it, with a live countdown shown in lblTimeLeft.
 --
--- Confirmed in testing (prototype phase): while a session is running, FH's main window
--- is locked. This is a deliberate "Session" (see CONTEXT.md) — start it to hand control
--- to Claude for a bit, Stop when you want FH back.
+-- While a session is running, FH's main window is locked -- a deliberate "Session" (see
+-- CONTEXT.md): start it to hand control to Claude, Stop when you want FH back.
 --
--- Access mode (read-only / read-write) is chosen once at Start and fixed for the whole
--- Session (see CONTEXT.md "Access mode"), and threaded through to the sandbox via
--- runScript.run(script, currentAccessMode()) — read-write additionally wires through FH's
--- full write API (issue #14). describe_project's fixed script instead forces the
--- Read-only sandbox regardless of the Session's access mode, via the LUA_RO request form
--- (issue #16) — see requestFraming.lua.
+-- Access mode (read-only/read-write) is chosen once at Start and fixed for the whole
+-- Session, threaded through to the sandbox via runScript.run(script, currentAccessMode()).
+-- describe_project's fixed script instead always forces the Read-only sandbox, via the
+-- LUA_RO request form -- see requestFraming.lua.
 --
--- The Access-mode and idle-timeout selections a Start succeeds with are persisted (issue
--- #80, sessionSettings.lua) via FH's supported fhu.loadOptions/saveOptions settings-file
--- API, LOCAL_MACHINE scope, so the dialog reopens with last time's choices instead of
--- always resetting to read-only/15 minutes. This is a different code path from
--- bridge/sandbox.lua's block on the same fhu functions for run_lua-submitted scripts
--- (issue #22) — that block is about keeping filesystem access out of Claude-authored
--- scripts, not about this file's own dialog code, which calls fhUtils directly.
+-- The Access-mode and idle-timeout selections a Start succeeds with are persisted
+-- (sessionSettings.lua) via fhu.loadOptions/saveOptions, so the dialog reopens with last
+-- time's choices. This is a different code path from bridge/sandbox.lua's block on those
+-- same fhu functions for run_lua-submitted scripts -- that block is about keeping
+-- filesystem access out of Claude-authored scripts, not this file's own dialog code.
 
 local socket = require("socket")
 require("iuplua")
@@ -59,55 +47,48 @@ local versionCompare = require("versionCompare")
 local sessionSettings = require("sessionSettings")
 
 local PORT = 8734
--- Last-used Access mode and idle-timeout minutes (issue #80), loaded once here so the
--- widgets below can seed themselves from it. sessionSettings.load() already falls back to
--- (read-only, 15) -- matching this file's own former hardcoded defaults -- on a missing or
--- unreadable settings file, so this is safe to use unconditionally, first run or not.
+-- Last-used Access mode and idle-timeout minutes, loaded once here so the widgets below
+-- can seed themselves from it. sessionSettings.load() falls back to (read-only, 15) on a
+-- missing/unreadable settings file, so this is safe to use unconditionally.
 local lastSettings = sessionSettings.load()
 local DEFAULT_IDLE_TIMEOUT_MINUTES = lastSettings.idleTimeoutMinutes
--- Issue #77 / docs/adr/0020: Exit (and the window's X, which shares Exit's teardown) only
--- prompts to confirm closing a running Session when the last request was handled this
--- recently -- the only observable proxy for "Claude might send another request any
--- moment," since a script actually executing can never overlap with a button click (IUP's
--- mainloop is single-threaded). Hardcoded, not exposed on the dialog like the idle
--- timeout -- this is a safety-net nudge, not a per-user tunable. Measured against
--- lastRequestHandledTime, not lastActivityTime -- lastActivityTime is also stamped at
--- Start itself (for the idle-timeout clock), so using it here would warn on a Start-then-
--- immediately-Exit even though no request was ever handled.
+-- Exit (and the window's X) only prompts to confirm closing a running Session when the
+-- last request was handled this recently -- the only observable proxy for "Claude might
+-- send another request any moment," since IUP's mainloop is single-threaded so a script
+-- actually executing can never overlap with a button click. Hardcoded, not exposed on the
+-- dialog -- a safety-net nudge, not a per-user tunable. Measured against
+-- lastRequestHandledTime, not lastActivityTime, since lastActivityTime is also stamped at
+-- Start itself -- using it here would warn on a Start-then-immediately-Exit with no
+-- request ever handled.
 local RECENT_ACTIVITY_CONFIRM_SECONDS = 10
 
--- Dialog background colours (see sessionPolicy.lua for the palette rationale): a muted
+-- Dialog background colours (see sessionPolicy.lua for the palette): a muted
 -- traffic-light so the Session's state -- and, while listening, whether write access is
--- armed -- is visible without reading the status label. Aliased locally so call sites below
--- read the same as before this issue #88 extraction. Set on the dialog itself (dlg.bgcolor),
--- not lblStatus -- IUP native labels don't reliably honour BGCOLOR, confirmed not working live.
+-- armed -- is visible without reading the status label. Set on the dialog itself
+-- (dlg.bgcolor), not lblStatus -- IUP native labels don't reliably honour BGCOLOR.
 local STATUS_COLOR_STOPPED   = sessionPolicy.STATUS_COLOR_STOPPED
 local STATUS_COLOR_ERROR     = sessionPolicy.STATUS_COLOR_ERROR
 local server = nil
 local lastActivityTime = nil
--- Distinct from lastActivityTime above: only stamped when a real request (stop/version/lua)
--- is actually handled, never at Start -- see RECENT_ACTIVITY_CONFIRM_SECONDS above for why.
+-- Distinct from lastActivityTime above: only stamped when a real request is actually
+-- handled, never at Start -- see RECENT_ACTIVITY_CONFIRM_SECONDS above.
 local lastRequestHandledTime = nil
--- Set by a VERSION request (issue #45), cleared on a match or a fresh Start. A VERSION
--- check arrives on its own connection, handled and closed within a single poll tick — a
--- mismatch noted only in that tick's own status update would be overwritten by the very
--- next tick's normal "Last request handled..." line before a user ever saw it. Appending
--- this to every subsequent status update instead keeps a real mismatch visible for the
--- rest of the Session, not just the one tick it was detected on.
+-- Set by a VERSION request, cleared on a match or a fresh Start. A VERSION check is
+-- handled and closed within a single poll tick -- appending this to every subsequent
+-- status update (rather than noting it only in that tick) keeps a real mismatch visible
+-- for the rest of the Session, not just the tick it was detected on.
 local currentVersionWarning = nil
 
 local lblStatus = iup.label{title="Not listening.", padding="10x10"}
--- Seeded from lastSettings (issue #80) rather than always "Read-only" -- ON goes on
--- whichever toggle matches the last-saved Access mode, so a read-write habit is restored
--- too, not just clamped back to the safer default every reload.
+-- Seeded from lastSettings rather than always "Read-only" -- restores a read-write habit
+-- too, not just the safer default.
 local togReadOnly  = iup.toggle{title="Read-only", value=(lastSettings.accessMode == "read-only") and "ON" or "OFF"}
 local togReadWrite = iup.toggle{title="Read-write", value=(lastSettings.accessMode == "read-write") and "ON" or "OFF"}
 local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
--- Idle-timeout control (issue #34): minutes, 5-120 per the ticket's stated range, editable
--- only while the Session is stopped (locked the same way togReadOnly/togReadWrite are —
--- see btnStart/btnStop below). SPINMIN/SPINMAX are the widget's own guard;
--- timeoutDisplay.clampMinutes is a second, defensive clamp applied when the value is
--- actually read, in case a manually typed value slips past the widget.
+-- Idle-timeout control: minutes, 5-120, editable only while the Session is stopped.
+-- SPINMIN/SPINMAX are the widget's own guard; timeoutDisplay.clampMinutes is a second,
+-- defensive clamp applied when the value is read, in case a manually typed value slips
+-- past the widget.
 local txtIdleTimeout = iup.text{
     spin="YES", spinmin=timeoutDisplay.MIN_MINUTES, spinmax=timeoutDisplay.MAX_MINUTES,
     value=tostring(DEFAULT_IDLE_TIMEOUT_MINUTES), visiblecolumns=4
@@ -115,15 +96,14 @@ local txtIdleTimeout = iup.text{
 local lblTimeLeft = iup.label{title="", padding="0x4"}
 local btnStart  = iup.button{title="Start", padding="4x4"}
 local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
--- Always active, Session running or not -- mirrors the window's X, which is likewise
--- clickable regardless of Session state (issue #77, docs/adr/0020).
+-- Always active, Session running or not -- mirrors the window's X, likewise clickable
+-- regardless of Session state.
 local btnExit   = iup.button{title="Exit", padding="4x4"}
 
 lblStatus.expand = "HORIZONTAL"
--- Same fix as lblStatus: this label is created with an empty title, so without an
--- explicit expand it maps at near-zero width and never grows to fit the "Time left:
--- M:SS" text set into it later — IUP sizes a label once, at map time, from whatever
--- title it had then.
+-- Without an explicit expand this label maps at near-zero width and never grows to fit
+-- text set into it later -- IUP sizes a label once, at map time, from whatever title it
+-- had then.
 lblTimeLeft.expand = "HORIZONTAL"
 
 local dlg = iup.dialog{
@@ -141,13 +121,8 @@ local dlg = iup.dialog{
             gap="10", normalizesize="HORIZONTAL"
         },
         -- lblTimeLeft rides alongside the buttons rather than owning its own row -- it's
-        -- blank whenever the Session isn't running (i.e. most of the time this dialog is
-        -- on screen), and a dedicated row for it was costing a full row height plus two
-        -- gaps even while empty. expand="HORIZONTAL" (still set where lblTimeLeft is
-        -- created, above) is still needed for the same reason as before -- an
-        -- empty-titled label maps at near-zero width and won't regrow to fit the "Time
-        -- left: M:SS" text set into it later -- it just now expands within this row
-        -- instead of its own.
+        -- blank most of the time this dialog is on screen, and a dedicated row costs a
+        -- full row height even while empty.
         iup.hbox{btnStart, btnStop, btnExit, lblTimeLeft, gap="10"},
         margin="10x10", gap="10"
     },
@@ -159,11 +134,9 @@ local dlg = iup.dialog{
 -- than a system-wide topmost -- this keeps the dialog above Family Historian specifically,
 -- not above every other application on screen.
 iup.SetAttribute(dlg, "NATIVEPARENT", fhGetContextInfo("CI_PARENT_HWND"))
--- Map first so RASTERSIZE is populated (both dimensions now come from the children's own
--- natural layout -- no explicit SIZE is set on the dialog any more, since the horizontal
--- frame row's width depends on Mode's own natural width), then use that as the floor for
--- MINSIZE -- otherwise a user could resize the dialog small enough to push the Start/Stop
--- buttons off-screen, the same failure this fix is for.
+-- Map first so RASTERSIZE is populated, then use that as the floor for MINSIZE --
+-- otherwise a user could resize the dialog small enough to push the Start/Stop buttons
+-- off-screen.
 dlg:map()
 dlg.minsize = dlg.rastersize
 
@@ -171,9 +144,8 @@ local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"
 end
 
--- dlg's bgcolor while listening -- issue #88: moved to sessionPolicy.lua so it's testable
--- standalone (this file can't be require()'d from a plain-lua test at all, see this file's
--- own header comment). Aliased locally so call sites below read the same as before.
+-- dlg's bgcolor while listening -- lives in sessionPolicy.lua so it's testable standalone
+-- (this file can't be require()'d from a plain-lua test).
 local statusColorForMode = sessionPolicy.statusColorForMode
 
 -- Read live rather than snapshotted at Start, same as currentAccessMode() above — safe
@@ -190,12 +162,11 @@ end
 local timPoll = iup.timer{time=100, run="NO"}
 
 -- Set just before ending the plugin on a genuine write-mode error (see action_cb below) --
--- checked once iup.MainLoop() returns, so the error can be re-raised truly at the top
--- level, past this whole script's remaining statements, uncaught. docs/adr/0005: an error
--- raised from inside a callback alone never reaches that far -- IUP's own callback
--- dispatch swallows it before it can escape the plugin, confirmed empirically. Ending the
--- plugin this way (rather than just Stopping the Session) is deliberate and only happens
--- when a write-mode script actually wrote something before erroring (issue #15).
+-- checked once iup.MainLoop() returns, so the error can be re-raised at the top level,
+-- uncaught. An error raised from inside a callback alone never reaches that far -- IUP's
+-- own callback dispatch swallows it first. Ending the plugin this way (rather than just
+-- Stopping the Session) only happens when a write-mode script actually wrote something
+-- before erroring.
 local pendingRethrow = nil
 
 -- Request framing: the bridge reads one line first, parsed by requestFraming.lua.
@@ -203,24 +174,21 @@ local pendingRethrow = nil
 --   LUA <n>        -- followed by exactly n bytes: the script body, read via receive(n).
 --                     Runs under the Session's own current Access mode.
 --   LUA_RO <n>     -- same, but forces the Read-only sandbox regardless of the Session's
---                     Access mode (issue #16 — used exclusively by describe_project).
---   VERSION <v>    -- issue #45: no body. Replies with this Bridge's own version and
---                     current Access mode (issue #109), compares the version against the
---                     server's, surfacing a mismatch via currentVersionWarning (see above)
---                     rather than the LUA/LUA_RO response shape.
--- This replaces the prototype's single-line-only receive("*l") read, which could not
--- carry a multi-line Lua script.
+--                     Access mode (used exclusively by describe_project).
+--   VERSION <v>    -- no body. Replies with this Bridge's own version and current Access
+--                     mode, compares the version against the server's, surfacing a
+--                     mismatch via currentVersionWarning rather than the LUA/LUA_RO
+--                     response shape.
 function timPoll:action_cb()
     if not server then return end
 
-    -- Issue #34's auto-Stop rule, moved to sessionPolicy.lua (issue #88) so it's testable
-    -- standalone -- see that module for the decision itself.
+    -- Auto-Stop rule lives in sessionPolicy.lua so it's testable standalone.
     if sessionPolicy.shouldAutoStopForIdle(lastActivityTime, currentIdleTimeoutSeconds(), os.time()) then
         return btnStop:action()
     end
 
-    -- Live countdown (issue #34) -- updated every poll tick, not just when a request
-    -- arrives, so it counts down even while idle.
+    -- Live countdown -- updated every poll tick, not just when a request arrives, so it
+    -- counts down even while idle.
     if lastActivityTime then
         updateTimeLeftLabel(currentIdleTimeoutSeconds() - (os.time() - lastActivityTime))
     end
@@ -256,8 +224,8 @@ function timPoll:action_cb()
         lastActivityTime = os.time()
         lastRequestHandledTime = lastActivityTime
         local severity = versionCompare.compare(BRIDGE_VERSION, request.serverVersion)
-        -- issue #109: also reports the Session's real Access mode, so the server's
-        -- describe_project bridgeState can surface it without a second connection.
+        -- also reports the Session's real Access mode, so the server's describe_project
+        -- bridgeState can surface it without a second connection.
         client:send(json.encode({ version = BRIDGE_VERSION, accessMode = currentAccessMode() }) .. "\n")
         client:close()
         if severity == "match" then
@@ -284,24 +252,22 @@ function timPoll:action_cb()
     client:send(response .. "\n")
     client:close()
 
-    -- Give FH a chance to redraw anything a write script changed (issue #33) --
-    -- unconditional, regardless of access mode or whether this particular script
-    -- actually wrote anything: cheap when nothing changed, per fhUpdateDisplay's own docs.
+    -- Give FH a chance to redraw anything a write script changed -- unconditional,
+    -- regardless of access mode or whether this particular script actually wrote
+    -- anything: cheap when nothing changed, per fhUpdateDisplay's own docs.
     fhUpdateDisplay()
 
     dlg.bgcolor = statusColorForMode(currentAccessMode())
     lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
         "\nLast request handled at " .. os.date("%H:%M:%S") .. (currentVersionWarning or "")
 
-    -- Send-then-rethrow (docs/adr/0005): a write-mode runtime error is already reported to
-    -- the client above. To give FH's own auto-undo an actual chance to fire, the whole
-    -- plugin has to end with the error uncaught -- ending the network side the same way a
-    -- manual Stop does, then returning iup.CLOSE (the documented way a callback ends
-    -- iup.MainLoop(), same effect as ExitLoop -- confirmed safe here since only this
-    -- plugin's own process owns the loop; FH itself isn't IUP-based) so the code below can
-    -- re-raise pendingRethrow once MainLoop() returns, truly at the top level. The Session
-    -- does not survive this -- the user has to reopen the plugin (Tools -> Plugins, or the
-    -- Tools-menu entry) to start a new one.
+    -- Send-then-rethrow: a write-mode runtime error is already reported to the client
+    -- above. To give FH's own auto-undo an actual chance to fire, the whole plugin has to
+    -- end with the error uncaught -- ending the network side the same way a manual Stop
+    -- does, then returning iup.CLOSE (the documented way a callback ends iup.MainLoop())
+    -- so the code below can re-raise pendingRethrow once MainLoop() returns, truly at the
+    -- top level. The Session does not survive this -- the user has to reopen the plugin to
+    -- start a new one.
     if rethrowErr ~= nil then
         pendingRethrow = rethrowErr
         btnStop:action()
@@ -320,12 +286,11 @@ function btnStart:action()
     server:settimeout(0)
     lastActivityTime = os.time()
     currentVersionWarning = nil
-    -- Persist the values that just took effect (issue #80) -- only here, after the bind
-    -- above has already succeeded, never on every toggle/spin-box edit and never for a
-    -- Start that failed. currentIdleTimeoutSeconds() isn't used here since that returns
-    -- seconds for the idle-Session clock -- clampMinutes(txtIdleTimeout.value) is the
-    -- minutes figure this settings file actually stores. A write failure inside save() is
-    -- swallowed silently and never blocks Start (see sessionSettings.lua).
+    -- Persist the values that just took effect -- only here, after the bind above has
+    -- already succeeded, never on every toggle/spin-box edit and never for a failed Start.
+    -- clampMinutes(txtIdleTimeout.value) is the minutes figure the settings file stores
+    -- (not currentIdleTimeoutSeconds(), which is seconds for the idle-Session clock). A
+    -- write failure inside save() is swallowed silently and never blocks Start.
     sessionSettings.save({
         accessMode = currentAccessMode(),
         idleTimeoutMinutes = timeoutDisplay.clampMinutes(txtIdleTimeout.value),
@@ -342,11 +307,10 @@ function btnStart:action()
         "\nWaiting for a connection..."
 end
 
--- Shared by btnStop, Exit and the window's X (docs/adr/0020) so the socket/timer teardown
--- can't drift between the three -- issue #77 flagged that close_cb previously skipped most
--- of this. Only the socket/timer/activity state; the "return dialog to Start-ready" UI
--- reset stays in btnStop:action() below, since it's meaningless when the dialog is about
--- to close (Exit/X) rather than staying open (Stop).
+-- Shared by btnStop, Exit and the window's X so the socket/timer teardown can't drift
+-- between the three. Only the socket/timer/activity state; the "return dialog to
+-- Start-ready" UI reset stays in btnStop:action() below, since it's meaningless when the
+-- dialog is about to close rather than staying open.
 local function stopSessionIfRunning()
     timPoll.run = "NO"
     if server then
@@ -369,14 +333,13 @@ function btnStop:action()
     lblStatus.title = "Not listening."
 end
 
--- Exit and the window's X both funnel through here (docs/adr/0020). Confirms only when a
--- Session is running and the last request was handled within
--- RECENT_ACTIVITY_CONFIRM_SECONDS -- otherwise closes straight away, silently. Returns
--- false (and leaves the Session untouched) if the user declines the prompt.
+-- Exit and the window's X both funnel through here. Confirms only when a Session is
+-- running and the last request was handled within RECENT_ACTIVITY_CONFIRM_SECONDS --
+-- otherwise closes straight away, silently. Returns false (and leaves the Session
+-- untouched) if the user declines the prompt.
 local function confirmAndStopSession()
-    -- ADR 0020's freshness-confirm rule, moved to sessionPolicy.lua (issue #88) so it's
-    -- testable standalone -- see that module for the decision itself. `server ~= nil` is
-    -- this file's own "is a Session running" check; only the decision logic moved.
+    -- Freshness-confirm rule lives in sessionPolicy.lua so it's testable standalone.
+    -- `server ~= nil` is this file's own "is a Session running" check.
     if sessionPolicy.shouldConfirmBeforeExit(server ~= nil, lastRequestHandledTime, os.time(), RECENT_ACTIVITY_CONFIRM_SECONDS) then
         local pressed = iup.Alarm("Confirm Exit", "A request was just handled -- close anyway?", "Yes", "No")
         if pressed ~= 1 then
@@ -407,7 +370,7 @@ end
 dlg:destroy()
 
 -- Re-raise a write-mode script's error here, past every other statement in this file,
--- genuinely uncaught -- see the pendingRethrow comment above and docs/adr/0005.
+-- genuinely uncaught.
 if pendingRethrow ~= nil then
     error(pendingRethrow)
 end

@@ -1,10 +1,10 @@
 -- Persists the bridge Session's last-used Access mode and idle-timeout minutes across
--- plugin reloads (issue #80), via FH's supported fhUtils settings-file API
--- (fhu.loadOptions/saveOptions, LOCAL_MACHINE scope) rather than a hand-rolled file format.
+-- plugin reloads, via FH's supported fhUtils settings-file API (fhu.loadOptions/
+-- saveOptions, LOCAL_MACHINE scope) rather than a hand-rolled file format.
 --
--- Distinct from bridge/sandbox.lua's block on fhu.saveOptions/loadOptions/resetOptions
--- (issue #22): that block only applies to the sandboxed proxy handed to run_lua-submitted
--- scripts, to keep filesystem access out of Claude-authored scripts. This module calls the
+-- Distinct from bridge/sandbox.lua's block on fhu.saveOptions/loadOptions/resetOptions:
+-- that block only applies to the sandboxed proxy handed to run_lua-submitted scripts, to
+-- keep filesystem access out of Claude-authored scripts. This module calls the
 -- real fhUtils directly, the same way sourceHelper.lua/familyHelper.lua call real fh*
 -- globals, and is only ever invoked from bridgeSession.lua's own dialog code -- never
 -- reachable from a run_lua script.
@@ -54,7 +54,7 @@ function M.load()
 end
 
 -- Persists settings that already took effect for a Session that just started -- call only
--- after Start's own validation/clamp has succeeded (issue #80), never on every field edit
+-- after Start's own validation/clamp has succeeded, never on every field edit
 -- and never for an aborted Start. A write failure (e.g. a permissions issue on the
 -- LOCAL_MACHINE plugin-data path) is swallowed silently -- the worst case is next Start not
 -- remembering these values, not a reason to interrupt this one.

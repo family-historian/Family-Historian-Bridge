@@ -1,32 +1,20 @@
--- Creates a fully populated templated Source record in one call: resolves an existing
--- _SRCT template record, validates every supplied field against the template's own FDEF
--- field definitions, then creates the SOUR record, its _SRCT link, each metafield, an
--- optional transcription, and refreshes its auto-title. See
--- docs/superpowers/specs/2026-07-30-createSourceFromTemplate-design.md for the full design.
--- Also creates a SOUR citation on any target item (citeSource), optionally populating its
--- own standard citation fields (Page/Text/EntryDate/Assessment) and/or a template's
--- citation-specific (CITN) fields in the same call (issue #99).
+-- Creates a fully populated templated Source record in one call (createSourceFromTemplate):
+-- resolves a _SRCT template, validates fields against it, creates the SOUR record plus its
+-- metafields/transcription, and refreshes its auto-title. Also attaches a SOUR citation to
+-- any target item (citeSource), optionally setting standard citation fields
+-- (Page/Text/EntryDate/Assessment) and/or template CITN fields in the same call.
 --
--- Calls the real fh* globals directly (not a sandboxed copy), the same way fhUtils does —
--- sandbox.lua must only ever wire createSourceFromTemplate/citeSource through during a
--- read-write Session (see its own comment for why). findSources (issue #65) is the one
--- exception: a pure-read function, wired through in BOTH access modes, same as
--- familyHelper.lua's members -- see sandbox.lua's own comment on why gating tracks
--- whether a function writes, not which file it lives in.
+-- Calls the real fh* globals directly (not sandboxed) -- sandbox.lua only wires
+-- createSourceFromTemplate/citeSource through during a read-write Session. findSources is
+-- the one exception: a pure-read function, wired through in both access modes.
 
 local M = {}
 
--- findSources (below) reuses familyHelper.getAllDetails rather than re-walking/
--- re-describing a Source record's fields itself, both for the SOUR record's own tree
--- (the .source field in its result) and to recursively find every citation of it across
--- the project (getAllDetails already walks a record's full child tree, same as the
--- gedcom-knowledge-corpus's checking-for-any-source-citation-is-recursive entry does for
--- a single Individual).
+-- findSources reuses familyHelper.getAllDetails to describe a source's own tree and to
+-- recursively find every citation of it, rather than re-walking a record's fields itself.
 local familyHelper = require('familyHelper')
 
--- "~" is the self-reference Data Reference token (see the '~.NAME'/'~:SURNAME' qualifier
--- examples in the gedcom-knowledge-corpus and the FH API's own fhGetItemText examples) —
--- it means "the value at the pointer itself", with no further child/qualifier navigation.
+-- "~" is the self-reference Data Reference token: "the value at the pointer itself".
 local function currentText(ptr)
   return fhGetItemText(ptr, "~")
 end
@@ -57,17 +45,11 @@ local function parseOptions(prom)
 end
 
 -- Builds a CODE -> {type, options, citation, fdefPtr} map from a resolved template's FDEF
--- children. citation (boolean) is FDEF's own CITN child ("Yes" when present, absent
--- otherwise) -- FH's "Citation-specific" checkbox in the Source Template Field
--- Definition Dialog, live-confirmed (issue #65) to be readable the same way as every
--- other FDEF subfield: a citation-level field's value is populated on the *citation*
--- item, not the Source record itself (see gedcom-knowledge-corpus source-template-fields
--- for the general record-vs-citation distinction, e.g. QUAY/AUTH/TITL) -- findSources
--- below uses this to know which of fieldFilters to check where. fdefPtr (a live pointer
--- to the FDEF item itself, Clone()'d so it survives past this walk) is for shortcutFor
--- below (fhGetMetafieldShortcut also works directly on a metafield *definition* item, per
--- its own FH help page) -- never returned to a caller outside this module, so it never
--- needs to cross the JSON-encode boundary the rest of this map's fields do.
+-- children. citation (boolean, from FDEF's CITN child) is FH's "Citation-specific"
+-- checkbox -- a citation-level field's value is populated on the citation item, not the
+-- Source record itself; findSources uses this to know which of fieldFilters to check
+-- where. fdefPtr (Clone()'d) is a live pointer to the FDEF item itself, for shortcutFor
+-- below -- never returned outside this module.
 local function fieldDefs(srctPtr)
   local defs = {}
   local child = fhNewItemPtr()
@@ -89,12 +71,9 @@ local function fieldDefs(srctPtr)
   return defs
 end
 
--- Resolves a tag+id pair to the one record via MoveToRecordById directly -- confirmed
--- (issue #118, live against the Sample Project: 40/40 SOUR + 18/18 _SRCT ids, zero
--- mismatches) equivalent to the O(n) tag-walk-and-compare this used to do, since FH's own
--- docs (MoveToRecordById.htm, fhGetRecordId.htm) both scope record ids the same way -- "only
--- unique within a given record type". label names the record kind in error messages (e.g.
--- "_SRCT template", "SOUR source").
+-- Resolves a tag+id pair to the one record via MoveToRecordById -- ids are only unique
+-- within a record type, per FH's own docs, so tag+id is enough. label names the record
+-- kind in error messages (e.g. "_SRCT template", "SOUR source").
 local function resolveById(tag, label, id)
   local ptr = fhNewItemPtr()
   ptr:MoveToRecordById(tag, id)
@@ -104,24 +83,16 @@ local function resolveById(tag, label, id)
   return ptr
 end
 
--- Resolves nameOrId to the one record: tag whose readChildText(ptr, nameFieldTag) matches
--- nameOrId case-insensitively (string form, not shaped like this tag's own qualified id),
--- or whose fhGetRecordId matches exactly (number form, or a qualified-id-shaped string
--- form -- issue #100, e.g. "S1186" for a SOUR lookup), via resolveById above. Errors on
--- zero or multiple Title/NAME matches, or on an id (either form) that doesn't exist. label
--- names the record kind in error messages (e.g. "_SRCT template", "SOUR source").
+-- Resolves nameOrId to the one record: by exact case-insensitive match on
+-- readChildText(ptr, nameFieldTag) for a string not shaped like this tag's own qualified
+-- id, or by fhGetRecordId for a number or a qualified-id-shaped string (e.g. "S1186" for a
+-- SOUR lookup). Errors on zero/multiple name matches or a nonexistent id. label names the
+-- record kind in error messages.
 --
--- Precedence (issue #100): a string shaped like THIS tag's own qualified id
--- (familyHelper.parseQualifiedId(tag, nameOrId) returning non-nil) always resolves as an
--- id -- it is never also attempted against Title/NAME, even if some record's Title
--- literally reads the same way (e.g. a SOUR titled "S78" is not reachable via the string
--- "S78" once a real id 78 exists) -- matching familyHelper.resolvePointer's own
--- "any qualified id string is always an id, never a name" precedent, the closest existing
--- rule in this codebase. A string shaped like a DIFFERENT tag's qualified id (e.g. "T4"
--- passed to a SOUR lookup) is not recognized as an id at all here -- parseQualifiedId is
--- tag-scoped and returns nil -- so it falls through to the Title/NAME match below the
--- same as any other non-matching string, rather than silently resolving the wrong tag.
-
+-- A string shaped like THIS tag's own qualified id always resolves as an id, never as a
+-- name match, even if some record's Title happens to read the same way. A string shaped
+-- like a DIFFERENT tag's qualified id isn't recognized as an id here at all, and falls
+-- through to the name match like any other non-matching string.
 local function resolveByNameOrId(tag, nameFieldTag, label, nameOrId)
   if type(nameOrId) == "number" then
     return resolveById(tag, label, nameOrId)
@@ -165,10 +136,8 @@ local function resolveSource(sourceNameOrId)
   return resolveByNameOrId("SOUR", "TITL", "SOUR source", sourceNameOrId)
 end
 
--- Looks up code's field definition in defs, erroring with the same "unknown field code"
--- message every caller that validates a code against a resolved template's fields wants
--- (createSourceFromTemplate's validateFields below, and findSources' filter-splitting
--- further down) -- shared so the two don't drift.
+-- Looks up code's field definition in defs, with the "unknown field code" error shared by
+-- every caller that validates a code against a resolved template.
 local function requireFieldDef(defs, code)
   local def = defs[code]
   if not def then
@@ -178,9 +147,7 @@ local function requireFieldDef(defs, code)
 end
 
 -- Returns parentPtr's first direct child tagged wantedTag (a live Clone()'d pointer), or
--- nil if it has none -- shared by linkedTemplate (below, a link-valued child) and
--- citationDataItem (issue #99, a complex/record-valued child), the same "walk children,
--- match by tag" loop both used to hand-roll separately.
+-- nil if none.
 local function findChildItem(parentPtr, wantedTag)
   local child = fhNewItemPtr()
   child:MoveToFirstChildItem(parentPtr)
@@ -194,36 +161,24 @@ local function findChildItem(parentPtr, wantedTag)
 end
 
 -- Finds the template a SOUR record is linked to (its own _SRCT child's link target), or
--- nil if it isn't a templated source at all. Moved above validateFields/validateCiteSource
--- (issue #99) so citeSource's own validation can resolve a source's template without a
--- forward reference -- findSources/getTemplateFieldCensus further down still use it the
--- same way.
+-- nil if it isn't a templated source.
 local function linkedTemplate(sourPtr)
   local link = findChildItem(sourPtr, "_SRCT")
   return link and fhGetValueAsLink(link)
 end
 
--- The ~PREFIX-CODE shortcut fhCreateItem expects for a metafield (setField below, to
--- populate one) or a Data Reference expects to resolve one back (resolvedFieldValue
--- below, both for record-level and citation-level matching, and getPopulatedTemplateFields)
--- -- shared so none of them drift. Delegates to FH's own fhGetMetafieldShortcut on the
--- field definition's live pointer (def.fdefPtr, see fieldDefs above) rather than
--- hand-building "~" .. prefix .. "-" .. code from a maintained TYPE->prefix table: FH's
--- own function is guaranteed to match its real internal form (live-confirmed, issue #73:
--- the real shortcut for a field coded "Reference" is "~TX-REFERENCE", uppercased, not
--- "~TX-Reference" -- Data Reference resolution turned out to be case-insensitive on the
--- code portion so the old hand-built form still worked, but there's no reason to rely on
--- that once FH will just tell us the exact form directly).
+-- The ~PREFIX-CODE shortcut fhCreateItem expects for a metafield, and a Data Reference
+-- resolves back to read one -- delegates to FH's own fhGetMetafieldShortcut(def.fdefPtr)
+-- rather than hand-building "~"..prefix.."-"..code, since the real shortcut isn't always
+-- what a naive prefix+code build would produce (e.g. "Reference" -> "~TX-REFERENCE",
+-- uppercased).
 local function shortcutFor(def)
   return fhGetMetafieldShortcut(def.fdefPtr)
 end
 
--- expectCitation (issue #99) flips which side of the record-vs-citation distinction is
--- rejected: false/nil (createSourceFromTemplate's own record-level fields, the original
--- issue #98 behavior) rejects a citation-specific (CITN) code; true (citeSource's own
--- template fields) rejects a record-level (non-CITN) code instead, with a matching
--- clear-error message rather than createSourceFromTemplate's. Enum-option validation is
--- identical either way, so it isn't duplicated per caller.
+-- expectCitation=false (createSourceFromTemplate's record-level fields) rejects a
+-- citation-specific (CITN) code; true (citeSource's template fields) rejects a
+-- record-level code instead. Enum-option validation is identical either way.
 local function validateFields(fields, defs, expectCitation)
   for code, value in pairs(fields) do
     local def = requireFieldDef(defs, code)
@@ -249,27 +204,18 @@ local function validateFields(fields, defs, expectCitation)
   end
 end
 
--- Date fields (a template field typed "Date", or citeSource's EntryDate standard field)
--- accept a Date object, the {year=,month=,day=[,subtype=]} table shorthand, or (issue #113)
--- a plain string parsed via FH's own Date string parser -- see familyHelper.resolveDate,
--- moved there (from this module's own local toDate) once factHelper.lua needed the
--- identical logic too, docs/adr/0030.
--- The 4 generic citation-specific fields FH's own help documents (sourcesandsourcetemplates
--- .html: "generic citation-specific fields... Entry date / Assessment / Where within Source
--- / Text from Source") -- issue #99, the follow-up #98's own closing comment deliberately
--- left untracked. Reserved citeSource.fields keys, always valid regardless of whether the
--- resolved source is templated at all (unlike a template's own CITN fields, below, which
--- only exist when it is). Names chosen to mirror the underlying GEDCOM tag directly where
--- there is one short enough to read on sight (Page/Text, matching GEDCOM's own PAGE/TEXT --
--- see this file's other GEDCOM-tag-named fields QUAY/AUTH/TITL in CONTEXT.md), and FH's own
--- dialog label otherwise (EntryDate/Assessment, since DATA.DATE/QUAY have no single-word
--- GEDCOM tag a caller would recognize unaided).
+-- Date fields (a template field typed "Date", or citeSource's EntryDate) accept a Date
+-- object, the {year=,month=,day=[,subtype=]} table shorthand, or a plain string -- see
+-- familyHelper.resolveDate.
+-- The 4 generic citation-specific fields FH's own docs describe (Entry date / Assessment /
+-- Where within Source / Text from Source). Reserved citeSource.fields keys, always valid
+-- regardless of whether the resolved source is templated. Names mirror the underlying
+-- GEDCOM tag where short enough (Page/Text -> PAGE/TEXT), FH's own dialog label otherwise
+-- (EntryDate/Assessment).
 local STANDARD_CITATION_FIELDS = { Page = true, Text = true, EntryDate = true, Assessment = true }
 
--- QUAY's real GEDCOM tag is a single certainty digit 0-3, but FH's plugin API exposes and
--- stores it as a human-readable, space-separated string built from up to 4 independent
--- yes/no axes -- live-confirmed, FH developer response, issue #32 (see
--- citation-quality-assessment-quay in the gedcom-knowledge corpus). Each row is
+-- QUAY's real GEDCOM tag is a single certainty digit 0-3, but FH's API exposes/stores it
+-- as a human-readable string built from up to 4 independent yes/no axes. Each row is
 -- either/or/neither, never both words from the same row.
 local ASSESSMENT_ROWS = {
   { "Unreliable", "Questionable" },
@@ -278,10 +224,8 @@ local ASSESSMENT_ROWS = {
   { "Derivative", "Original" },
 }
 
--- Rejects an Assessment string containing a word outside the fixed vocabulary, or two
--- words from the same row -- same rigor this file already applies to a template's own
--- closed Enum option lists (validateFields above), rather than passing an unvalidated
--- string through to fhSetValueAsText, which doesn't reject bad input on its own.
+-- Rejects an Assessment string with a word outside the fixed vocabulary, or two words from
+-- the same row.
 local function validateAssessment(value)
   if value == nil or value == "" then
     return
@@ -308,9 +252,8 @@ local function validateAssessment(value)
   end
 end
 
--- Page/Text minimal type checks -- Enum-grade closed-vocabulary validation only applies to
--- Assessment (above); EntryDate is left to toDate/fhNewDate to reject a genuinely malformed
--- value, same as a template Date field already does.
+-- Page/Text get minimal type checks; EntryDate is left to resolveDate/fhNewDate to reject
+-- a malformed value.
 local function validateStandardFields(fields)
   if fields.Page ~= nil and type(fields.Page) ~= "string" then
     error("Page must be a string")
@@ -321,10 +264,8 @@ local function validateStandardFields(fields)
   validateAssessment(fields.Assessment)
 end
 
--- Splits a citeSource fields table into its two families (issue #99): reserved standard-
--- field keys always win over a same-named template field code (see the collision check in
--- M.validateCiteSource below) -- a flat merged table matches createSourceFromTemplate's own
--- convention rather than introducing a namespaced shape just for the rare collision case.
+-- Splits citeSource's fields table into standard vs template fields -- a reserved
+-- standard-field key always wins over a same-named template field code.
 local function splitCitationFields(fields)
   local standard, template = {}, {}
   for code, value in pairs(fields) do
@@ -337,21 +278,14 @@ local function splitCitationFields(fields)
   return standard, template
 end
 
--- Text and EntryDate both nest under one shared DATA child of the citation, per GEDCOM
--- 5.5.1's own SOURCE_CITATION structure (SOUR > DATA > {DATE, TEXT}) -- cross-confirmed
--- against fhUtils.createTextFromSource's own doc ("Creates or updates a TEXT item from
--- rich text and attaches it to a source or citation DATA"), a different Lua API surface
--- than this file uses but the same live data model underneath. PAGE and QUAY are direct
--- citation children instead (GEDCOM SOUR > PAGE, SOUR > QUAY, siblings of DATA). Reuses an
--- existing DATA child rather than creating a second one if Text and EntryDate are both
--- supplied in the same call.
+-- Text and EntryDate both nest under one shared DATA child of the citation, per GEDCOM's
+-- SOUR > DATA > {DATE, TEXT} structure; PAGE and QUAY are direct citation children instead
+-- (SOUR > PAGE, SOUR > QUAY). Reuses an existing DATA child rather than creating a second
+-- one if both are supplied in the same call.
 
--- Best-effort description of what a write-result error message is naming as its target.
--- sour may be a real record (createSourceFromTemplate's freshly created SOUR, or ptrTarget
--- in citeSource -- an INDI/FAM record or a Fact item) or a citation sub-item (citeSource's
--- own SOUR-tag child, never a standalone record) -- fhGetQualifiedRecordId resolves the
--- former but returns "" for the latter (per its own docs, a non-record item has no
--- qualified id), so this falls back to naming the item's own tag instead.
+-- Best-effort description of a write-result error's target: sour may be a real record
+-- (fhGetQualifiedRecordId resolves it) or a citation sub-item, which has no qualified id
+-- -- falls back to naming the item's own tag.
 local function describeTarget(ptr)
   local qid = fhGetQualifiedRecordId(ptr)
   if qid ~= "" then
@@ -408,16 +342,10 @@ local function setField(sour, value, def, code, callerName)
 end
 
 -- sourceHelper.validateCreateSourceFromTemplate(templateNameOrId, fields)
--- The pure validation half of M.createSourceFromTemplate below (steps 1-3 of the design
--- spec's "validate everything, then mutate" order), extracted (issue #97) so sandbox.lua can
--- call it on its own, untracked, before arming the write tracker -- flipping tracker.wrote
--- purely from entering the wrapped fhBridge.createSourceFromTemplate call (as the old
--- single-function wrapping did) meant even a call rejected right here still armed ADR 0005's
--- rollback path, for a call that (by definition, once this errors) never reached
--- fhCreateItem. Returns the resolved template pointer and its CODE -> field-def map, both
--- of which M.createSourceFromTemplate itself needs for step 4 -- so it also calls this
--- first (rather than duplicating steps 1-3), keeping today's single-call, validate-then-
--- mutate contract unchanged for direct callers/tests.
+-- The validation half of createSourceFromTemplate, extracted so sandbox.lua can call it
+-- before arming the write tracker -- a rejected call here should never look like a write.
+-- Returns the resolved template pointer and its field-def map, both needed for the actual
+-- create step.
 function M.validateCreateSourceFromTemplate(templateNameOrId, fields)
   local template = resolveTemplate(templateNameOrId)
   local defs = fieldDefs(template)
@@ -426,9 +354,8 @@ function M.validateCreateSourceFromTemplate(templateNameOrId, fields)
 end
 
 -- sourceHelper.createSourceFromTemplate(templateNameOrId, fields, transcription)
--- See the design spec for the full contract. Validates everything (steps 1-3, delegated to
--- validateCreateSourceFromTemplate above) before any fhCreateItem call (step 4), so a bad
--- call never leaves a partially-created record behind.
+-- Validates everything before any fhCreateItem call, so a bad call never leaves a
+-- partially-created record behind.
 function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
   fields = fields or {}
 
@@ -459,32 +386,18 @@ function M.createSourceFromTemplate(templateNameOrId, fields, transcription)
 end
 
 -- sourceHelper.validateCiteSource(ptrTarget, sourceNameOrId, fields)
--- The pure validation half of M.citeSource below, extracted (issue #97) so sandbox.lua can
--- call it on its own, untracked, before arming the write tracker -- same rationale as
--- validateCreateSourceFromTemplate above: flipping tracker.wrote purely from entering the
--- wrapped fhBridge.citeSource call armed ADR 0005's rollback path even for a ptrTarget/
--- sourceNameOrId rejected right here, before fhCreateItem ever ran. Returns the resolved
--- source pointer, the split standard/template field tables, and (only when the source is
--- templated) its field-def map -- everything M.citeSource itself needs, so it also calls
--- this first rather than duplicating any of it, keeping today's single-call,
--- validate-then-mutate contract unchanged for direct callers/tests. The ptrTarget check
--- itself (same "not ptr or ptr:IsNull()" idiom familyHelper.lua uses throughout) was added
--- in issue #96, the same audit that found the sessionLogHelper.logActivity gap fixed in
--- issue #95.
+-- The validation half of citeSource, extracted so sandbox.lua can call it before arming
+-- the write tracker. Returns the resolved source pointer, the split standard/template
+-- field tables, and (when the source is templated) its field-def map.
 --
--- fields (issue #99, follow-up to #98's own closing comment) is optional, covering two
--- families in one flat table: the 4 reserved standard citation fields (Page/Text/
--- EntryDate/Assessment, STANDARD_CITATION_FIELDS above -- always valid, templated or not)
--- and a template's own citation-specific (CITN) field codes (only valid when the resolved
--- source is actually templated). A reserved standard-field key always wins over a
--- same-named template CITN field code -- if the resolved template happens to define one,
--- that template field becomes unreachable through this table, so it's rejected outright
--- with a clear error naming the collision, rather than silently routing the caller's value
--- to the standard field instead of the template field they may have meant. A record-level
--- (non-CITN) template field sharing a reserved name isn't a real collision and isn't
--- flagged -- it was never reachable through citeSource's fields regardless of naming,
--- since citeSource only ever accepts CITN fields (see validateFields's expectCitation
--- branch below), so there's no caller intent this could actually be misrouting.
+-- fields is optional, covering two families in one flat table: the 4 reserved standard
+-- citation fields (Page/Text/EntryDate/Assessment, always valid) and a template's own
+-- citation-specific (CITN) field codes (only valid when the source is templated). A
+-- reserved standard-field key always wins over a same-named template CITN field code --
+-- if the template defines one, it's rejected outright with a clear collision error rather
+-- than silently misrouting the caller's value. A record-level (non-CITN) template field
+-- sharing a reserved name isn't flagged, since citeSource never accepts record-level
+-- fields anyway.
 function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   local problem = familyHelper.pointerProblem(ptrTarget)
   if problem then
@@ -519,18 +432,14 @@ function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
 end
 
 -- sourceHelper.citeSource(ptrTarget, sourceNameOrId, fields)
--- Attaches a SOUR citation to ptrTarget, resolving the source the same by-id-or-by-title
--- way createSourceFromTemplate resolves a template. ptrTarget may be an INDI/FAM record
--- (a Whole-record citation, per FH's own "citation for the record as a whole" concept —
--- see docs/adr/0006-cite-every-fact-a-source-supports.md) or any Fact item already
--- positioned by the caller (a Fact-level citation). Errors on an unresolvable source, an
--- invalid ptrTarget, or an invalid fields entry (all delegated to validateCiteSource above)
--- before creating anything, so a bad call never leaves a stray citation behind.
+-- Attaches a SOUR citation to ptrTarget, resolving the source the same by-id-or-title way
+-- createSourceFromTemplate resolves a template. ptrTarget may be an INDI/FAM record (a
+-- Whole-record citation) or any Fact item already positioned by the caller (a Fact-level
+-- citation). Validates everything (validateCiteSource) before creating anything.
 --
--- Returns the created citation's own live item Pointer (issue #99) -- not a qualifiedId,
--- since a citation is a child item nested under a record/Fact, not a standalone record
--- with one of its own -- so a caller can keep working on it directly (e.g. an FTF-authored
--- Text beyond what fields' plain-string Text supports) within the same run_lua call.
+-- Returns the created citation's own live pointer, not a qualifiedId -- a citation is a
+-- child item, not a standalone record -- so a caller can keep working on it directly
+-- within the same run_lua call.
 function M.citeSource(ptrTarget, sourceNameOrId, fields)
   local source, standardFields, templateFields, defs = M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   local citation = fhCreateItem("SOUR", ptrTarget)
@@ -547,13 +456,10 @@ function M.citeSource(ptrTarget, sourceNameOrId, fields)
   return citation
 end
 
--- Field types whose fieldFilters value is matched exactly, not as a substring -- Enum
--- (a fixed dropdown, so "close" is meaningless), Date and Repository (compared as their
--- rendered display text -- the same fhGetDisplayText(ptr, "~", "min") rendering
--- describeItem/getAllDetails already uses for every field's .value -- rather than as a
--- structured Date/link comparison, so a caller matches what getAllDetails already showed
--- them). Every other type (Text/Name/Place/Address/URL) is free-form enough that a
--- case-insensitive substring match is more useful than requiring an exact string.
+-- Field types whose fieldFilters value is matched exactly, not as a substring: Enum
+-- (a fixed dropdown), Date and Repository (compared as their rendered display text, the
+-- same text getAllDetails already shows). Every other type gets a case-insensitive
+-- substring match.
 local EXACT_MATCH_TYPES = { Enum = true, Date = true, Repository = true }
 
 local function valueMatches(value, wantedValue, fieldType)
@@ -567,19 +473,12 @@ local function valueMatches(value, wantedValue, fieldType)
 end
 
 -- Resolves one field's value directly off ptr via its own ~PREFIX-CODE shortcut Data
--- Reference -- FH's own field-addressing mechanism (gedcom-knowledge-corpus
--- data-references-syntax: "Source Template metafields... addressed... by a shortcut built
--- from the field's 3-letter type prefix + its CODE"). Live-proven correct (issue #67/#73)
--- where two more obvious alternatives aren't: a populated field's real raw tag is
--- "_FIELD" always, never its shortcut string or its CODE, so matching by tag can't
--- distinguish one field from another at all; and matching a source's Nth _FIELD child
--- positionally against its template's Nth FDEF breaks the moment a field partway through
--- is left unpopulated, shifting every later field's answer. ptr may be a SOUR record (a
--- record-level field) or a citation item (a citation-level field, issue #73) -- the
--- resolution is identical either way, since a Data Reference resolves relative to
--- whatever ptr is.
+-- Reference -- FH's own field-addressing mechanism. Matching by tag can't distinguish
+-- fields (a populated field's raw tag is always "_FIELD"), and matching by child position
+-- against the template's Nth FDEF breaks the moment an earlier field is left unpopulated.
+-- ptr may be a SOUR record or a citation item -- resolution is identical either way.
 --
--- Returns nil (not "") for "not populated", so it plugs directly into valueMatches below.
+-- Returns nil (not "") for "not populated", so it plugs directly into valueMatches.
 local function resolvedFieldValue(ptr, def)
   local value = fhGetItemText(ptr, "~." .. shortcutFor(def))
   if value == "" then
@@ -588,14 +487,9 @@ local function resolvedFieldValue(ptr, def)
   return value
 end
 
--- True if every filters[code] matches ptr's own resolvedFieldValue for that code, per
--- valueMatches' substring-or-exact rule for that code's field type. ptr is a live Item
--- Pointer -- the SOUR record itself for a record-level check, or a citation item for a
--- citation-level one (issue #73) -- not a getAllDetails-shape tree, since
--- resolvedFieldValue needs a live pointer to resolve a Data Reference against. One
--- function serves both cases identically; which fields end up in a given filters table
--- (record-level vs citation-level) is already decided by findSources below, per each
--- field's own CITN flag.
+-- True if every filters[code] matches ptr's own resolvedFieldValue for that code. ptr is
+-- the SOUR record itself for a record-level check, or a citation item for a
+-- citation-level one.
 local function matchesFilters(ptr, filters, defs)
   for code, wantedValue in pairs(filters) do
     local value = resolvedFieldValue(ptr, defs[code])
@@ -607,29 +501,14 @@ local function matchesFilters(ptr, filters, defs)
 end
 
 -- fhBridge.getPopulatedTemplateFields(sourPtr)
--- sourPtr may be a live Item Pointer or a qualified id string (e.g. "S1462") -- see
--- familyHelper.resolvePointer, reused here since sourceHelper.lua already require()s
--- familyHelper for getAllDetails. Read-only, wired into BOTH Session modes (same as
--- findSources) -- unlike createSourceFromTemplate/citeSource.
+-- sourPtr: live pointer or qualified id string. Read-only, wired into both Session modes.
 --
--- Resolves sourPtr's linked _SRCT template (via linkedTemplate above) and returns
--- {code = value} for every record-level field that resolves to a non-empty value via
--- resolvedFieldValue above. Returns an empty table (not an error) if sourPtr resolves to a
--- real record that just isn't a templated source -- same "legitimate empty answer, not a
--- failure" philosophy as searchByName/getFactsByTag in familyHelper.lua. sourPtr itself
--- being null is a caller mistake, not that case, so it's rejected the same explicit way as
--- getAllDetails' own null check -- otherwise it would silently read as "not templated"
--- too, masking the actual mistake.
+-- Resolves sourPtr's linked template and returns {code = value} for every record-level
+-- field with a non-empty value. Returns an empty table (not an error) if sourPtr is a real
+-- record that just isn't templated; a null sourPtr is still rejected as a caller mistake.
 --
--- Scope: record-level fields only -- a Citation-specific field (FDEF's own CITN child) is
--- populated per-citation, not on the SOUR record itself, so it never resolves here even
--- when populated on some citation (see source-template-fields in the
--- gedcom-knowledge-corpus for the general record-vs-citation distinction). findSources
--- above resolves citation-level fields the same way (resolvedFieldValue, matchesFilters),
--- just against a citation's own live pointer instead of sourPtr -- there's no equivalent
--- exported helper for "every populated citation-level field on this specific citation"
--- yet, since nothing has needed one so far; add one the same shape as this function if
--- that changes.
+-- Scope: record-level fields only -- a citation-specific field is populated per-citation,
+-- not on the SOUR record itself, so it never resolves here.
 function M.getPopulatedTemplateFields(sourPtr)
   sourPtr = familyHelper.resolvePointer(sourPtr)
   local problem = familyHelper.pointerProblem(sourPtr)
@@ -652,24 +531,14 @@ function M.getPopulatedTemplateFields(sourPtr)
   return result
 end
 
--- Recursively scans ptr's own live children for every SOUR-tagged citation at any depth,
+-- Recursively scans ptr's live children for every SOUR-tagged citation at any depth,
 -- grouping them by the id of the source each one links to. ownTag/ownQualifiedId identify
--- the enclosing item the citation actually sits on -- the top-level record itself for a
--- Whole-record citation (ownTag starts as the record's own tag, e.g. "INDI"/"FAM"), or the
--- nearest enclosing Fact for a Fact-level one (ownTag becomes that Fact's own tag, e.g.
--- "BIRT", as the walk descends into it) -- matching FH's own "Whole-record vs Fact-level
--- citation" distinction (see run-lua-guidance-cite-every-fact). Same reasoning as
--- checking-for-any-source-citation-is-recursive in the gedcom-knowledge-corpus: a shallow
--- direct-children-only scan would miss most real citations, which sit on a Fact rather
--- than the record itself.
+-- the enclosing item -- the record itself for a Whole-record citation, or the nearest
+-- enclosing Fact for a Fact-level one.
 --
--- Walks the live tree directly (MoveToFirstChildItem/MoveNext) rather than a pre-built
--- getAllDetails JSON tree the way this used to (issue #73): each citation's own live
--- pointer is retained (Clone()'d) alongside its tag/qualifiedId, so matchesFilters can
--- resolve a citation-level field by its shortcut Data Reference the same reliable way
--- record-level fields already do -- a JSON tree can't carry a live pointer at all
--- (jsonEncode.lua can't encode one), which is exactly why citation-level matching used to
--- be stuck with a less reliable tag-based tree walk instead.
+-- Walks the live tree directly rather than a getAllDetails JSON tree, so each citation's
+-- own live pointer (Clone()'d) is retained -- needed for matchesFilters to resolve a
+-- citation-level field by its shortcut Data Reference, which a JSON tree can't carry.
 local function collectCitations(ptr, ownTag, ownQualifiedId, bySourceId)
   local child = fhNewItemPtr()
   child:MoveToFirstChildItem(ptr)
@@ -692,9 +561,8 @@ local function collectCitations(ptr, ownTag, ownQualifiedId, bySourceId)
   end
 end
 
--- One pass over every INDI/FAM record, grouping every SOUR citation found anywhere in the
--- project by the id of the source it links to. Cheaper than re-scanning the whole project
--- once per candidate source below.
+-- One pass over every INDI/FAM record, grouping every SOUR citation by the id of the
+-- source it links to -- cheaper than re-scanning the whole project per candidate source.
 local function allCitationsBySourceId()
   local bySourceId = {}
   for _, recTag in ipairs({ "INDI", "FAM" }) do
@@ -709,26 +577,18 @@ local function allCitationsBySourceId()
 end
 
 -- sourceHelper.findSources(templateNameOrId, fieldFilters)
--- Read-only (see sandbox.lua -- unlike createSourceFromTemplate/citeSource, wired through
--- in both Read-only and Read-write Sessions). Finds every SOUR record linked to the given
--- template whose populated fields match every fieldFilters entry: {[fieldCode] =
--- matchValue}, e.g. {Registration_District = "Barnstaple"} -- matching is substring
--- (case-insensitive) or exact per field type, see EXACT_MATCH_TYPES above. Which of
--- fieldFilters is checked against the SOUR record's own fields vs. against its
--- citations' fields is decided per field by the template's own CITN flag (fieldDefs
--- above), not by the caller -- a citation-level fieldFilters entry matches a candidate
--- source if ANY of its citations (anywhere in the project) has a matching value, since a
--- template's citation-level fields are populated per-citation, not once for the source
--- as a whole. Errors on a field code that isn't defined on this template at all (same
--- validation as createSourceFromTemplate); a field code that's merely unpopulated on a
--- given candidate source just fails to match that candidate, same as any other value.
+-- Read-only, wired through in both Session modes. Finds every SOUR record linked to the
+-- given template whose populated fields match every fieldFilters entry: {[fieldCode] =
+-- matchValue} -- substring (case-insensitive) or exact per field type (EXACT_MATCH_TYPES).
+-- Which of fieldFilters is checked against the record's own fields vs. its citations'
+-- fields is decided per field by the template's CITN flag, not by the caller -- a
+-- citation-level entry matches if ANY citation of the candidate source matches. Errors on
+-- a field code not defined on the template; an unpopulated code on a given candidate just
+-- fails to match, same as any other value.
 --
--- Returns an array of { source = <getAllDetails-shape tree for the SOUR record>, citedBy
--- = array of {tag, qualifiedId} for every fact/record that cites it, across every
--- INDI/FAM in the project } -- citedBy is unconditional (present even with no
--- fieldFilters, and even when a match came from record-level fields alone), so a caller
--- can see how a template is actually used (e.g. "usually cited on BIRT plus a dated
--- OCCU") without a second helper call.
+-- Returns an array of { source = <getAllDetails tree>, citedBy = array of {tag,
+-- qualifiedId} for every fact/record citing it }. citedBy is always present, even with no
+-- fieldFilters, so a caller can see how a template is actually used.
 function M.findSources(templateNameOrId, fieldFilters)
   fieldFilters = fieldFilters or {}
 
@@ -754,10 +614,8 @@ function M.findSources(templateNameOrId, fieldFilters)
   while sourPtr:IsNotNull() do
     local candidateTemplate = linkedTemplate(sourPtr)
     if candidateTemplate and not candidateTemplate:IsNull() and fhGetRecordId(candidateTemplate) == templateId then
-      -- Record-level filters are checked directly off the live pointer (matchesFilters, the
-      -- proven-correct resolution) before paying for a full getAllDetails walk -- cheaper
-      -- for the common non-matching case, and sourTree is only actually needed once we know
-      -- this candidate is worth keeping.
+      -- Record-level filters are checked off the live pointer first (cheap) -- sourTree is
+      -- only built once we know this candidate is worth keeping.
       if matchesFilters(sourPtr, recordFilters, defs) then
         local sourTree = familyHelper.getAllDetails(sourPtr)
         local citationEntries = citationsBySourceId[fhGetRecordId(sourPtr)] or {}
@@ -765,9 +623,6 @@ function M.findSources(templateNameOrId, fieldFilters)
         local citedBy = {}
         for _, entry in ipairs(citationEntries) do
           table.insert(citedBy, { tag = entry.tag, qualifiedId = entry.qualifiedId })
-          -- Same matchesFilters function as record-level above -- entry.ptr is the
-          -- citation's own live pointer (issue #73), resolved the same shortcut-Data-
-          -- Reference way rather than the old tag-based tree walk.
           if not citationFiltersOk and matchesFilters(entry.ptr, citationFilters, defs) then
             citationFiltersOk = true
           end
@@ -784,31 +639,18 @@ function M.findSources(templateNameOrId, fieldFilters)
 end
 
 -- fhBridge.getTemplateFieldCensus(templateNameOrId)
--- Read-only (wired into both Session modes, same as findSources/getPopulatedTemplateFields
--- -- gating tracks whether a function writes, not which file it lives in). issue #74 (ADR
--- 0017): describe_project's own sourceTemplateFields census used to give this occurrence
--- data (record-level fields only, issue #67/#73) but was found to make every describe_project
--- call pay for a per-SOUR-record field-resolution walk regardless of whether the
--- conversation ever needed it, and even then never covered citation-level (CITN) fields at
--- all -- extending it to do so would mean walking every citation across every INDI/FAM
--- record (allCitationsBySourceId below) on every describe_project call, which recomputes on
--- every call with no caching (ADR 0002). So describe_project's own census is now structural
--- only (field definitions, no counts); this helper gives the actual occurrence counts,
--- opt-in, single-template scoped like findSources/getPopulatedTemplateFields.
+-- Read-only, wired into both Session modes. Gives per-field occurrence counts for one
+-- template, since describe_project's own census is structural only (field definitions, no
+-- counts -- ADR 0017) to avoid paying for a full field-resolution walk on every call.
 --
 -- Returns { recordFields = {code = countOfSourRecordsPopulated}, citationFields = {code =
--- countOfCitationsPopulated} } for every field this template defines -- every code
--- present, even ones populated on zero record/citation (0, not omitted), so a caller can
--- tell "never populated" apart from "not a field on this template" (which errors instead,
--- same as findSources/createSourceFromTemplate's own unknown-field-code handling elsewhere
--- in this file). recordFields counts SOUR records (one per source, whether-or-not
--- populated more than once isn't a real state); citationFields counts individual citations
--- (matching how issue #74's own evidence was framed -- "1,108 of 1,196 citations", not
--- "N sources with at least one such citation").
+-- countOfCitationsPopulated} } for every field the template defines -- every code present
+-- even at 0, so "never populated" is distinguishable from "not a field on this template"
+-- (which errors, same as findSources/createSourceFromTemplate). recordFields counts SOUR
+-- records; citationFields counts individual citations.
 --
--- The whole-project citation walk (allCitationsBySourceId, the same one findSources uses)
--- only runs at all when this template actually defines at least one citation-level field --
--- a template with none never pays for it.
+-- The whole-project citation walk only runs when the template defines at least one
+-- citation-level field.
 function M.getTemplateFieldCensus(templateNameOrId)
   local template = resolveTemplate(templateNameOrId)
   local templateId = fhGetRecordId(template)

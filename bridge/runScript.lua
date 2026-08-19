@@ -1,13 +1,10 @@
--- Executes a run_lua script inside the sandbox and returns a JSON-encoded response
--- string — either the script's own returned value, or a JSON error object on failure.
--- Ties sandbox.lua and jsonEncode.lua together; no socket/IUP/FH dependency of its own,
--- so (unlike bridge.fh_lua's dialog/socket plumbing) this is testable standalone.
+-- Executes a run_lua script inside the sandbox and returns a JSON-encoded response string
+-- -- either the script's own returned value, or a JSON error object on failure. Ties
+-- sandbox.lua and jsonEncode.lua together; no socket/IUP/FH dependency of its own, so
+-- (unlike bridge.fh_lua's dialog/socket plumbing) this is testable standalone.
 --
--- accessMode defaults to "read-only" here (mirroring sandbox.build()'s own default) since
--- M.run needs a resolved value for the pre-scan below before sandbox.build ever runs; the
--- resolved value is then forwarded straight through to sandbox.build() as before — see
--- CONTEXT.md "Access mode" and sandbox.lua's own comment for what it does and doesn't
--- unlock yet.
+-- accessMode defaults to "read-only" (mirroring sandbox.build()'s own default) -- M.run
+-- needs a resolved value for the pre-scan below before sandbox.build ever runs.
 
 local sandbox = require('sandbox')
 local json = require('jsonEncode')
@@ -23,17 +20,17 @@ local function containsName(scriptText, name)
   return scriptText:find('%f[%w_]' .. name .. '%f[^%w_]') ~= nil
 end
 
--- Set form of sandbox.KNOWN_FH_GLOBAL_NAMES (issue #81), built once at module load rather
--- than per-call, for O(1) membership checks in unrecognizedFhCallViolation below.
+-- Set form of sandbox.KNOWN_FH_GLOBAL_NAMES, built once at module load for O(1) membership
+-- checks in unrecognizedFhCallViolation below.
 local knownFhGlobalNames = {}
 for _, name in ipairs(sandbox.KNOWN_FH_GLOBAL_NAMES) do
   knownFhGlobalNames[name] = true
 end
 
--- Static pre-scan (issue #43, docs/adr/0012): a best-effort heuristic over the script's
--- raw source text, not a security boundary -- the runtime backstop in M.run below is what
--- actually guarantees no write escapes detection. Runs before load() is even attempted, so
--- it catches a violation even in a script that wouldn't otherwise compile.
+-- Static pre-scan: a best-effort heuristic over the script's raw source text, not a
+-- security boundary -- the runtime backstop in M.run below is what actually guarantees no
+-- write escapes detection. Runs before load() is even attempted, so it catches a violation
+-- even in a script that wouldn't otherwise compile.
 local function preScanViolation(scriptText, accessMode)
   local writeName = nil
   for _, name in ipairs(sandbox.WRITE_NAMES) do
@@ -57,30 +54,21 @@ local function preScanViolation(scriptText, accessMode)
   return nil
 end
 
--- Extracts every bare fh*-prefixed identifier immediately followed by a call paren (issue
--- #81) -- e.g. matches 'fhGetQualifiedId' in 'fhGetQualifiedId(newest)'. A dot immediately
--- after the identifier breaks the match ('fhu.foo(', 'fhBridge.getFamilyGroup(' never
--- match), which is exactly right: this check is scoped to bare fh* globals only, not
--- fhu.* methods or item-pointer :Method() calls (out of scope for v1 -- a text pre-scan
--- can't validate a method call without knowing the calling object's type). Generalizes
--- containsName's %f[%w_]/%f[^%w_] identifier-boundary convention above to capture the name
--- instead of checking one fixed candidate.
+-- Extracts every bare fh*-prefixed identifier immediately followed by a call paren -- e.g.
+-- matches 'fhGetQualifiedId' in 'fhGetQualifiedId(newest)'. A dot immediately after the
+-- identifier breaks the match ('fhu.foo(', 'fhBridge.getFamilyGroup(' never match) --
+-- scoped to bare fh* globals only, not fhu.* methods or item-pointer :Method() calls (a
+-- text pre-scan can't validate a method call without knowing the calling object's type).
 local function eachFhCallName(scriptText)
   return scriptText:gmatch('%f[%w_](fh%w*)%f[^%w_]%s*%(')
 end
 
--- Unrecognized-fh*-global pre-scan (issue #81, docs/adr/0022): rejects a run_lua script
--- that calls a bare fh* global this sandbox doesn't recognize -- either a genuine
--- typo/hallucination (real incident: fhGetQualifiedId, guessed, vs. the real
--- fhGetQualifiedRecordId already in sandbox.lua's allowlist) or a known-but-permanently-
--- excluded name (sandbox.EXCLUDED_FH_GLOBAL_REASONS) -- before load() is even attempted,
--- same "before load()" placement and same rationale as preScanViolation above: catches the
--- violation even in a script that wouldn't otherwise compile, and avoids the
--- partial-write-then-rollback cost of only finding out at runtime, which is what actually
--- happened in the incident that prompted this issue. A best-effort text heuristic, not a
--- security boundary -- same known limitations as preScanViolation (a name inside a
--- comment/string, or reached via indirection like `local f = fhGetQualifiedId`, isn't
--- caught).
+-- Unrecognized-fh*-global pre-scan: rejects a run_lua script that calls a bare fh* global
+-- this sandbox doesn't recognize -- either a genuine typo/hallucination, or a
+-- known-but-permanently-excluded name (sandbox.EXCLUDED_FH_GLOBAL_REASONS) -- before
+-- load() is even attempted, avoiding the partial-write-then-rollback cost of only finding
+-- out at runtime. A best-effort text heuristic, same known limitations as preScanViolation
+-- (a name inside a comment/string, or reached via indirection, isn't caught).
 local function unrecognizedFhCallViolation(scriptText)
   local messages = {}
   local seen = {}
@@ -101,16 +89,13 @@ local function unrecognizedFhCallViolation(scriptText)
   return table.concat(messages, '; ')
 end
 
--- Bare-leading-dot Data Reference pre-scan (issue #103, docs/adr/0023): rejects a script
--- passing a literal Data Reference string starting with a bare '.' -- neither of the two
--- valid forms (a '~'-relative reference, or a full path from a record-level tag) -- to any
--- of the four call shapes FH's own API accepts one on. None of the four raise a Lua error
--- for this: MoveTo/fhGetItemPtr silently leave the pointer Null, fhGetItemText/
--- fhGetDisplayText silently return "" -- the same "not found" shape a caller can't tell
--- apart from a genuinely absent field, discovered live (issue #103) when it surfaced only
--- as a full write-session rollback well after the actual mistake. Same "literal argument
--- only" heuristic limitation as every other pre-scan here (a data reference built into a
--- variable first isn't caught) -- see docs/adr/0023 for the full scope decision.
+-- Bare-leading-dot Data Reference pre-scan: rejects a script passing a literal Data
+-- Reference string starting with a bare '.' -- neither of the two valid forms (a
+-- '~'-relative reference, or a full path from a record-level tag) -- to any of the four
+-- call shapes FH's API accepts one on. None of the four raise a Lua error for this:
+-- MoveTo/fhGetItemPtr silently leave the pointer Null, fhGetItemText/fhGetDisplayText
+-- silently return "" -- indistinguishable from a genuinely absent field. Same
+-- "literal argument only" heuristic limitation as every other pre-scan here.
 local DATA_REF_CALL_SHAPES = {
   { name = 'MoveTo', symptom = 'silently leaves the pointer Null' },
   { name = 'fhGetItemPtr', symptom = 'silently leaves the pointer Null' },
@@ -141,11 +126,10 @@ local function dataReferenceViolation(scriptText)
   return table.concat(messages, '; ')
 end
 
--- Shared shape for a write-mode response that FH's own auto-undo should act on (docs/adr/0005):
--- a JSON error carrying writeSessionRolledBack: true, plus the original error/message as a
--- second return value the caller re-raises after sending. Both the write-mode-runtime-error
--- path and the write-then-log runtime backstop (issue #43, docs/adr/0012) build this same
--- shape, so it's constructed in one place rather than two.
+-- Shared shape for a write-mode response that FH's own auto-undo should act on: a JSON
+-- error carrying writeSessionRolledBack: true, plus the original error/message as a second
+-- return value the caller re-raises after sending. Both the write-mode-runtime-error path
+-- and the write-then-log runtime backstop build this same shape.
 local function rollbackResponse(message)
   return json.encode({ error = tostring(message), writeSessionRolledBack = true }), message
 end
@@ -154,12 +138,9 @@ function M.run(scriptText, accessMode)
   accessMode = accessMode or 'read-only'
 
   -- All three pre-scans below run unconditionally and their messages are joined rather than
-  -- short-circuiting after the first hit (2026-08-08 grilling session, issue #81 follow-up;
-  -- extended to a third pre-scan, issue #103/docs/adr/0023): a script tripping more than one
-  -- should hear about everything wrong with it in one round-trip, not fix one violation only
-  -- to hit the next on resubmission. Response shape stays the existing single `error`
-  -- string (all messages concatenated), not a structured list, to keep today's response
-  -- contract unchanged.
+  -- short-circuiting after the first hit -- a script tripping more than one should hear
+  -- about everything wrong with it in one round-trip, not fix one violation only to hit the
+  -- next on resubmission.
   local violations = {}
   local writeViolation = preScanViolation(scriptText, accessMode)
   if writeViolation then
@@ -192,23 +173,20 @@ function M.run(scriptText, accessMode)
   watchdog.stop()
 
   if ok and accessMode == 'read-write' and tracker.wrote and not tracker.logged then
-    -- Runtime backstop (issue #43, docs/adr/0012): the ground truth for what the pre-scan
-    -- can't see -- text presence isn't proof of execution (dead code, indirection, partial
-    -- logging). Same response shape as the write-mode-runtime-error path below, feeding
-    -- the same ADR 0005 rethrow/auto-undo mechanism, since an unlogged write is exactly as
-    -- much a problem to roll back as a script that errored mid-write.
+    -- Runtime backstop: the ground truth for what the pre-scan can't see -- text presence
+    -- isn't proof of execution (dead code, indirection, partial logging). Same response
+    -- shape as the write-mode-runtime-error path below, feeding the same rollback/auto-undo
+    -- mechanism.
     return rollbackResponse('script wrote to the tree without logging the activity via fhBridge.logActivity')
   end
 
   if not ok then
     -- Only a write-mode script that actually called a tracked write primitive before
-    -- erroring (sandbox.lua's tracker) can have partially mutated the tree -- a script
-    -- that errored before writing anything, or a compile/sandbox-build failure above, has
-    -- nothing for FH's auto-undo to act on. When the tracker did fire, report the error
-    -- as normal but also hand the caller the raw error, to be re-raised after sending in
-    -- a way that actually ends the whole plugin -- the only way confirmed (docs/adr/0005)
-    -- to give FH's own auto-undo a real chance to fire, unlike an error raised from
-    -- inside a timer callback alone, which IUP swallows before it ever escapes the plugin.
+    -- erroring can have partially mutated the tree. When the tracker fired, report the
+    -- error as normal but also hand the caller the raw error, to be re-raised after sending
+    -- in a way that actually ends the whole plugin -- the only way to give FH's own
+    -- auto-undo a real chance to fire (an error raised from inside a timer callback alone
+    -- never escapes the plugin).
     if accessMode == 'read-write' and tracker.wrote then
       return rollbackResponse(result)
     end

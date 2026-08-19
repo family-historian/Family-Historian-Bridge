@@ -1,39 +1,25 @@
--- Builds the allowlist _ENV table a run_lua script executes inside.
--- Allowlist, not denylist: start from nothing, add back only what's explicitly safe.
--- Anything not added here is simply absent to the script (nil), regardless of what
--- exists in the real global environment. See CONTEXT.md "Sandbox" and
--- docs/adr/0001-arbitrary-sandboxed-lua-execution.md.
+-- Builds the allowlist _ENV table a run_lua script executes inside. Allowlist, not
+-- denylist: start from nothing, add back only what's explicitly safe. See CONTEXT.md
+-- "Sandbox" and docs/adr/0001.
 --
--- Read-only allowlist: basic Lua, plus FH's read-side primitives and fhUtils. Both are
--- wired through by reference from the real global environment, not reimplemented —
--- FH's own Lua host installs the primitives as globals, and fhUtils ships with every FH
--- install (require('fhUtils'), not bundled by this project).
+-- Read-only: basic Lua, plus FH's read-side primitives and fhUtils, wired through by
+-- reference from the real global environment.
 --
--- accessMode ("read-only" / "read-write", from the bridge dialog's toggle) is threaded
--- through from the bridge dialog's toggle. "read-write" additionally wires through FH's
--- full write API (issue #14, 2026-07-30 grilling session decision) — all of it at once,
--- with no further staging within read-write. See CONTEXT.md "Access mode". Read-write also
--- adds further env.fhBridge members from this project's own sourceHelper.lua module
--- (issue #18) and sessionLogHelper.lua's logActivity (issue #36) — neither is part of FH's
--- write API itself, but both call real fh* write globals directly, so both are gated the
--- same way. env.fhBridge itself is NOT read-write-only, though: its family/detail-query
--- members (familyHelper.lua) call only read primitives, already granted below regardless
--- of accessMode, so they're built into env.fhBridge unconditionally, before the
--- read-write block below that only ever adds further members to that same table.
+-- accessMode ("read-only"/"read-write") also gates FH's full write API, plus
+-- sourceHelper.lua's createSourceFromTemplate/citeSource and sessionLogHelper.lua's
+-- logActivity (neither part of FH's write API, but both call real fh* write globals
+-- directly, so both are gated the same way). env.fhBridge itself is NOT read-write-only:
+-- its family/detail-query members only call read primitives, so they're built
+-- unconditionally, before the read-write block adds further members.
 
 local M = {}
 
 -- Raw fh* primitives that mutate the GEDCOM tree (or can, via bCreateIfNone) -- wrapped
 -- below to flip a per-build write tracker, so runScript.lua/M.run can tell whether a
--- since-failed script actually wrote anything before it errored (issue #15,
--- docs/adr/0005). fhGetFactTag/fhGetFlagTag are conservatively tracked on every call under
--- Read-write, not just a bCreateIfNone=true one -- cheaper to over-flag a possible write
--- than silently miss one. Both stay in this list (and hence in WRITE_NAMES below, so
--- runScript.lua's static pre-scan keeps flagging any script that calls either name) even
--- though, as of issue #51, they're no longer entirely excluded from Read-only -- see the
--- guarded wrappers below M.build's local-function definitions: each has a genuine
--- pure-lookup branch (bCreateIfNone=false) with no possible mutation, so only the
--- bCreateIfNone=true branch actually needs the write gate.
+-- since-failed script actually wrote anything before it errored (ADR 0005).
+-- fhGetFactTag/fhGetFlagTag are tracked on every call under Read-write, even though only
+-- their bCreateIfNone=true branch is a real write -- see the guarded wrappers below, which
+-- give each a genuine pure-lookup path under Read-only.
 local WRITE_PRIMITIVE_NAMES = {
   'fhSetLabelledText', 'fhSetValueAsAge', 'fhSetValueAsDate', 'fhSetValueAsInteger',
   'fhSetValueAsLink', 'fhSetValueAsRichText', 'fhSetValueAsText', 'fhCreateItem',
@@ -42,15 +28,11 @@ local WRITE_PRIMITIVE_NAMES = {
 }
 
 -- fhUtils (fhu) methods that write tree data, found by reading fhUtils.lua's actual
--- source rather than trusting the help corpus alone (which is missing
--- createTextFromSource entirely -- issue #22). fhu is FH-shipped and calls the real
--- global fh* primitives directly, bypassing this sandbox's env entirely -- so without this
--- list, neither the Read-only gate below nor the write tracker above would ever see a
--- write made via fhu.createIndi() and friends, which is how most scripts are told to
--- write (RUN_LUA_DESCRIPTION prefers fhu helpers over hand-rolled primitives). Every other
--- fhu method (list/string helpers, the pCite object, UI prompts) only reads tree data or
--- touches an in-memory Lua object -- see issue #22 for the two other fhu escape hatches
--- (modal dialogs, direct filesystem writes) that are out of scope here.
+-- source (the help corpus is missing some, e.g. createTextFromSource). fhu calls the real
+-- global fh* primitives directly, bypassing this sandbox's env -- so without this list,
+-- neither the Read-only gate nor the write tracker would ever see a write made via
+-- fhu.createIndi() and friends. Every other fhu method only reads tree data or touches an
+-- in-memory Lua object.
 local FHU_WRITE_METHOD_NAMES = {
   'addFamilyAsChild', 'addFamilyAsSpouse', 'addWitness', 'createFact',
   'createFamilyAsChild', 'createFamilyAsSpouse', 'createIndi', 'createUpdateFact',
@@ -67,10 +49,8 @@ end
 
 local FHU_WRITE_METHODS = toSet(FHU_WRITE_METHOD_NAMES)
 
--- Union of both write-name lists above, exported alongside M.build so runScript.lua's
--- static pre-scan (issue #43, docs/adr/0012) reuses this exact list rather than a second,
--- driftable copy. Enforcement doesn't care *which* write function fires, only whether
--- logActivity was also called, so a flat combined list is all it needs.
+-- Union of both write-name lists above, exported so runScript.lua's static pre-scan
+-- (ADR 0012) reuses this exact list rather than a second, driftable copy.
 local WRITE_NAMES = {}
 for _, name in ipairs(WRITE_PRIMITIVE_NAMES) do
   table.insert(WRITE_NAMES, name)
@@ -80,12 +60,9 @@ for _, name in ipairs(FHU_WRITE_METHOD_NAMES) do
 end
 M.WRITE_NAMES = WRITE_NAMES
 
--- Every bare fh* global wired into env under Read-only (issue #81) -- listed here as flat
--- data, not introspected from M.build, so it exists independently of whether M.build is
--- ever actually called (this file's own tests, and runScript.lua's pre-scan below, run
--- under plain lua with no real FH host). Kept in the same grouping/order as M.build's own
--- env.fhX = fhX assignments purely so the two stay easy to eyeball against each other; this
--- list has no other relationship to M.build beyond both needing the same names.
+-- Every bare fh* global wired into env under Read-only -- listed here as flat data so it
+-- exists independently of whether M.build is ever called (this file's tests, and
+-- runScript.lua's pre-scan, run under plain lua with no real FH host).
 local READ_ONLY_FH_GLOBAL_NAMES = {
   'fhNewItemPtr', 'fhGetItemText', 'fhGetDisplayText', 'fhGetContextInfo', 'fhGetAppVersion',
   'fhGetTag', 'fhCallBuiltInFunction', 'fhGetValueAsLink',
@@ -104,18 +81,14 @@ local READ_ONLY_FH_GLOBAL_NAMES = {
   'fhFtfEncode', 'fhFtfParamEncode',
   'fhGetNamedList', 'fhGetNamedListByIndex', 'fhGetNamedListCount',
   'fhBeginsWithVowel',
-  -- fhGetFlagTag/fhGetFactTag (issue #51): bare names, present read-only as the guarded
-  -- wrappers -- also appear in WRITE_PRIMITIVE_NAMES above, deduped below via a set.
+  -- fhGetFlagTag/fhGetFactTag: bare names, present read-only as the guarded wrappers below
+  -- -- also appear in WRITE_PRIMITIVE_NAMES above, deduped via a set.
   'fhGetFlagTag', 'fhGetFactTag',
 }
 
--- Mode-independent union of every bare fh* global name ever assigned into env, across BOTH
--- access modes (issue #81) -- exported for runScript.lua's unrecognized-fh*-call pre-scan,
--- which needs "is this a real, known function" independent of which mode is actually
--- running (M.build only ever populates env for one mode at a time, so neither
--- READ_ONLY_FH_GLOBAL_NAMES alone nor WRITE_PRIMITIVE_NAMES alone is the right answer for a
--- pre-scan that has to run before accessMode-specific gating even matters). Deduped via a
--- set, since fhGetFactTag/fhGetFlagTag appear in both source lists.
+-- Mode-independent union of every bare fh* global name ever assigned into env, across both
+-- access modes -- exported for runScript.lua's unrecognized-fh*-call pre-scan, which needs
+-- "is this a real, known function" independent of which mode is running.
 local knownFhGlobalSet = toSet(READ_ONLY_FH_GLOBAL_NAMES)
 for _, name in ipairs(WRITE_PRIMITIVE_NAMES) do
   knownFhGlobalSet[name] = true
@@ -126,17 +99,14 @@ for name in pairs(knownFhGlobalSet) do
 end
 M.KNOWN_FH_GLOBAL_NAMES = KNOWN_FH_GLOBAL_NAMES
 
--- fhu methods that pop a real iup.Popup(dlg) modal dialog and block waiting for a human
--- to click a button, or that read/write straight to disk -- neither is survivable in
--- run_lua's headless script->JSON-return model, and both bypass this sandbox's env the
--- same way fhu's write methods do (issue #22, found by reading fhUtils.lua's actual
--- source). Unconditional: excluded in both Read-only and Read-write, since neither risk
--- has anything to do with access mode. createUpdateFact is *also* a write method
--- (FHU_WRITE_METHOD_NAMES above) -- this table takes priority over that in the proxy loop
--- below, so it never forwards to the real (hang-prone) function even under Read-write;
--- it's still absent under Read-only via the ordinary write gate, unchanged.
+-- fhu methods that pop a real modal dialog and block for a human click, or read/write
+-- straight to disk -- neither survivable in run_lua's headless model, and both bypass this
+-- sandbox's env the same way fhu's write methods do. Unconditional in both access modes.
+-- createUpdateFact is also a write method (FHU_WRITE_METHOD_NAMES above) -- this table
+-- takes priority in the proxy loop below, so it never forwards to the real (hang-prone)
+-- function even under Read-write.
 -- stripCommas is handled separately (buildStripCommas below): safe with just its text
--- argument, unsafe only when called with its optional sQuestion/sTitle/hParent args.
+-- argument, unsafe only with its optional sQuestion/sTitle/hParent args.
 local FHU_UNSUPPORTED_REASONS = {
   getParam = 'it opens a modal dialog and would hang a headless run_lua script',
   createUpdateFact = 'it calls getParam internally, which opens a modal dialog and would hang a headless run_lua script',
@@ -147,16 +117,12 @@ local FHU_UNSUPPORTED_REASONS = {
   resetOptions = 'it writes directly to disk, which this project\'s filesystem exclusion policy does not allow over run_lua',
 }
 
--- Bare fh* globals permanently excluded from the sandbox regardless of access mode --
--- converted from the prose list in M.build's own comment below into a real table (issue
--- #81), so runScript.lua's unrecognized-fh*-call pre-scan can report *why* a known-but-
--- unsupported name is rejected, instead of lumping it in with a genuine typo/hallucination
--- under a generic "unrecognized function" message. Kept separate from
--- FHU_UNSUPPORTED_REASONS above: that table is for fhu.* method calls (env.fhu.getParam
--- etc.), this one is for bare fh* global calls (env.fhFoo) -- the two namespaces never
--- overlap, though several of the underlying reasons do (both hit the same
--- headless-script/filesystem-exclusion policy limits). Reason text matches
--- sandbox.test.lua's own absence-assertion comments below, kept in sync by hand.
+-- Bare fh* globals permanently excluded from the sandbox regardless of access mode, so
+-- runScript.lua's unrecognized-fh*-call pre-scan can report *why* a known-but-unsupported
+-- name is rejected, rather than lumping it in with a genuine typo/hallucination. Separate
+-- from FHU_UNSUPPORTED_REASONS above: that's for fhu.* method calls, this is for bare fh*
+-- global calls -- the namespaces never overlap. Reason text is kept in sync by hand with
+-- sandbox.test.lua's own absence assertions.
 local EXCLUDED_FH_GLOBAL_REASONS = {
   fhSetStringEncoding = 'it mutates app/session state, not tree data, which is outside this sandbox\'s tree-data write model',
   fhSetConversionLossFlag = 'it mutates app/session state, the same concern as fhSetStringEncoding',
@@ -203,13 +169,11 @@ local function buildStripCommas(realStripCommas)
   end
 end
 
--- fhGetFlagTag(strFlagName, bCreateIfNone[, bFactFlag]) (issue #51): a pure lookup when
--- bCreateIfNone is not true -- returns the existing tag, or "" if the flag type isn't
--- found, per FH's own docs (fhGetFlagTag.htm) -- but bCreateIfNone=true can create a new
--- flag-type definition, which is a real write. Guarded the same way buildStripCommas
--- guards its optional UI args: forward through on the safe branch, raise a clear error on
--- the write-capable one. Read-only only -- M.build overwrites this with the full,
--- unguarded, tracked version under Read-write (see WRITE_PRIMITIVE_NAMES's own comment).
+-- fhGetFlagTag(strFlagName, bCreateIfNone[, bFactFlag]): a pure lookup when bCreateIfNone
+-- is not true -- returns the existing tag, or "" if not found -- but bCreateIfNone=true can
+-- create a new flag-type definition, a real write. Forwards on the safe branch, raises a
+-- clear error on the write-capable one. Read-only only -- M.build overwrites this with the
+-- full, unguarded, tracked version under Read-write.
 local function buildGuardedGetFlagTag(realGetFlagTag)
   return function(strFlagName, bCreateIfNone, bFactFlag)
     if bCreateIfNone then
@@ -219,10 +183,9 @@ local function buildGuardedGetFlagTag(realGetFlagTag)
   end
 end
 
--- fhGetFactTag(strFactName, strFactType, strRecTag, bCreateIfNone) (issue #51): same shape
--- and same reasoning as fhGetFlagTag above -- bCreateIfNone is this function's last
--- positional argument instead of its second, but the pure-lookup-vs-create split is
--- identical (fhGetFactTag.htm).
+-- fhGetFactTag(strFactName, strFactType, strRecTag, bCreateIfNone): same shape and
+-- reasoning as fhGetFlagTag above -- bCreateIfNone is just in a different argument
+-- position.
 local function buildGuardedGetFactTag(realGetFactTag)
   return function(strFactName, strFactType, strRecTag, bCreateIfNone)
     if bCreateIfNone then
@@ -232,12 +195,9 @@ local function buildGuardedGetFactTag(realGetFactTag)
   end
 end
 
--- M.build's accessMode ("read-only"/"read-write") is threaded through from the bridge
--- dialog's toggle; returns the sandbox env plus a tracker table
--- ({wrote = boolean, logged = boolean}) the caller can inspect after running a script to
--- see whether any wrapped write primitive was actually called, and separately whether
--- fhBridge.logActivity was -- kept out of env itself so the sandboxed script can't read
--- or tamper with its own tracker.
+-- accessMode ("read-only"/"read-write") comes from the bridge dialog's toggle. Returns the
+-- sandbox env plus a tracker table ({wrote, logged}) the caller can inspect after running a
+-- script -- kept out of env itself so the sandboxed script can't read or tamper with it.
 function M.build(accessMode)
   accessMode = accessMode or "read-only"
   local env = {}
@@ -250,29 +210,14 @@ function M.build(accessMode)
     end
   end
 
-  -- logActivity really does mutate the tree (creates/updates a _RNOT record), so a call to
-  -- it must still flip tracker.wrote exactly like every other write primitive -- a script
-  -- that calls only logActivity and then errors must stay eligible for ADR 0005's existing
-  -- rollback path. Was previously wrapped in a plain trackedLog(fn) built the same way as
-  -- trackedWrite above (issue #43, docs/adr/0012); superseded below by validatedTrackedLog
-  -- once logActivity grew its own pure validation phase (issue #97).
-
-  -- validatedTrackedWrite(validateFn, fn) / validatedTrackedLog(validateFn, fn) (issue #97):
-  -- for the three fhBridge.* composite functions (createSourceFromTemplate/citeSource/
-  -- logActivity) that each now expose their own pure validation half -- calls validateFn(...)
-  -- first, untracked, so a call it rejects never arms tracker.wrote/tracker.logged at all,
-  -- and only calls the real fn(...) (which re-validates internally too, harmlessly -- see
-  -- each validateFn's own comment) once validation has actually passed. Plain trackedWrite
-  -- above flips the tracker purely from being entered, before fn(...) even runs --
-  -- correct for a raw fh* write primitive (the call itself IS the mutation, so there's
-  -- nothing to validate first), but wrong for these three: each has a genuine, separate,
-  -- pure validation phase (resolveTemplate/resolveSource/the ptrRecord-action checks), and
-  -- wrapping the whole call with plain trackedWrite meant even a call rejected during that
-  -- validation phase -- one that, by definition, never reached fhCreateItem -- still armed
-  -- ADR 0005's rollback path and killed the Session. Confirmed live (issue #97) against
-  -- Family Historian Sample Project 8: pcall(fhBridge.createSourceFromTemplate, 999999, {})
-  -- still ended the Session even though resolveTemplate(999999) errors on a pure read, with
-  -- nothing ever written, and even though the caller's own pcall caught that error.
+  -- validatedTrackedWrite(validateFn, fn) / validatedTrackedLog(validateFn, fn): for the
+  -- fhBridge.* composite functions (createSourceFromTemplate/citeSource/logActivity/
+  -- setTftfText/createFact) that each expose their own pure validation half. Calls
+  -- validateFn(...) first, untracked, so a call it rejects never arms the tracker; only
+  -- calls the real fn(...) once validation passes. Plain trackedWrite above flips the
+  -- tracker purely from being entered -- correct for a raw fh* write primitive (the call
+  -- itself IS the mutation), but wrong for these: a call rejected during their own
+  -- validation phase never reached fhCreateItem, and must not arm ADR 0005's rollback path.
   local function validatedTrackedWrite(validateFn, fn)
     return function(...)
       validateFn(...)
@@ -303,8 +248,7 @@ function M.build(accessMode)
   env.os = { date = os.date }
 
   -- MoveToFirstRecord/MoveNext/IsNull are FH item-pointer methods (ptr:MoveToFirstRecord
-  -- (tag)), not free globals — copying same-named globals here would only ever copy nil,
-  -- so they're deliberately absent. Confirmed against a real FH project, see #7.
+  -- (tag)), not free globals -- deliberately absent here.
   env.fhNewItemPtr = fhNewItemPtr
   env.fhGetItemText = fhGetItemText
   env.fhGetDisplayText = fhGetDisplayText
@@ -314,35 +258,13 @@ function M.build(accessMode)
   env.fhCallBuiltInFunction = fhCallBuiltInFunction
   env.fhGetValueAsLink = fhGetValueAsLink
 
-  -- Batch-populated per the read-only sandbox policy agreed 2026-07-29 (grilling
-  -- session): every remaining function in FH's own API reference that reads data with
-  -- no side effect, so ordinary use never again needs a mid-conversation "copy this file
-  -- into FH's Plugins folder and reload" cycle. Two different kinds of exclusion below —
-  -- don't conflate them:
-  --
-  -- (1) Excluded from Read-only, granted under Read-write below (these write to the
-  -- GEDCOM tree, or can conditionally create schema): fhSetLabelledText, every
-  -- fhSetValueAs* setter (Age/Date/Integer/Link/RichText/Text), fhCreateItem,
-  -- fhDeleteItem, fhMoveItemAfter, fhMoveItemBefore, fhSrcEnableAutoTitle, fhGetFactTag,
-  -- fhGetFlagTag (the latter two despite their "Get" name, via a bCreateIfNone param).
-  --
-  -- (2) Excluded permanently, regardless of Read-only/Read-write — Read-write means
-  -- read-write to the user's tree data, not to their computer:
-  --   - filesystem/OS/shell: fhShellExecute, fhLoadTextFile, fhSaveTextFile,
-  --     fhGetIniFileValue, fhSetIniFileValue, fhGetClipboardData, fhGetValueAsBlob,
-  --     fhSetValueAsBlob, fhGetPluginDataFileName
-  --   - UI-interactive, incompatible with the headless script->JSON-return model:
-  --     fhMessageBox, fhDisplayRichTextBox, fhPromptUserForDate,
-  --     fhPromptUserForRecordSel, fhPromptUserForRichText, fhUpdateDisplay,
-  --     fhOutputResultSetColumn, fhOutputResultSetTitles
-  --   - app/session state rather than tree data: fhSetStringEncoding,
-  --     fhSetConversionLossFlag, fhOverridePreference
-  --   - fhSleep (blocks without executing Lua VM instructions, so watchdog.lua's
-  --     instruction-count hook can't interrupt it)
-  --   - fhExhibitResponsiveness/fhInitialise (message-pump/plugin bootstrap concerns,
-  --     not applicable to a per-script sandbox)
-  --
-  -- See sandbox.test.lua for the full exclusion list, asserted absent by name.
+  -- Every remaining read-only-safe function in FH's own API reference, wired through by
+  -- reference so ordinary use doesn't need a "copy this file into FH's Plugins folder and
+  -- reload" cycle for something already known to be safe. Two categories of function are
+  -- deliberately absent from this whole batch: writes (see WRITE_PRIMITIVE_NAMES above,
+  -- granted under Read-write below) and permanently-excluded ones (see
+  -- EXCLUDED_FH_GLOBAL_REASONS above, e.g. filesystem/OS access, modal UI, app/session
+  -- state). See sandbox.test.lua for the full exclusion list, asserted absent by name.
 
   -- Create Objects: constructors only — the objects they return carry their own methods,
   -- same as fhNewItemPtr's item pointer.
@@ -415,22 +337,19 @@ function M.build(accessMode)
   -- Miscellaneous
   env.fhBeginsWithVowel = fhBeginsWithVowel
 
-  -- fhGetFlagTag/fhGetFactTag (issue #51): guarded partial read-only availability -- see
-  -- buildGuardedGetFlagTag/buildGuardedGetFactTag above and WRITE_PRIMITIVE_NAMES's own
-  -- comment. Set here, unconditionally, so both access modes get a value; the Read-write
-  -- block below overwrites both with the full, unguarded, tracked version when
-  -- accessMode == "read-write", same override pattern as everything else in that block.
+  -- Guarded partial read-only availability (see buildGuardedGetFlagTag/
+  -- buildGuardedGetFactTag above) -- set here so both access modes get a value; the
+  -- Read-write block below overwrites both with the full, unguarded, tracked version.
   env.fhGetFlagTag = buildGuardedGetFlagTag(fhGetFlagTag)
   env.fhGetFactTag = buildGuardedGetFactTag(fhGetFactTag)
 
   -- fhu (require('fhUtils')) is never the raw module -- always a proxy, so its write
-  -- methods can be gated by accessMode and tracked the same as the raw primitives below
-  -- (issue #22 found the raw module was reachable read-only, since fhu bypasses env and
-  -- calls real fh* globals directly regardless of what this sandbox otherwise allows).
-  -- The modal-dialog/filesystem-write check runs first and takes priority over write
-  -- gating (see FHU_UNSUPPORTED_REASONS above -- this is what keeps createUpdateFact from
-  -- ever forwarding, despite also being a write method). Every other method is passed
-  -- through by reference, unchanged.
+  -- methods can be gated by accessMode and tracked the same as the raw primitives (the raw
+  -- module is reachable read-only otherwise, since fhu bypasses env and calls real fh*
+  -- globals directly). The modal-dialog/filesystem-write check runs first and takes
+  -- priority over write gating -- this is what keeps createUpdateFact from ever
+  -- forwarding, despite also being a write method. Every other method passes through by
+  -- reference, unchanged.
   do
     local realFhu = require('fhUtils')
     local fhuProxy = {}
@@ -451,31 +370,12 @@ function M.build(accessMode)
     env.fhu = fhuProxy
   end
 
-  -- familyHelper.lua's getFamilyGroup/getAllDetails/getAncestors/getDescendants/
-  -- searchByName/getFactsByTag call nothing but read primitives already granted above
-  -- (fhNewItemPtr, item-pointer MoveToFirstRecord/MoveTo/MoveNext/
-  -- MoveToFirstChildItem/IsNotNull/IsNull, fhGetValueAsLink, fhGetTag,
-  -- fhGetItemText, fhGetRecordId, fhGetQualifiedRecordId, fhGetDisplayText,
-  -- fhGetValueType, fhGetValueAsRichText, fhGetDataClass, fhGetValueAsText,
-  -- fhHasChildItem, fhIndGetName,
-  -- fhCallBuiltInFunction -- getDescendants' optional dnaLine filter, a pure
-  -- lookup/query, not a write) -- unlike
-  -- sourceHelper.lua's createSourceFromTemplate/citeSource below, so env.fhBridge is
-  -- built here, unconditionally, rather than inside the read-write block. The read-write
-  -- block only ever adds further (write) members to this same table, never replaces it.
-  --
-  -- sourceHelper.lua itself is also required unconditionally here (issue #65): unlike
-  -- createSourceFromTemplate/citeSource, its findSources, getPopulatedTemplateFields
-  -- (issue #73), and getTemplateFieldCensus (issue #74) are pure reads (they walk
-  -- records/citations via familyHelper.getAllDetails and fhGetItemText Data References, no
-  -- fh* write primitive), so all three are wired into env.fhBridge here too, by reference
-  -- like every other read-only member -- gating tracks whether a function writes, not
-  -- which file it's defined in.
-  --
-  -- richTextHelper.lua's getTftfText (issue #107, docs/adr/0025) is the same story:
-  -- fhGetValueAsRichText/fhGetQualifiedRecordId are both pure reads already granted above,
-  -- so it's wired in unconditionally too. Its sibling setTftfText calls the real
-  -- fhSetValueAsRichText write primitive and stays gated to read-write, below.
+  -- familyHelper.lua's query helpers, sourceHelper.lua's findSources/
+  -- getPopulatedTemplateFields/getTemplateFieldCensus, and richTextHelper.lua's
+  -- getTftfText all call nothing but read primitives already granted above, so
+  -- env.fhBridge is built here unconditionally, before the read-write block below --
+  -- gating tracks whether a function writes, not which file it's defined in. The
+  -- read-write block only ever adds further members to this same table, never replaces it.
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
   local realRichTextHelper = require('richTextHelper')
@@ -493,31 +393,20 @@ function M.build(accessMode)
   }
 
   if accessMode == "read-write" then
-    -- FH's full write API (issue #14, 2026-07-30 grilling session): granted all at once,
-    -- wrapped to flip the write tracker above — no further staging within read-write. See
-    -- CONTEXT.md "Access mode" for the authoritative list.
+    -- FH's full write API: granted all at once, wrapped to flip the write tracker -- no
+    -- further staging within read-write. See CONTEXT.md "Access mode" for the
+    -- authoritative list.
     for _, name in ipairs(WRITE_PRIMITIVE_NAMES) do
       env[name] = trackedWrite(_G[name])
     end
 
-    -- createSourceFromTemplate/citeSource fill the one gap fhUtils itself doesn't cover
-    -- (issue #18) — call the real fh* globals directly, same as fhUtils, so they must
-    -- stay gated to read-write (unlike findSources above, already wired in unconditionally).
-    -- logActivity (issue #36) is a separate sibling module, not part of sourceHelper.lua's
-    -- own Source-record concerns, but exposed through the same env.fhBridge table and
-    -- gated the same read-write-only way, since it also calls the real fh* globals
-    -- directly.
-    -- validatedTrackedWrite/validatedTrackedLog (issue #97), not plain trackedWrite/
-    -- trackedLog, for these three -- see their own comment above for why: each has a real
-    -- validation phase (validateCreateSourceFromTemplate/validateCiteSource/
-    -- validateLogActivity) worth running before the tracker arms, unlike a raw fh* primitive.
-    -- richTextHelper.lua's setTftfText (issue #107, docs/adr/0025) is the same shape --
-    -- validateSetTftfText re-checks for citations right before the real write, gated the
-    -- same validatedTrackedWrite way as createSourceFromTemplate/citeSource.
-    -- factHelper.lua's createFact (issue #113) is the same shape too -- fhu.createFact fills
-    -- the last gap fhUtils itself doesn't cover with a validated, checked wrapper (a bare
-    -- fhu.createFact is still separately reachable via env.fhu, see FHU_WRITE_METHOD_NAMES
-    -- above, but without the pointer/tag validation or checkCreated failure check this gives).
+    -- createSourceFromTemplate/citeSource/logActivity/setTftfText/createFact each call
+    -- real fh* write globals directly (not via fhu), so each stays gated to read-write
+    -- here. validatedTrackedWrite/validatedTrackedLog (not plain trackedWrite) for these,
+    -- since each has its own pure validation phase worth running before the tracker arms
+    -- -- see their own comment above. A bare fhu.createFact is also separately reachable
+    -- via env.fhu (see FHU_WRITE_METHOD_NAMES above), but without this wrapper's
+    -- pointer/tag validation or checkCreated failure check.
     local realSessionLogHelper = require('sessionLogHelper')
     local realFactHelper = require('factHelper')
     env.fhBridge.createSourceFromTemplate = validatedTrackedWrite(

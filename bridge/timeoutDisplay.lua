@@ -1,10 +1,10 @@
--- Pure formatting/conversion helpers for the Session idle-timeout control (issue #34) --
--- no socket/IUP/FH dependency, so (unlike bridge.fh_lua's dialog/timer code) this is
--- testable standalone.
+-- Pure formatting/conversion helpers for the Session idle-timeout control -- no
+-- socket/IUP/FH dependency, so (unlike bridge.fh_lua's dialog/timer code) this is testable
+-- standalone.
 
 local M = {}
 
--- Issue #34's stated range for the idle-timeout spin-box control.
+-- Stated range for the idle-timeout spin-box control.
 M.MIN_MINUTES = 5
 M.MAX_MINUTES = 120
 
@@ -18,8 +18,8 @@ function M.formatSecondsRemaining(seconds)
   return string.format('%d:%02d', mins, secs)
 end
 
--- Converts the spin-box's minutes value (5-120, per issue #34) to the seconds the bridge's
--- idle-Session check compares elapsed time against.
+-- Converts the spin-box's minutes value (5-120) to the seconds the bridge's idle-Session
+-- check compares elapsed time against.
 function M.minutesToSeconds(minutes)
   return minutes * 60
 end

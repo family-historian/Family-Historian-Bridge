@@ -1,16 +1,13 @@
--- Pure session-lifecycle policy decisions extracted out of bridgeSession.lua (issue #88):
--- no socket/IUP/FH dependency, so -- like timeoutDisplay.lua -- this is testable standalone,
+-- Pure session-lifecycle policy decisions extracted out of bridgeSession.lua: no
+-- socket/IUP/FH dependency, so -- like timeoutDisplay.lua -- this is testable standalone,
 -- unlike the file it's extracted from (that file calls require("iuplua")/require("socket")
 -- at module scope, so nothing defined inside it can be required from a plain-lua test).
 --
--- Deliberately narrow: issue #88 originally proposed a full pure-state-vs-IUP-wiring split
--- mirroring ADR 0018's entry-file/bridgeSession split, but the two functions it named as
--- the actual value (stopSessionIfRunning, confirmAndStopSession) call server:close() and
--- iup.Alarm(...) directly -- genuinely I/O-coupled, not just adjacent to I/O, so a stub-based
--- split wouldn't land coverage on the parts that actually regress. What IS pure underneath
--- them is pulled out here instead: the *decisions*, as boolean/string functions over plain
--- values, leaving bridgeSession.lua to gather those values from its own widgets/sockets and
--- act on the decision. See the issue #88 closing comment for the full reasoning.
+-- Deliberately narrow: stopSessionIfRunning/confirmAndStopSession (in bridgeSession.lua)
+-- call server:close() and iup.Alarm(...) directly -- genuinely I/O-coupled, so they stay
+-- there. What's pulled out here is the *decisions* underneath them: boolean/string
+-- functions over plain values, leaving bridgeSession.lua to gather those values from its
+-- own widgets/sockets and act on the decision.
 
 local M = {}
 
@@ -30,7 +27,7 @@ function M.statusColorForMode(accessMode)
   return accessMode == "read-write" and M.STATUS_COLOR_READWRITE or M.STATUS_COLOR_READONLY
 end
 
--- Issue #34's auto-Stop rule: true once more than idleTimeoutSeconds has elapsed since
+-- Auto-Stop rule: true once more than idleTimeoutSeconds has elapsed since
 -- lastActivityTime, so a forgotten Session doesn't lock FH indefinitely. False (never
 -- auto-stops) when lastActivityTime is nil -- i.e. no Session is running yet.
 function M.shouldAutoStopForIdle(lastActivityTime, idleTimeoutSeconds, now)

@@ -5,10 +5,10 @@
 -- Two LUA forms exist:
 --   LUA <n>     -- run under the Session's own current Access mode (run_lua's own requests)
 --   LUA_RO <n>  -- force the Read-only sandbox regardless of the Session's Access mode
---                  (issue #16 — describe_project's fixed script always uses this)
+--                  (describe_project's fixed script always uses this)
 -- Both are followed by exactly n bytes: the script body, read separately by the caller.
 -- STOP takes no byte-count and carries no script body.
--- VERSION <server-version> -- issue #45: sent as its own connection ahead of every
+-- VERSION <server-version> -- sent as its own connection ahead of every
 --                             LUA/LUA_RO request, carrying the server's version so each
 --                             side can compare it against its own (see versionCompare.lua
 --                             and Claude MCP Bridge.fh_lua's VERSION handling). Carries no
@@ -43,9 +43,8 @@ function M.parse(header)
 end
 
 -- Resolves the access mode a parsed "lua" request should actually run under: a forced
--- Read-only request always wins over the Session's own current Access mode (issue #16 —
--- this is the one line that decides whether describe_project's forcing form actually
--- forces anything).
+-- Read-only request always wins over the Session's own current Access mode -- this is the
+-- one line that decides whether describe_project's forcing form actually forces anything.
 function M.resolveAccessMode(request, currentAccessMode)
   if request.forceReadOnly then
     return "read-only"
