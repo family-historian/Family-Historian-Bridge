@@ -32,17 +32,8 @@ Contract (what/params/returns) + load-bearing gotchas only. Drop bare issue-numb
 
 ## 🛠️ MCP Tool Requirements (MANDATORY)
 
-This project utilizes custom Model Context Protocol (MCP) tooling. You MUST prioritize these specific semantic tools before using any fallback shell commands:
-
-### 1. Code Intelligence & Discovery (Serena)
-* **Rule:** NEVER run broad `grep`, `ripgrep`, or full-file reads to explore the codebase or search for components.
-* **Action:** You must use **Serena**'s LSP tools (`find_symbol`, `get_symbols_overview`, `find_referencing_symbols`) to structurally navigate variables, classes, and language server types.
-* **Context:** Persistent context memories are tracked locally in `.serena/memories/`. Use Serena's `read_memory` or structural editing capabilities over manual regex search-and-replace text blocks.
-
-### 2. Impact Tracing & PR Reviews (code-review-graph)
-* **Rule:** Do not guess the blast-radius of code changes or parse standard text trees manually to write reviews.
-* **Action:** ALWAYS utilize `code-review-graph` MCP tools before planning structural refactors or validating code changes. 
-* **Task:** Query the local SQLite database to trace callers, graph dependents, map execution flows, and explicitly surface test-coverage gaps before code commits.
+- **Serena**: use its LSP tools (`find_symbol`, `get_symbols_overview`, `find_referencing_symbols`) over grep/ripgrep/full-file reads for codebase exploration. `.serena/memories/` holds persistent context — use `read_memory`, not manual search-replace.
+- **code-review-graph**: use its MCP tools before planning refactors or validating changes — trace callers, graph dependents, map execution flows, surface test-coverage gaps. Don't guess blast radius or hand-parse trees.
 
 ## File Handling Rules
 - **changelog.md**: Do not read or pull the existing contents of `changelog.md` into your active context or reasoning. Treat it as a write-only file. Only open or write to `changelog.md` when you need to append a new entry for changes you have just completed.
