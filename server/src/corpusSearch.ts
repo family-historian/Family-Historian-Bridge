@@ -99,6 +99,7 @@ export function searchEntries<T extends SearchableEntry>(
       scored.push({ entry, rank: 2 });
     }
   }
+  scored.sort((a, b) => a.rank - b.rank);
 
   let matches = scored;
   if (matches.length === 0) {

@@ -168,6 +168,32 @@ describe("searchEntries", () => {
     expect(results[0]?.entry.title).toBe("The Map Window");
   });
 
+  it("sorts a titled match ahead of an earlier body-only match, regardless of raw corpus order", () => {
+    // The titled entry is deliberately placed after the body-only and breadcrumb-only
+    // entries in raw corpus order, so this only passes if `scored` is actually sorted
+    // by rank before truncating to `limit`.
+    const rankOrderCorpus: SearchableEntry[] = [
+      entry({
+        title: "Unrelated Topic",
+        breadcrumb: ["Unrelated"],
+        text: "This page mentions sourcing only in passing, as an aside.",
+      }),
+      entry({
+        title: "Another Unrelated Topic",
+        breadcrumb: ["How to...", "Sourcing Basics"],
+        text: "This page doesn't discuss the term itself.",
+      }),
+      entry({
+        title: "Sourcing Records",
+        breadcrumb: ["How to...", "Sourcing Records"],
+        text: "This page explains sourcing records.",
+      }),
+    ];
+
+    const results = searchEntries(rankOrderCorpus, "sourcing", 1);
+    expect(results[0]?.entry.title).toBe("Sourcing Records");
+  });
+
   it("ranks a breadcrumb substring match above a body-only substring match", () => {
     const results = searchEntries(corpus, "merging duplicate", 5);
     expect(results[0]?.entry.title).toBe("Merging Duplicate People");
