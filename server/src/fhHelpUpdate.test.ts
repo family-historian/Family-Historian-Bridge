@@ -162,6 +162,48 @@ describe("checkFhHelpUpdates", () => {
     expect(result.message).toContain("connection reset");
   });
 
+  it("reports 'error' without throwing when the 200 body is malformed (non-JSON) content", async () => {
+    let anythingWritten = false;
+    const deps = fakeDeps({
+      fetchCorpus: async () => ({ status: 200, body: "<html>502 Bad Gateway</html>" }),
+      writeCorpusFile: async () => {
+        anythingWritten = true;
+      },
+      writeMeta: async () => {
+        anythingWritten = true;
+      },
+    });
+
+    const result = await checkFhHelpUpdates(
+      { sourceUrl: "https://example.com/corpus.jsonl", currentCorpus: [] },
+      deps,
+    );
+
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("unreachable");
+    expect(result.message).toContain("Malformed corpus");
+    expect(anythingWritten).toBe(false);
+  });
+
+  it("reports 'error' distinctly (not 'Malformed corpus') when writeCorpusFile fails on well-formed content", async () => {
+    const deps = fakeDeps({
+      fetchCorpus: async () => ({ status: 200, body: ONE_TOPIC_JSONL }),
+      writeCorpusFile: async () => {
+        throw new Error("ENOSPC: no space left on device");
+      },
+    });
+
+    const result = await checkFhHelpUpdates(
+      { sourceUrl: "https://example.com/corpus.jsonl", currentCorpus: [] },
+      deps,
+    );
+
+    expect(result.status).toBe("error");
+    if (result.status !== "error") throw new Error("unreachable");
+    expect(result.message).not.toContain("Malformed corpus");
+    expect(result.message).toContain("ENOSPC");
+  });
+
   it("reports 'error' on an unexpected HTTP status without writing anything", async () => {
     let anythingWritten = false;
     const deps = fakeDeps({

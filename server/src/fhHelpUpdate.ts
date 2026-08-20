@@ -93,8 +93,21 @@ export async function checkFhHelpUpdates(
     };
   }
 
-  const newCorpus = parseCorpus(response.body);
-  await deps.writeCorpusFile(response.body);
+  let newCorpus: FhHelpTopic[];
+  try {
+    newCorpus = parseCorpus(response.body);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { status: "error", message: `Malformed corpus from ${params.sourceUrl}: ${message}` };
+  }
+
+  try {
+    await deps.writeCorpusFile(response.body);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { status: "error", message: `Could not write corpus file: ${message}` };
+  }
+
   await deps.writeMeta({
     etag: response.etag,
     lastModified: response.lastModified,
