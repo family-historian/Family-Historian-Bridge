@@ -138,7 +138,9 @@ Create `fh-mcp-bridge-vX.Y.Z/` containing:
   undercounted it until caught while packaging 0.6.0). **Excludes** `server/src/` and
   `server/node_modules/` — the zip ships runtime deps only, installed fresh by the end
   user (step 8 below), not the dev/build toolchain.
-- `docs/user-guide.md`
+- `docs/user-guide.md` — keeps the `docs/` subfolder in the zip (i.e. lands at
+  `fh-mcp-bridge-vX.Y.Z/docs/user-guide.md`), matching `INSTALL.txt`'s own
+  `docs/user-guide.md` reference below.
 - `README.md` — the FH8-generalized copy from step 5, if this is a public release.
 - `INSTALL.txt` — a short file, not committed to the repo, written fresh each time. The
   wording was identical release-to-release through 0.3.0 (before the Bridge was bundled
