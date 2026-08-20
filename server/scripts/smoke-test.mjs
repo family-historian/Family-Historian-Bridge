@@ -23,9 +23,16 @@ console.log(
   tools.tools.map((t) => t.name),
 );
 
+// fh-help's ResourceTemplate is registered with {list: undefined} on purpose (avoids an
+// unpaginated resources/list response over ~1000 topics), so listResources() is expected
+// to come back empty here — this asserts that deliberate behavior, not a real listing.
 const resources = await client.listResources();
-console.log(`FH help resources listed: ${resources.resources.length}`);
-console.log("First resource:", resources.resources[0]);
+if (resources.resources.length !== 0) {
+  throw new Error(
+    `Expected listResources() to be empty (fh-help opts out via {list: undefined}), got ${resources.resources.length}`,
+  );
+}
+console.log("FH help resources list is empty, as expected.");
 
 const searchResult = await client.callTool({
   name: "search_fh_help",
@@ -33,12 +40,21 @@ const searchResult = await client.callTool({
 });
 console.log("search_fh_help result:", searchResult.content[0].text);
 
-const [firstMatch] = JSON.parse(searchResult.content[0].text);
+// search_fh_help returns a plain-English "No match" string (not JSON) when nothing matches,
+// so guard the parse rather than assume a hit.
+let firstMatch;
+try {
+  [firstMatch] = JSON.parse(searchResult.content[0].text);
+} catch {
+  firstMatch = undefined;
+}
 if (firstMatch) {
   const page = await client.readResource({ uri: firstMatch.uri });
   console.log(
     `Read resource ${firstMatch.uri}: ${page.contents[0].text.length} chars`,
   );
+} else {
+  console.log('No match for "merge" — skipping resource read.');
 }
 
 const result = await client.callTool({
