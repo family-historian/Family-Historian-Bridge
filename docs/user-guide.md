@@ -110,6 +110,12 @@ restart Claude Desktop) after adding the config, not before.
    - Pick **Read-only** (Claude can only look things up) or **Read-write** (Claude can
      also create, edit, and delete records). This choice holds for the whole Session;
      Stop and Start again to change it.
+   - Set **Minutes:** to how long the Session should stay open with no activity before it
+     auto-Stops (see step 4 below). Defaults to 5; change it before clicking Start, it's
+     locked for the rest of the Session.
+   - Optionally tick **Debug logging** (off by default) to have every `run_lua` script and
+     its result written to a plain-text log file for this Session, useful if you need to
+     see exactly what Claude ran (see [Troubleshooting](#troubleshooting)).
    - Click **Start**. The dialog shows "Listening..." and FH's main window locks. This is
      expected.
 2. **Ask Claude your question**, in plain English, in your normal conversation. No fixed
@@ -130,8 +136,8 @@ restart Claude Desktop) after adding the config, not before.
 3. If your question is genuinely ambiguous (an unclear place-name spelling, an unspecified
    number of generations), Claude will ask you to clarify rather than guess.
 4. **Click Stop** when you're done to get FH back. If you forget, the Session
-   auto-Stops after 5 minutes of no activity, and the dialog returns to "Not listening."
-   automatically.
+   auto-Stops after the **Minutes:** timeout (5 by default) of no activity, and the dialog
+   returns to "Not listening." automatically.
 
 ## What it can do right now
 
@@ -166,6 +172,13 @@ writes. Nothing here bypasses FH's own undo: Ctrl-Z always reverts the last chan
 automatically undoes a script's changes if it errors partway through (see CONTEXT.md "FH
 auto-undo"). `describe_project`'s built-in project census always runs Read-only, even
 during a Read-write Session; it never needs write access, so it doesn't get it.
+
+Every write in a Read-write Session is also logged automatically. The first write of a
+Session creates one Research Note in your tree with a `Title:`/`Type: mcp-log`/`Status:
+closed`/`Date:` header, and each write after that (in the same or a later Session) adds a
+bulleted entry with a link to the record it touched. This is built in, not optional, so
+you can always see what Claude changed and when, and target these notes with a Smart
+Folder later if you want to review or clean them up.
 
 Getting a standalone plugin written for you (see below) is separate from either mode;
 it's not bound by the Session's Access mode at all.
@@ -217,8 +230,8 @@ Tell Claude which kind you want, a **Report** plugin (shows in FH's Report Windo
 **"No FH Bridge Session is running"**: click Start in the Claude MCP Bridge dialog. Claude can't
 start a Session itself; there's no way around clicking Start yourself.
 
-**Session ended on its own**: either you clicked Stop, or 5 minutes passed with no
-question sent (the idle auto-Stop). Just click Start again.
+**Session ended on its own**: either you clicked Stop, or the **Minutes:** idle timeout
+(5 by default) passed with no question sent. Just click Start again.
 
 **Bridge won't Start / "Failed to bind port 8734"**: something else already has port 8734
 open, most likely an earlier copy of the plugin still running in FH's Plugin Editor. Close
@@ -227,7 +240,15 @@ any other running instance and try again.
 **Claude's answer looks wrong**: Claude runs a fresh Lua script per question, so an
 unusual question can occasionally expose a scripting bug rather than a data problem. Ask
 it to double-check or explain how it got the number; it has full context on the script it
-just ran.
+just ran. For a harder case, Stop the Session, tick **Debug logging**, Start again, and
+reproduce the question. Every `run_lua` script and its result gets written to a
+plain-text log file under your project's public folder for the rest of that Session.
+
+**`run_lua` never shows up in Claude Desktop, and step 4's config file looks correct**:
+newer Claude Desktop builds (the unified/MSIX-packaged version, not the older Squirrel
+one) don't read `claude_desktop_config.json` at all, so hand-editing it does nothing on
+those builds. There's no supported workaround yet if you're on one of these; this is a
+known gap, not something you're doing wrong.
 
 ## Privacy and security notes
 
