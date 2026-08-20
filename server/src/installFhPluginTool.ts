@@ -54,7 +54,7 @@ async function resolvePluginsFolder(
   } catch (err) {
     if (err instanceof BridgeConnectionRefusedError) {
       if (explicitPath) {
-        return { path: explicitPath, versionNote: null };
+        return { path: explicitPath, versionNote };
       }
       return {
         errorResult: textResult(
@@ -119,8 +119,13 @@ function sanitizeFilenameBase(title: string): string {
   return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
 }
 
+function stripVersionSuffix(title: string): string {
+  return title.replace(/ V\d+$/, "");
+}
+
 function nextVersionNumber(existingNames: string[], base: string): number {
-  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const strippedBase = stripVersionSuffix(base);
+  const escapedBase = strippedBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`^${escapedBase} V(\\d+)\\.fh_lua$`);
   let max = 0;
   for (const name of existingNames) {
@@ -151,7 +156,7 @@ export async function handleInstallFhPlugin(
       true,
     );
   }
-  const originalTitle = titleMatch[1];
+  const originalTitle = stripVersionSuffix(titleMatch[1]);
 
   const resolved = await resolvePluginsFolder(deps, input.path);
   if ("errorResult" in resolved) {

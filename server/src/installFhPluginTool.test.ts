@@ -193,6 +193,25 @@ describe("handleInstallFhPlugin — versioning and write behaviour", () => {
     expect(writtenPath).toContain("Surname Census V3.fh_lua");
   });
 
+  it("bumps correctly when the supplied title already carries a V<N> suffix (issue #126)", async () => {
+    const source = PLUGIN_SOURCE.replace("@Title: Surname Census", "@Title: Surname Census V1");
+    let writtenPath: string | undefined;
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: source },
+      makeDeps({
+        readdir: async () => ["Surname Census V1.fh_lua"],
+        writeFile: async (filePath, content) => {
+          writtenPath = filePath;
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenPath).toContain("Surname Census V2.fh_lua");
+    expect(writtenContent).toMatch(/^@Title: Surname Census V2$/m);
+  });
+
   it("sanitizes characters invalid in a Windows filename out of the title", async () => {
     const source = PLUGIN_SOURCE.replace("@Title: Surname Census", '@Title: Surnames: A "Census"?');
     let writtenPath: string | undefined;
@@ -359,6 +378,22 @@ describe("handleInstallFhPlugin version check (issue #45)", () => {
 
     expect(result.isError).toBeFalsy();
     expect(writtenPath).toBe("C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugins\\Surname Census V1.fh_lua");
+  });
+
+  it("preserves an already-computed version-mismatch note on the explicit-path fallback when the folder lookup then fails to connect (issue #126)", async () => {
+    const result = await handleInstallFhPlugin(
+      { pluginSource: PLUGIN_SOURCE, path: "C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugins" },
+      makeDeps({
+        queryBridgeVersion: async () => JSON.stringify({ version: `${SERVER_VERSION}-does-not-match` }),
+        runLuaOnBridge: async () => {
+          throw new BridgeConnectionRefusedError();
+        },
+      }),
+    );
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { text: string }).text;
+    expect(text.toLowerCase()).toContain("note");
   });
 
   it("still surfaces the folder lookup's own tailored no-Session error when the version check also can't connect and no path was given", async () => {
