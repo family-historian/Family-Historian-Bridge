@@ -17,7 +17,7 @@ Instead, the MCP server exposes a single tool, `run_lua(script)`: Claude authors
 Lua script per question and the bridge executes it directly inside FH's process via
 `load()`. This trades a priori bounded safety (a fixed command set can only ever do what
 was explicitly implemented) for flexibility (any query FH's Lua API can answer is
-reachable without a protocol change) — accepted because the code executes with the same
+reachable without a protocol change), accepted because the code executes with the same
 trust level as any plugin the user would run themselves, and because the resulting risks
 (unsandboxed stdlib access, runaway scripts) are separately mitigated by an allowlist
 `_ENV` sandbox and an execution-instruction watchdog, rather than by constraining what a
@@ -26,9 +26,9 @@ script is allowed to *ask for* in the first place.
 ## Consequences
 
 - Adding a new kind of question is a prompting concern (Claude writes different Lua), not
-  a protocol or bridge-code change — the whole point of this ADR.
+  a protocol or bridge-code change, the whole point of this ADR.
 - The sandbox (allowlist `_ENV`) and watchdog (`debug.sethook` instruction limit) are load-
-  bearing safety mechanisms, not optional hardening — removing either reopens the risk
+  bearing safety mechanisms, not optional hardening, removing either reopens the risk
   this ADR explicitly accepted in exchange for flexibility.
 - Read-only vs read-write access is enforced per-session (at Start) by what's in the
-  allowlist, not per-script — a script cannot request elevated access mid-session.
+  allowlist, not per-script, a script cannot request elevated access mid-session.

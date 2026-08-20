@@ -21,7 +21,7 @@ Decisions:
    call is cheap; simpler than tracking file offsets or opening/closing a handle per call.
 3. **A write failure disables the rest of that Session's logging, not just the failed
    call.** If the initial folder-create or header write fails, `Session.enabled` is never
-   set true — logging silently never starts for that Session. If a later `logRunLua` write
+   set true; logging silently never starts for that Session. If a later `logRunLua` write
    fails, the in-memory `content` is left un-advanced by that entry but the session stays
    enabled and retries on the next call, matching the issue's "any write failure is silent
    and non-blocking; `run_lua` must always execute and return normally" requirement.
