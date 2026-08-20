@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.16.0
+
 ### New fhBridge.createFact helper (issue #113)
 - New `bridge/factHelper.lua`, wired read-write-only: `fhBridge.createFact(ptrRecord, sTag,
   sPlace, dtDate, sAddress, sValue, sAge)` creates a Fact on an `INDI`/`FAM` record via
@@ -21,6 +23,55 @@
   `resolveDate` replaces `sourceHelper.lua`'s own local `toDate` (used by
   `createSourceFromTemplate`'s Date-typed template fields and `citeSource`'s `EntryDate`),
   which gains the same string support, behavior-preserving for its existing inputs.
+
+### New debug logging mode for run_lua Sessions (issue #122)
+- Off-by-default checkbox alongside Access mode in the Session dialog. When on, every
+  `run_lua` script and result is logged to a plain-text file under the project's public
+  folder for that Session's lifetime, entirely outside `runScript.lua`'s sandbox.
+  `describe_project`/`install_fh_plugin`'s fixed scripts are excluded. New
+  `bridge/debugLog.lua` module (`docs/adr/0033`). Fix: `M.start` now creates the project's
+  public folder itself first if missing (it's only created on demand by FH), not just the
+  `debug` subfolder — without this, logging silently stayed disabled on a fresh project.
+
+### logActivity fixes (issues #114, #117)
+- `ptrRecord` now accepts a qualified id string (e.g. `"I219"`), not just a live Item
+  Pointer, matching `createFact`'s existing pattern — was the one write-capable `fhBridge`
+  helper that didn't already resolve one.
+- A Fact or other sub-item pointer passed as `ptrRecord` is now silently climbed to its
+  owning record (`ptr:MoveToRecordItem(ptr)`) instead of erroring, reversing ADR 0027's
+  addendum. Live-caught: that rejection could land on the last call of a multi-step write
+  and, via the write-then-log rollback invariant, undo everything already written for what
+  was really just a targeting mistake (`docs/adr/0031`). Known limitation, deferred: a
+  Shared Fact's `_SHAR`/`_SHAN` witness item climbs to the fact's principal, not the
+  witness.
+
+### Fix live-caught dtDate/sPlace positional mismatch in fhBridge.createFact
+- `validateCreateFact`'s parameter positions didn't match `createFact`'s real call
+  signature, so `sandbox.lua`'s wrapper (which forwards raw positional args) bound `sPlace`'s
+  value to `dtDate` — e.g. `fhBridge.createFact(p, "CENS", "Newtown", "1905")` validated
+  `"Newtown"` as the date and silently dropped `"1905"`. No existing test caught this since
+  every one called either `createFact` or `validateCreateFact` directly rather than
+  simulating the wrapper's raw forwarding.
+
+### install_fh_plugin version-bump fixes (issues #126, #128, #129)
+- Fixed a title genuinely ending in `V<N>` (e.g. `"Fifth Generation V2"`) being mangled by
+  version-bump stripping meant only for a previously-installed plugin's own suffix.
+  `stripVersionSuffix` is no longer applied to the incoming title, only to matching against
+  existing installed filenames.
+- Fixed the explicit-`path` fallback losing an already-computed version-mismatch note when
+  the Plugins-folder lookup itself then failed to connect.
+- `server/scripts/smoke-test.mjs` now checks for `search_fh_help`'s literal "No match for"
+  response instead of a catch-all `JSON.parse` try/catch, so a genuinely malformed response
+  fails the script instead of silently reading as "no match".
+
+### Other fixes
+- `searchEntries` (FH help search) now sorts matches by rank before truncating to the
+  requested limit, so raw corpus order can no longer bury a titled match behind an
+  incidental body-text hit (issue #123).
+- `checkFhHelpUpdates` now catches `parseCorpus` and `writeCorpusFile` errors separately —
+  a malformed 200 response (e.g. an HTML error page) previously threw unhandled instead of
+  resolving to the error shape callers expect, and a write failure is no longer mislabeled
+  as a corpus parsing failure (issue #124).
 
 ## 0.15.0
 
@@ -1115,9 +1166,3 @@
 First packaged release. Bridge plugin + MCP server (`run_lua`,
 `describe_project`, FH help search/update-check), sandboxed script
 execution, Session Access-mode selector and idle-timeout auto-Stop.
-
-## 2026-08-19
-- Added debug logging mode (issue #122): an off-by-default checkbox alongside Access mode
-  in the Session dialog, recording every `run_lua` script and result to a plain-text log
-  under the project's public folder for that Session's lifetime. New `bridge/debugLog.lua`
-  module; see ADR 0033 for the file-write design.
