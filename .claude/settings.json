@@ -1,4 +1,8 @@
 {
+  "enabledPlugins": {
+    "obsidian-cli@obsidian-cli-skill": false,
+    "understand-anything@understand-anything": false
+  },
   "hooks": {
     "PostToolUse": [
       {
