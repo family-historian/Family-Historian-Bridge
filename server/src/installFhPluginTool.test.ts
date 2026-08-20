@@ -212,6 +212,44 @@ describe("handleInstallFhPlugin — versioning and write behaviour", () => {
     expect(writtenContent).toMatch(/^@Title: Surname Census V2$/m);
   });
 
+  it("does not mangle a title that genuinely ends in \"V<N>\" when no prior install exists (issue #128)", async () => {
+    const source = PLUGIN_SOURCE.replace("@Title: Surname Census", "@Title: Fifth Generation V2");
+    let writtenPath: string | undefined;
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: source },
+      makeDeps({
+        readdir: async () => [],
+        writeFile: async (filePath, content) => {
+          writtenPath = filePath;
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenPath).toContain("Fifth Generation V2 V1.fh_lua");
+    expect(writtenContent).toMatch(/^@Title: Fifth Generation V2 V1$/m);
+  });
+
+  it("still increments cleanly when the supplied title's own V<N> is ahead of what's on disk", async () => {
+    const source = PLUGIN_SOURCE.replace("@Title: Surname Census", "@Title: Surname Census V3");
+    let writtenPath: string | undefined;
+    let writtenContent: string | undefined;
+    await handleInstallFhPlugin(
+      { pluginSource: source },
+      makeDeps({
+        readdir: async () => ["Surname Census V1.fh_lua"],
+        writeFile: async (filePath, content) => {
+          writtenPath = filePath;
+          writtenContent = content;
+        },
+      }),
+    );
+
+    expect(writtenPath).toContain("Surname Census V2.fh_lua");
+    expect(writtenContent).toMatch(/^@Title: Surname Census V2$/m);
+  });
+
   it("sanitizes characters invalid in a Windows filename out of the title", async () => {
     const source = PLUGIN_SOURCE.replace("@Title: Surname Census", '@Title: Surnames: A "Census"?');
     let writtenPath: string | undefined;

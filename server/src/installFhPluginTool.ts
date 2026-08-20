@@ -119,13 +119,8 @@ function sanitizeFilenameBase(title: string): string {
   return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
 }
 
-function stripVersionSuffix(title: string): string {
-  return title.replace(/ V\d+$/, "");
-}
-
 function nextVersionNumber(existingNames: string[], base: string): number {
-  const strippedBase = stripVersionSuffix(base);
-  const escapedBase = strippedBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`^${escapedBase} V(\\d+)\\.fh_lua$`);
   let max = 0;
   for (const name of existingNames) {
@@ -135,6 +130,20 @@ function nextVersionNumber(existingNames: string[], base: string): number {
     }
   }
   return max + 1;
+}
+
+// A trailing " V<N>" is only treated as a prior install's version suffix — and stripped
+// back off before recomputing the next version — when the folder already holds at least
+// one versioned file for the stripped base. A pattern match alone can't tell a real
+// version suffix from a title that just happens to end that way, so an empty/unrelated
+// folder listing leaves the title untouched rather than discarding its "V<N>".
+function stripVersionSuffix(title: string, existingNames: string[]): string {
+  const match = title.match(/^(.*) V\d+$/);
+  if (!match) {
+    return title;
+  }
+  const strippedBase = sanitizeFilenameBase(match[1]);
+  return nextVersionNumber(existingNames, strippedBase) > 1 ? match[1] : title;
 }
 
 function appendVersionToTitle(source: string, version: number, originalTitle: string): string {
@@ -156,8 +165,6 @@ export async function handleInstallFhPlugin(
       true,
     );
   }
-  const originalTitle = stripVersionSuffix(titleMatch[1]);
-
   const resolved = await resolvePluginsFolder(deps, input.path);
   if ("errorResult" in resolved) {
     return resolved.errorResult;
@@ -171,6 +178,7 @@ export async function handleInstallFhPlugin(
     return textResult(`Could not read the Plugins folder at ${resolved.path}: ${message}`, true);
   }
 
+  const originalTitle = stripVersionSuffix(titleMatch[1], existingNames);
   const base = sanitizeFilenameBase(originalTitle);
   const version = nextVersionNumber(existingNames, base);
   const filename = `${base} V${version}.fh_lua`;

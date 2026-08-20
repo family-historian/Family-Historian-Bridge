@@ -40,13 +40,15 @@ const searchResult = await client.callTool({
 });
 console.log("search_fh_help result:", searchResult.content[0].text);
 
-// search_fh_help returns a plain-English "No match" string (not JSON) when nothing matches,
-// so guard the parse rather than assume a hit.
+// search_fh_help returns a plain-English "No match for ..." string (not JSON) when nothing
+// matches — checked for explicitly, not via a catch-all JSON.parse try/catch, so a real
+// malformed-response regression still fails this script instead of reading as "no match".
+const searchText = searchResult.content[0].text;
 let firstMatch;
-try {
-  [firstMatch] = JSON.parse(searchResult.content[0].text);
-} catch {
+if (searchText.startsWith("No match for")) {
   firstMatch = undefined;
+} else {
+  [firstMatch] = JSON.parse(searchText);
 }
 if (firstMatch) {
   const page = await client.readResource({ uri: firstMatch.uri });
