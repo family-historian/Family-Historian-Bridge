@@ -114,6 +114,16 @@ bundler discovers them, so there's no list to keep current — see
 docs/adr/0009-bundle-bridge-plugin-for-install.md). Ship that one file, not the loose
 sources.
 
+Also spot-check `server/` for complex, under-tested functions:
+
+```bash
+cd server
+npx @sebassdc/crap4ts
+cd ..
+```
+Informational only — no pass/fail gate, just eyeball the CRAP report for anything both high-CC
+and low-coverage before shipping.
+
 Then build the `.mcpb` bundle, which is a released asset:
 
 ```bash
