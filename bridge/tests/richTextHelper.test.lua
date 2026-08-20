@@ -10,21 +10,10 @@
 -- against Family Historian Sample Project 8 (2026-08-15 grilling session, issue #107).
 
 package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
+  .. ';' .. arg[0]:match("(.*[/\\])") .. '?.lua'
 
-local failures = 0
-
-local function check(condition, label)
-  if condition then
-    print(string.format('PASS %s', label))
-  else
-    failures = failures + 1
-    print(string.format('FAIL %s', label))
-  end
-end
-
-local function contains(haystack, needle)
-  return type(haystack) == 'string' and haystack:find(needle, 1, true) ~= nil
-end
+local t = require('testHelpers').new()
+local check, contains = t.check, t.contains
 
 ------------------------------------------------------------------
 -- Fake pointer: identified by name; IsNull()/IsNotNull() driven by an explicit flag so a
@@ -364,10 +353,4 @@ check(okWriteFail == false, 'setTftfText raises when fhSetValueAsRichText itself
 check(contains(errWriteFail, 'setTftfText'), 'the failure names the function')
 check(contains(errWriteFail, 'field-write-failure'), 'the failure names the target field (via fhGetTag)')
 
-if failures > 0 then
-  print(string.format('\n%d assertion(s) failed', failures))
-  os.exit(1)
-else
-  print('\nAll assertions passed')
-  os.exit(0)
-end
+t.report()

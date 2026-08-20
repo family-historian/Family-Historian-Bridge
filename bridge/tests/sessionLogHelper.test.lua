@@ -7,21 +7,10 @@
 -- directly since sessionLogHelper.lua only ever creates records, never walks existing ones.
 
 package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
+  .. ';' .. arg[0]:match("(.*[/\\])") .. '?.lua'
 
-local failures = 0
-
-local function check(condition, label)
-  if condition then
-    print(string.format('PASS %s', label))
-  else
-    failures = failures + 1
-    print(string.format('FAIL %s', label))
-  end
-end
-
-local function contains(haystack, needle)
-  return type(haystack) == 'string' and haystack:find(needle, 1, true) ~= nil
-end
+local t = require('testHelpers').new()
+local check, contains = t.check, t.contains
 
 ------------------------------------------------------------------
 -- Fake tree: records grouped by tag, each node a plain table with { tag, id }.
@@ -613,10 +602,4 @@ local okSave, errSave = pcall(writeCheckSessionLogHelper.logActivity, indiWriteC
 check(okSave == false, 'logActivity raises when the entry save (fhSetValueAsRichText) fails')
 check(contains(errSave, "logActivity"), 'the save-failure error names the function')
 
-if failures > 0 then
-  print(string.format('\n%d assertion(s) failed', failures))
-  os.exit(1)
-else
-  print('\nAll assertions passed')
-  os.exit(0)
-end
+t.report()

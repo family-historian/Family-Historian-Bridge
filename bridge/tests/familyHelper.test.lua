@@ -15,21 +15,10 @@
 -- MoveNext must actually honor "SAME_TAG" vs the default "ANY", not just advance an index.
 
 package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
+  .. ';' .. arg[0]:match("(.*[/\\])") .. '?.lua'
 
-local failures = 0
-
-local function check(condition, label)
-  if condition then
-    print(string.format('PASS %s', label))
-  else
-    failures = failures + 1
-    print(string.format('FAIL %s', label))
-  end
-end
-
-local function contains(haystack, needle)
-  return type(haystack) == 'string' and haystack:find(needle, 1, true) ~= nil
-end
+local t = require('testHelpers').new()
+local check, contains = t.check, t.contains
 
 ------------------------------------------------------------------
 -- Fake tree: records grouped by tag, each node a plain table:
@@ -1124,10 +1113,4 @@ do
 end
 
 
-if failures > 0 then
-  print(string.format('\n%d assertion(s) failed', failures))
-  os.exit(1)
-else
-  print('\nAll assertions passed')
-  os.exit(0)
-end
+t.report()
