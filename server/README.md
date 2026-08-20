@@ -14,6 +14,15 @@ implements.
   Resource per help topic, served from `data/fh-help-corpus.jsonl`.
 - `src/fhHelpUpdate.ts`: `check_fh_help_updates`, the one tool that reaches the network.
   Fetches a fresh corpus from family-historian.co.uk if one exists, explicit-trigger only.
+- `src/describeProjectTool.ts`: the `describe_project` tool. Runs a fixed, read-only script
+  against the Bridge (forces `forceReadOnly` regardless of the Session's own Access mode).
+- `src/authorFhPluginTool.ts`: the `author_fh_plugin` tool. Scaffolds a standalone Report or
+  Query plugin as text for the user to save and install themselves — never executed by the
+  Bridge.
+- `src/installFhPluginTool.ts`: the `install_fh_plugin` tool. Stages a plugin file into FH's
+  Plugins folder via the Bridge's app-data-folder lookup, then a write.
+- `src/gedcomKnowledge.ts`: the `search_gedcom_knowledge` tool. Searches the bundled GEDCOM
+  domain-knowledge corpus (distinct from the FH8 help corpus).
 - `src/index.ts`: entry point. Registers the tools/resources and connects over stdio.
 - `data/fh-help-corpus.jsonl`: bundled copy of the FH8 help corpus (built by the sibling
   `fh-help/fh8-help-site` project). `data/fh-help-corpus.meta.json` (gitignored) tracks
