@@ -32,7 +32,7 @@ Contract (what/params/returns) + load-bearing gotchas only. Drop bare issue-numb
 
 ## 🛠️ MCP Tool Requirements (MANDATORY)
 
-- **Serena**: use its LSP tools (`find_symbol`, `get_symbols_overview`, `find_referencing_symbols`) over grep/ripgrep/full-file reads for codebase exploration. `.serena/memories/` holds persistent context — use `read_memory`, not manual search-replace.
+- **Serena**: use its LSP tools (`find_symbol`, `get_symbols_overview`, `find_referencing_symbols`) over grep/ripgrep/full-file reads for codebase exploration. Active language servers for this project: typescript, lua, bash, markdown, json, yaml — this covers `bridge/` (Lua) and `server/` (TypeScript) both; don't assume Lua lacks LSP coverage here. `.serena/memories/` holds persistent context — use `read_memory`, not manual search-replace.
 - **code-review-graph**: use its MCP tools before planning refactors or validating changes — trace callers, graph dependents, map execution flows, surface test-coverage gaps. Don't guess blast radius or hand-parse trees.
 
 ## File Handling Rules
