@@ -27,13 +27,13 @@ one script-built artifact that has been released. Decide deliberately which arti
 release is publishing rather than assuming; if it's just the zip and the `.mcpb`, you only
 need `build-dxt.mjs`, not the full platform scripts.
 
-**Step 9 (create the Forgejo release + upload the assets) is mandatory for every release,
+**Step 10 (create the Forgejo release + upload the assets) is mandatory for every release,
 not an optional extra.** A version bump/tag with no matching Forgejo release is an
 incomplete release — don't stop at step 8. (0.9.0 shipped this way once, caught and fixed
 after the fact; see CHANGELOG/git history around 2026-08-07.)
 
 See `docs/agents/issue-tracker.md` for the Forgejo API base URL and `FORGEJO_TOKEN` auth
-used in step 9.
+used in step 10.
 
 ## 1. Finish the CHANGELOG's `Unreleased` section
 
@@ -194,7 +194,25 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-## 9. Create the Forgejo release and upload the assets (required — do not skip)
+## 9. Update the GitHub mirror's `release` branch
+
+The public GitHub mirror (`family-historian/family-historian-bridge`, tracked at issue
+#132) syncs a separate `release` branch, cut only at release time — not `main` tracked
+commit-by-commit, so day-to-day dev churn and internal-only docs (e.g. LAN addresses in
+`docs/agents/issue-tracker.md`) stay off GitHub. Force the branch to the tag just pushed;
+Forgejo's push mirror (Branch Filter: `release`) carries it over automatically on its next
+sync:
+
+```bash
+git branch -f release vX.Y.Z
+git push origin release --force
+```
+
+**Skip this step until the push mirror is actually set up** (blocked on FH8 GA per #132 —
+as of this writing only the LICENSE/privacy.md prep is done; the mirror itself isn't
+configured yet).
+
+## 10. Create the Forgejo release and upload the assets (required — do not skip)
 
 ```bash
 source ~/.zshrc   # FORGEJO_TOKEN
@@ -270,12 +288,12 @@ platform installer/zip from `installer/output/` too if this release is publishin
   pointing at this if one hangs, so a future recurrence fails fast instead of hanging
   silently — but the underlying version mismatch is still worth fixing at the source
   wherever it's found, not just relying on the timeout to catch it after the fact.
-- **Step 9's release-body extraction silently truncated to one subsection.** Discovered
+- **Step 10's release-body extraction silently truncated to one subsection.** Discovered
   cutting 0.13.0: `sed -n '/## X.Y.Z/,/## /p'` matches its own end pattern against every
   `### ` subsection heading, since `### ` contains `## ` as a substring — the range closed
   after the version's first subsection instead of the whole section, and nothing about the
   resulting `curl` call would have flagged a short body as wrong. Replaced with an anchored
-  `awk` (see step 9) that only matches a bare `## ` at line start. Caught by eyeballing the
+  `awk` (see step 10) that only matches a bare `## ` at line start. Caught by eyeballing the
   posted release body against the CHANGELOG before moving on — this step has no automated
   check, so the same class of silent truncation could recur with a differently-shaped
   CHANGELOG entry.
