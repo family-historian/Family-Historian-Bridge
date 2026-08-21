@@ -76,28 +76,4 @@ retention, contact): see [privacy.md](privacy.md).
 
 MIT — see [LICENSE](LICENSE).
 
-## Development
-
-Run every test suite (server via vitest, bridge via Lua, installer via `node --test`) with
-one command from the repo root:
-
-```bash
-npm test
-```
-
-There's no CI on this repo, deliberately (see issue #90). After cloning, enable the
-pre-push hook that runs the suites for you instead:
-
-```bash
-npm run setup:hooks
-```
-
-That points `core.hooksPath` at the committed `.githooks/` directory (a one-time,
-per-clone step; `.git/hooks/` isn't version controlled). The hook takes under two seconds;
-`git push --no-verify` skips it when you really mean to.
-
-- [bridge/README.md](bridge/README.md): Bridge plugin internals and manual test steps.
-- [server/README.md](server/README.md): MCP server internals, setup, and automated tests.
-- [docs/agents/domain.md](docs/agents/domain.md) and
-  [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md): agent-facing notes on
-  the domain docs and issue tracker for this repo.
+Developer docs, including running the test suites: **[docs/build.md](docs/build.md)**.

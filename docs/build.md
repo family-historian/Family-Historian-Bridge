@@ -87,6 +87,32 @@ is a known gap in the manual-config path specifically, not something you're doin
 There's no supported workaround yet for that build; if you hit it, use
 [docs/install.md](install.md)'s `.mcpb` path instead, which doesn't touch this file.
 
+## Development
+
+Run every test suite (server via vitest, bridge via Lua, installer via `node --test`) with
+one command from the repo root:
+
+```bash
+npm test
+```
+
+There's no CI on this repo, deliberately (see issue #90). After cloning, enable the
+pre-push hook that runs the suites for you instead:
+
+```bash
+npm run setup:hooks
+```
+
+That points `core.hooksPath` at the committed `.githooks/` directory (a one-time,
+per-clone step; `.git/hooks/` isn't version controlled). The hook takes under two seconds;
+`git push --no-verify` skips it when you really mean to.
+
+- [../bridge/README.md](../bridge/README.md): Bridge plugin internals and manual test steps.
+- [../server/README.md](../server/README.md): MCP server internals, setup, and automated tests.
+- [agents/domain.md](agents/domain.md) and
+  [agents/issue-tracker.md](agents/issue-tracker.md): agent-facing notes on
+  the domain docs and issue tracker for this repo.
+
 ## Next steps
 
 - [docs/user-guide.md](user-guide.md) — day-to-day usage once both halves are installed.
