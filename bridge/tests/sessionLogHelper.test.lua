@@ -166,12 +166,41 @@ fhNewRichText = newRichText
 
 local setValueCalls = {}
 fhSetValueAsRichText = function(ptr, richTextObj)
-  table.insert(setValueCalls, { node = currentNode(ptr), richText = richTextObj })
+  local ok = not forceNextWriteFailure
   if forceNextWriteFailure then
     forceNextWriteFailure = false
-    return false
   end
-  return true
+  -- Snapshots the segments seen at this exact call, rather than keeping the same mutable
+  -- richTextObj reference -- otherwise a later mutation of the caller's still-live buffer
+  -- (e.g. a subsequent, unsaved append) would silently bleed backward into what this
+  -- "already saved" call recorded, which real FH's own tree-copy-on-write semantics never
+  -- allow.
+  local snapshot = newRichText()
+  for _, seg in ipairs(richTextObj.segments) do
+    table.insert(snapshot.segments, seg)
+  end
+  table.insert(setValueCalls, { node = currentNode(ptr), richText = snapshot, ok = ok })
+  return ok
+end
+
+-- Models a fresh fetch of a node's on-disk RichText value (issue #133's
+-- recoverAfterRollback): returns a new RichText object seeded from that node's most
+-- recent *successful* fhSetValueAsRichText save (a failed save never reached disk, so it
+-- must not be resurrected by a later fetch) -- a fresh object, not the same Lua table a
+-- caller's buffer local already holds, same "independent object" contract the real fetch
+-- has.
+fhGetValueAsRichText = function(ptr)
+  local node = currentNode(ptr)
+  for i = #setValueCalls, 1, -1 do
+    if setValueCalls[i].node == node and setValueCalls[i].ok then
+      local fetched = newRichText()
+      for _, seg in ipairs(setValueCalls[i].richText.segments) do
+        table.insert(fetched.segments, seg)
+      end
+      return fetched
+    end
+  end
+  return newRichText()
 end
 
 ------------------------------------------------------------------
@@ -621,5 +650,132 @@ check(accessorSessionLogHelper.getNotePtr() ~= nil,
   'getNotePtr returns non-nil once logActivity has created this Session\'s note')
 check(currentNode(accessorSessionLogHelper.getNotePtr()).tag == '_RNOT',
   'getNotePtr returns the _RNOT record pointer itself, not its TEXT subfield')
+
+------------------------------------------------------------------
+-- M.setCommitCount (issue #133): bridge-side commit-counter plumbing.
+------------------------------------------------------------------
+
+package.loaded['sessionLogHelper'] = nil
+local commitSessionLogHelper = require('sessionLogHelper')
+
+local indiCommitA = fhCreateItem("INDI")
+commitSessionLogHelper.logActivity(indiCommitA, "created")
+local segmentsNoCount = setValueCalls[#setValueCalls].richText.segments
+check(segmentsNoCount[#segmentsNoCount].kind == 'reclink',
+  'with no commit count set, the record link is still the entry\'s last segment -- no stray count segment appended')
+
+commitSessionLogHelper.setCommitCount(1)
+local indiCommitB = fhCreateItem("INDI")
+commitSessionLogHelper.logActivity(indiCommitB, "fact added Birth")
+local segmentsWithCount = setValueCalls[#setValueCalls].richText.segments
+local countSegment = segmentsWithCount[#segmentsWithCount]
+check(countSegment.kind == 'text' and countSegment.text == ' (commit 1)' and countSegment.rich == false,
+  'once setCommitCount is called, every subsequent entry appends the running count as its own trailing segment')
+
+commitSessionLogHelper.setCommitCount(2)
+local indiCommitC = fhCreateItem("INDI")
+commitSessionLogHelper.logActivity(indiCommitC, "created")
+local segmentsWithCount2 = setValueCalls[#setValueCalls].richText.segments
+check(segmentsWithCount2[#segmentsWithCount2].text == ' (commit 2)',
+  'a later setCommitCount call updates the count subsequent entries report')
+
+------------------------------------------------------------------
+-- M.recoverAfterRollback (issue #133): resyncs cached note state with what a rollback
+-- actually left on disk, rather than unconditionally discarding it.
+------------------------------------------------------------------
+
+-- Case 1: the note record survives (it was already committed by an earlier call) --
+-- only the pending entry this call tried to append gets rolled back. Simulated here by
+-- forcing the next save to fail (standing in for a script whose write got rolled back
+-- after logActivity had already appended to the in-memory buffer but before that entry
+-- reached disk), then confirming recoverAfterRollback resyncs the buffer from the last
+-- *saved* state, discarding the failed entry, and the note itself is unchanged -- so the
+-- next logActivity call continues the SAME note rather than starting a new one.
+-- markNoteCommitted is bridgeSession.lua's own signal, not textPtr:IsNull() -- see
+-- noteConfirmed's own comment in sessionLogHelper.lua -- simulates every earlier call in
+-- this test file having actually committed successfully, which they did.
+commitSessionLogHelper.markNoteCommitted()
+
+local notePtrBeforeRollback = commitSessionLogHelper.getNotePtr()
+local rnotBeforeRollback = #(recordsByTag["_RNOT"] or {})
+
+forceNextWriteFailure = true
+local okFailedEntry = pcall(commitSessionLogHelper.logActivity, indiCommitC, "fact added Death")
+check(okFailedEntry == false, 'a save failure still raises via checkWrite, same as before recoverAfterRollback existed')
+
+commitSessionLogHelper.recoverAfterRollback()
+
+check(commitSessionLogHelper.getNotePtr() == notePtrBeforeRollback,
+  'recoverAfterRollback leaves the note pointer unchanged when the note record still resolves')
+
+local indiCommitD = fhCreateItem("INDI")
+commitSessionLogHelper.logActivity(indiCommitD, "created")
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeRollback,
+  'the next logActivity call after recoverAfterRollback creates no new _RNOT record -- it continues the same note')
+check(commitSessionLogHelper.getNotePtr() == notePtrBeforeRollback,
+  'the note is still the same record after the post-rollback logActivity call')
+
+local segmentsPostRollback = setValueCalls[#setValueCalls].richText.segments
+local deathEntryResurfaced = false
+for _, seg in ipairs(segmentsPostRollback) do
+  if seg.text and contains(seg.text, "fact added Death") then
+    deathEntryResurfaced = true
+  end
+end
+check(not deathEntryResurfaced,
+  'the failed "fact added Death" entry never resurfaces in a later save -- recoverAfterRollback discarded it, not just left it stuck at the end')
+check(segmentsPostRollback[#segmentsPostRollback].text == ' (commit 2)',
+  'recoverAfterRollback does not touch commitCount -- only bridgeSession.lua manages that')
+
+-- Case 2: no note exists yet to resync (e.g. a rollback of the very first call in a
+-- Session, before any note was even created) -- recoverAfterRollback safely no-ops, and
+-- the next logActivity call starts a fresh note exactly as a brand-new Session would.
+package.loaded['sessionLogHelper'] = nil
+local rollbackFreshSessionLogHelper = require('sessionLogHelper')
+
+rollbackFreshSessionLogHelper.recoverAfterRollback()
+check(rollbackFreshSessionLogHelper.getNotePtr() == nil,
+  'recoverAfterRollback on a Session with no note yet leaves the note pointer nil, rather than erroring')
+
+local rnotBeforeFreshRollback = #(recordsByTag["_RNOT"] or {})
+local indiCommitE = fhCreateItem("INDI")
+rollbackFreshSessionLogHelper.logActivity(indiCommitE, "created")
+check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeFreshRollback + 1,
+  'the first logActivity call after a no-op recoverAfterRollback creates a brand-new _RNOT record, same as a fresh Session')
+
+-- Case 3 (issue #133): the note record itself was created in this same not-yet-committed
+-- call, so the rollback undid the note's creation too -- NOT just Case 2's "no note ever
+-- existed". markNoteCommitted is never called here, mirroring a fresh Session's very first
+-- run_lua call failing after logActivity's first-ever entry. textPtr:IsNull() can't tell
+-- this case apart from Case 1 (see noteConfirmed's own comment), so this exercises the
+-- noteConfirmed-driven branch directly.
+package.loaded['sessionLogHelper'] = nil
+local sameCallSessionLogHelper = require('sessionLogHelper')
+
+local indiSameCall = fhCreateItem("INDI")
+forceNextWriteFailure = true
+local okSameCallEntry = pcall(sameCallSessionLogHelper.logActivity, indiSameCall, "fact added Death")
+check(okSameCallEntry == false, 'the note-creating call still raises via checkWrite when its save fails')
+
+local rnotAfterFailedCreate = #(recordsByTag["_RNOT"] or {})
+
+sameCallSessionLogHelper.recoverAfterRollback()
+check(sameCallSessionLogHelper.getNotePtr() == nil,
+  'recoverAfterRollback discards the note pointer when the note itself was created in the same uncommitted call, not just when no note ever existed')
+
+local indiSameCallNext = fhCreateItem("INDI")
+sameCallSessionLogHelper.logActivity(indiSameCallNext, "created")
+check(#(recordsByTag["_RNOT"] or {}) == rnotAfterFailedCreate + 1,
+  'the next logActivity call creates a genuinely new _RNOT record rather than reusing the rolled-back one')
+
+local segmentsSameCall = setValueCalls[#setValueCalls].richText.segments
+local deathEntryResurfacedSameCall = false
+for _, seg in ipairs(segmentsSameCall) do
+  if seg.text and contains(seg.text, "fact added Death") then
+    deathEntryResurfacedSameCall = true
+  end
+end
+check(not deathEntryResurfacedSameCall,
+  'the rolled-back note-creating entry never resurfaces in the new note')
 
 t.report()

@@ -5,6 +5,14 @@
 --
 -- accessMode defaults to "read-only" (mirroring sandbox.build()'s own default) -- M.run
 -- needs a resolved value for the pre-scan below before sandbox.build ever runs.
+--
+-- M.run returns up to three values: (response, rethrowErr, transactionResult).
+-- rethrowErr is non-nil only in the ADR-0005 fallback-of-last-resort case (see
+-- rollbackResponse below) -- bridgeSession.lua re-raises it to end the whole plugin.
+-- transactionResult is "committed" for a successful write-mode call, "rolledback" for a
+-- write-mode failure that was undone without ending the plugin, or nil (read-only calls,
+-- a write-mode call that never wrote anything, or the rethrow case above) -- see
+-- docs/INTERNAL-commit-rollback-plan.md (issue #133) for the full design.
 
 local sandbox = require('sandbox')
 local json = require('jsonEncode')
@@ -126,12 +134,34 @@ local function dataReferenceViolation(scriptText)
   return table.concat(messages, '; ')
 end
 
--- Shared shape for a write-mode response that FH's own auto-undo should act on: a JSON
--- error carrying writeSessionRolledBack: true, plus the original error/message as a second
--- return value the caller re-raises after sending. Both the write-mode-runtime-error path
--- and the write-then-log runtime backstop build this same shape.
+-- Shared shape for a write-mode response that ends the whole plugin so FH's own auto-undo
+-- can act on the tree (ADR 0005): a JSON error carrying writeSessionRolledBack: true, plus
+-- the original error/message as a second return value the caller re-raises after sending.
+-- Fallback of last resort only (issue #133) -- used when the tree's own rollback/commit
+-- primitive itself throws, at which point tree state can't be trusted and ending the
+-- plugin is the safest available behavior. The ordinary case (that primitive succeeding)
+-- never reaches this -- see attemptRollback below.
 local function rollbackResponse(message)
   return json.encode({ error = tostring(message), writeSessionRolledBack = true }), message
+end
+
+-- Attempts a rollback of everything this call has written so far. Commits first, then rolls
+-- back: the rollback primitive alone does not undo a record's own creation, only value edits
+-- on already-existing items, so a script that created a record before failing would
+-- otherwise leave that record permanently orphaned even though the rollback call itself
+-- reports success -- committing first makes the pending batch, record creation included,
+-- something the rollback primitive can then revert as a unit. On success the Session
+-- survives: an ordinary JSON error, no rethrow, no writeSessionRolledBack -- the caller
+-- resubmits without FH's own "Plugin Error" pop-up ever firing. On failure (either call
+-- throws), tree state can't be trusted any more, so this falls back to rollbackResponse's
+-- plugin-ending path (ADR 0005) as a last resort.
+local function attemptRollback(message)
+  local commitOk = pcall(fhCommit)
+  local rollbackOk = commitOk and pcall(fhRollback)
+  if rollbackOk then
+    return json.encode({ error = tostring(message) }), nil, 'rolledback'
+  end
+  return rollbackResponse(message)
 end
 
 function M.run(scriptText, accessMode)
@@ -174,31 +204,41 @@ function M.run(scriptText, accessMode)
 
   if ok and accessMode == 'read-write' and tracker.wrote and not tracker.logged then
     -- Runtime backstop: the ground truth for what the pre-scan can't see -- text presence
-    -- isn't proof of execution (dead code, indirection, partial logging). Same response
-    -- shape as the write-mode-runtime-error path below, feeding the same rollback/auto-undo
-    -- mechanism.
-    return rollbackResponse('script wrote to the tree without logging the activity via fhBridge.logActivity')
+    -- isn't proof of execution (dead code, indirection, partial logging). Same
+    -- attempt-rollback-first handling as the write-mode-runtime-error path below.
+    return attemptRollback('script wrote to the tree without logging the activity via fhBridge.logActivity')
   end
 
   if not ok then
     -- Only a write-mode script that actually called a tracked write primitive before
-    -- erroring can have partially mutated the tree. When the tracker fired, report the
-    -- error as normal but also hand the caller the raw error, to be re-raised after sending
-    -- in a way that actually ends the whole plugin -- the only way to give FH's own
-    -- auto-undo a real chance to fire (an error raised from inside a timer callback alone
-    -- never escapes the plugin).
+    -- erroring can have partially mutated the tree.
     if accessMode == 'read-write' and tracker.wrote then
-      return rollbackResponse(result)
+      return attemptRollback(result)
     end
     return json.encode({ error = tostring(result) })
   end
 
-  local encodeOk, encoded = pcall(json.encode, result)
-  if not encodeOk then
-    return json.encode({ error = 'failed to encode result: ' .. tostring(encoded) })
+  local committed = false
+  if accessMode == 'read-write' and tracker.wrote then
+    -- Success path: commit what this call wrote, once, before encoding the response. If
+    -- the commit call itself throws, tree state can't be trusted any more -- same
+    -- last-resort fallback as a failed rollback attempt below.
+    local commitOk = pcall(fhCommit)
+    if not commitOk then
+      return rollbackResponse('script completed but the tree could not be committed')
+    end
+    committed = true
   end
 
-  return encoded
+  local encodeOk, encoded = pcall(json.encode, result)
+  if not encodeOk then
+    -- The write already committed above, if there was one -- an encode failure here is
+    -- about the script's return value, not the tree, so the caller still needs to know
+    -- the commit happened (transactionResult), even though the response itself is an error.
+    return json.encode({ error = 'failed to encode result: ' .. tostring(encoded) }), nil, committed and 'committed' or nil
+  end
+
+  return encoded, nil, committed and 'committed' or nil
 end
 
 return M

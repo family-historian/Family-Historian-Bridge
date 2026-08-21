@@ -185,9 +185,18 @@ local timPoll = iup.timer{time=100, run="NO"}
 -- checked once iup.MainLoop() returns, so the error can be re-raised at the top level,
 -- uncaught. An error raised from inside a callback alone never reaches that far -- IUP's
 -- own callback dispatch swallows it first. Ending the plugin this way (rather than just
--- Stopping the Session) only happens when a write-mode script actually wrote something
--- before erroring.
+-- Stopping the Session) only happens when a write-mode script's own rollback attempt
+-- itself fails (see docs/INTERNAL-commit-rollback-plan.md, issue #133).
 local pendingRethrow = nil
+
+-- Session-scoped commit counter (issue #133): counts one per committed read-write run_lua
+-- call, never decrements on a rollback, resets at Start (a fresh dialog/plugin load, same
+-- lifetime as every other module-level local here). sessionLogHelper.setCommitCount is
+-- given commitCount + 1 (the optimistic "count so far including this pending call") before
+-- every read-write call, since the true post-commit value isn't known until after the
+-- script -- and any logActivity call inside it -- has already run; see runScript.run's own
+-- transactionResult return value for how this gets confirmed/adjusted afterward.
+local commitCount = 0
 
 -- Request framing: the bridge reads one line first, parsed by requestFraming.lua.
 --   STOP           -- ends the Session immediately, same as clicking Stop.
@@ -268,9 +277,29 @@ function timPoll:action_cb()
     end
 
     local accessMode = requestFraming.resolveAccessMode(request, currentAccessMode())
-    local response, rethrowErr = runScript.run(script, accessMode)
+    -- Optimistic count-so-far, set before the script runs so a logActivity call inside it
+    -- reports the right total -- see commitCount's own comment above. Harmless to set on
+    -- every call regardless of access mode: sessionLogHelper.logActivity only ever runs
+    -- during a read-write call anyway (sandbox.lua only wires fhBridge.logActivity through
+    -- then), and a read-only call never reaches it.
+    sessionLogHelper.setCommitCount(commitCount + 1)
+    local response, rethrowErr, transactionResult = runScript.run(script, accessMode)
     client:send(response .. "\n")
     client:close()
+
+    if transactionResult == "committed" then
+        commitCount = commitCount + 1
+        -- Tells sessionLogHelper this call's note writes (if any) are now durable, so a
+        -- later rollback in this Session knows the note itself survives rather than having
+        -- been created in that later, uncommitted call. See noteConfirmed's own comment.
+        sessionLogHelper.markNoteCommitted()
+    elseif transactionResult == "rolledback" then
+        -- Resyncs this module's cached note state with what the rollback actually left on
+        -- disk -- either the existing note's buffer (if it was already committed), or a
+        -- clean slate for a brand-new note next call (if the rollback undid the note's own
+        -- creation too). See sessionLogHelper.recoverAfterRollback's own comment.
+        sessionLogHelper.recoverAfterRollback()
+    end
 
     -- Only a plain "LUA <n>" request is run_lua's own -- "LUA_RO <n>"
     -- (describe_project/install_fh_plugin's fixed, internal scripts) is never logged.
@@ -312,6 +341,7 @@ function btnStart:action()
     server:settimeout(0)
     lastActivityTime = os.time()
     currentVersionWarning = nil
+    commitCount = 0
     -- Persist the values that just took effect -- only here, after the bind above has
     -- already succeeded, never on every toggle/spin-box edit and never for a failed Start.
     -- clampMinutes(txtIdleTimeout.value) is the minutes figure the settings file stores

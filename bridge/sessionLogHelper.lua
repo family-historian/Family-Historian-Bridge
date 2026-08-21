@@ -13,6 +13,13 @@ local familyHelper = require('familyHelper')
 local notePtr = nil  -- set on this Session's first logActivity call
 local textPtr = nil
 local buffer = nil
+-- True once the current note has survived a commit at least once (issue #133). Distinct
+-- from "textPtr resolves": a pointer into a record a rollback just undid does not reliably
+-- report IsNull() == true, so liveness-checking textPtr is not a safe way to tell "this note
+-- is durable" from "this note only existed inside the failed call". noteConfirmed is
+-- instead driven explicitly by bridgeSession.lua, which alone knows when a commit actually
+-- succeeded.
+local noteConfirmed = false
 
 local function timestamp(now)
   return os.date("%Y-%m-%d %H:%M", now)
@@ -90,6 +97,63 @@ function M.getNotePtr()
   return notePtr
 end
 
+-- Running commit-count total (issue #133), set bridge-side only -- never through
+-- sandbox.lua, so a run_lua script can't forge it. nil until bridgeSession.lua's first
+-- read-write call sets it; logActivity appends nothing when nil (read-only Sessions, or
+-- before the first write-mode call, never show a count).
+local commitCount = nil
+
+-- sessionLogHelper.setCommitCount(n)
+-- Bridge-side only. Called by bridgeSession.lua with an optimistic "count so far,
+-- including this pending call" value before each read-write run_lua call -- the true
+-- post-commit count isn't known until after the script (and any logActivity call inside
+-- it) has already run. Safe to set optimistically: if the script fails and its write gets
+-- rolled back, the note entry carrying this count is rolled back with it.
+function M.setCommitCount(n)
+  commitCount = n
+end
+
+-- sessionLogHelper.markNoteCommitted()
+-- Bridge-side only. Called by bridgeSession.lua exactly when a run_lua call's commit
+-- actually succeeds, so this module knows the current note (if any) has now survived at
+-- least one commit and is durable on disk. See noteConfirmed's own comment and
+-- recoverAfterRollback below for why this explicit signal exists.
+function M.markNoteCommitted()
+  noteConfirmed = true
+end
+
+-- sessionLogHelper.recoverAfterRollback()
+-- Bridge-side only. Called after a rolled-back write to resync this module's cached note
+-- state with what a rollback actually left on disk (issue #133; see noteConfirmed's own
+-- comment for why textPtr:IsNull() isn't used to tell the two cases apart).
+--
+-- Two cases, told apart by noteConfirmed:
+-- - true: this Session's note already survived an earlier commit, so the rollback only
+--   undid the pending entry this call tried to append -- the note record itself survives.
+--   Re-fetching the buffer from fhGetValueAsRichText(textPtr) resyncs it to that committed
+--   (rolled-back-to) state, so the next logActivity call appends onto the true on-disk
+--   content, continuing the SAME note. Without this, the in-memory buffer would still
+--   carry the rolled-back entry's text (the rollback primitive undoes the tree write, not
+--   this module's own Lua table), silently resurrecting it on the next successful save.
+--   AddText/AddRecordLink on a live-fetched RichText object appends to its end
+--   (docs/adr/0025), so this buffer is safe to keep appending to exactly like a
+--   freshly-created one.
+-- - false: the note record itself was created in this same not-yet-committed call, so it
+--   was rolled back away too -- nothing to re-fetch. Falls back to starting a brand-new
+--   note next call, same as a fresh Session.
+--
+-- Does not touch commitCount -- bridgeSession.lua manages that separately since it isn't
+-- reset by a rollback.
+function M.recoverAfterRollback()
+  if noteConfirmed then
+    buffer = fhGetValueAsRichText(textPtr)
+  else
+    notePtr = nil
+    textPtr = nil
+    buffer = nil
+  end
+end
+
 function M.logActivity(ptrRecord, action, media)
   local ptr = M.validateLogActivity(ptrRecord, action, media)
 
@@ -119,6 +183,13 @@ function M.logActivity(ptrRecord, action, media)
   buffer:AddText("* ", true)
   buffer:AddText(timeOnly() .. " - " .. action .. ": ", false)
   buffer:AddRecordLink(ptr)  -- live FTF record link: label stays current if the record is renamed
+
+  -- Running commit-count total (issue #133) -- only when bridgeSession.lua has set one via
+  -- setCommitCount, so a read-only Session (or any call before the first write-mode
+  -- request) never shows a stray count.
+  if commitCount ~= nil then
+    buffer:AddText(" (commit " .. commitCount .. ")", false)
+  end
 
   if media then
     local subline = "[ ] #ToDo Media to be added " .. media.name

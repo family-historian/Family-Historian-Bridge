@@ -62,6 +62,40 @@ package.loaded.sessionLogHelper = {
   logActivity = function(ptrRecord, action) return 'logged:' .. tostring(action) end,
 }
 
+-- Commit/rollback stubs (issue #133): bare identifiers, the same ones runScript.lua calls
+-- for real inside FH. Permitted as bare identifiers in test code per
+-- docs/INTERNAL-commit-rollback-plan.md's naming rule -- never named in comment prose,
+-- including this one (see this file's own assertions below for what each stub is used to
+-- prove). Call counts and throw-forcing are reset before each test that cares about them; a
+-- test that doesn't reset them is asserting against whatever the previous test left behind,
+-- so every fixture below resets first.
+local fhCommitCalls = 0
+local fhRollbackCalls = 0
+local forceCommitThrow = false
+local forceRollbackThrow = false
+
+local function resetCommitRollbackStubs()
+  fhCommitCalls = 0
+  fhRollbackCalls = 0
+  forceCommitThrow = false
+  forceRollbackThrow = false
+end
+
+fhCommit = function()
+  fhCommitCalls = fhCommitCalls + 1
+  if forceCommitThrow then
+    error('commit stub forced failure')
+  end
+  return fhCommitCalls
+end
+
+fhRollback = function()
+  fhRollbackCalls = fhRollbackCalls + 1
+  if forceRollbackThrow then
+    error('rollback stub forced failure')
+  end
+end
+
 check(runScript.run('return {ok=true}') == '{"ok":true}', 'trivial script returns encoded result')
 check(runScript.run('return 42') == '42', 'script returning a bare number')
 check(runScript.run('return nil') == 'null', 'script returning nil')
@@ -107,33 +141,59 @@ check(runScript.run('return {ok=true}', 'read-only') == '{"ok":true}',
 check(runScript.run("return os.execute('echo hi')", 'read-write'):find('"error"', 1, true) ~= nil,
   'a read-write run still cannot reach a permanently-excluded function (os.execute)')
 
--- Send-then-rethrow (issue #15, docs/adr/0005): a write-mode runtime error is still
--- reported to the caller as a normal JSON error response (the "send" half), but M.run's
--- second return value carries the original error so the caller can re-raise it after
--- sending -- giving FH's own auto-undo a chance to undo a partial write. This only
--- applies when the script actually wrote something before erroring (sandbox.lua's write
--- tracker) -- a write-mode script that errors without ever calling a write function has
--- nothing for FH's auto-undo to act on, so it behaves the same as read-only. Read-only
--- never has anything to undo at all, so it never returns a second value either way.
+-- Rollback-first, rethrow-as-fallback (issue #133, supersedes issue #15/docs/adr/0005 as
+-- the primary path): a write-mode runtime error after a tracked write attempts a rollback
+-- of everything written so far. When that succeeds, the Session survives -- a normal JSON
+-- error response, no writeSessionRolledBack hint, no rethrow (the caller just resubmits).
+-- ADR 0005's send-then-rethrow mechanism becomes a fallback of last resort, exercised only
+-- when the rollback attempt itself throws (covered further down). A write-mode script that
+-- errors without ever calling a write function has nothing to roll back, so it behaves the
+-- same as read-only. Read-only never has anything to undo at all, so it never returns a
+-- non-nil transaction result either way.
 do
+  resetCommitRollbackStubs()
   -- Includes a logActivity mention/call so this passes the write-then-log pre-scan (issue
   -- #43) and reaches the runtime error the way it did before that enforcement existed --
-  -- this test is about the send-then-rethrow mechanism, not the pre-scan itself.
-  local response, rethrow = runScript.run("fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); error('boom')", 'read-write')
+  -- this test is about the rollback-first mechanism, not the pre-scan itself.
+  local response, rethrow, transactionResult = runScript.run(
+    "fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); error('boom')", 'read-write')
   check(contains(response, '"error"') and contains(response, 'boom'),
     'write-mode runtime error after a tracked write still sends a normal JSON error response')
+  check(not contains(response, 'writeSessionRolledBack'),
+    'a successful rollback carries no writeSessionRolledBack hint -- the Session survives, nothing for FH\'s own auto-undo to do')
+  check(rethrow == nil, 'a successful rollback returns no second value -- nothing to re-raise, the plugin stays alive')
+  check(transactionResult == 'rolledback', 'a successful rollback reports "rolledback" as the third return value')
+  check(fhRollbackCalls == 1, 'the rollback primitive is called exactly once')
+  check(fhCommitCalls == 1, 'the commit primitive is called once before the rollback, to make the pending batch (including any record creation) something the rollback primitive can actually undo')
+end
+
+-- Rollback-throws fallback (issue #133): when the rollback attempt itself throws, tree
+-- state can't be trusted any more, so this falls back to ADR 0005's original
+-- send-then-rethrow behavior -- ending the whole plugin so FH's own auto-undo can act.
+do
+  resetCommitRollbackStubs()
+  forceRollbackThrow = true
+  local response, rethrow, transactionResult = runScript.run(
+    "fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); error('boom')", 'read-write')
+  check(contains(response, '"error"') and contains(response, 'boom'),
+    'a failed rollback attempt still sends a normal JSON error response')
   check(contains(response, '"writeSessionRolledBack":true'),
-    'write-mode runtime error after a tracked write carries the writeSessionRolledBack hint')
-  check(rethrow ~= nil, 'write-mode runtime error after a tracked write returns a non-nil second value to re-raise')
+    'a failed rollback attempt falls back to the writeSessionRolledBack hint (ADR 0005)')
+  check(rethrow ~= nil, 'a failed rollback attempt returns a non-nil second value to re-raise, ending the plugin')
+  check(transactionResult == nil, 'the ADR-0005 fallback reports no transaction result (the rethrow path is what matters)')
+  check(fhRollbackCalls == 1, 'the rollback primitive was attempted exactly once before falling back')
 end
 
 do
-  local response, rethrow = runScript.run("error('boom')", 'read-write')
+  resetCommitRollbackStubs()
+  local response, rethrow, transactionResult = runScript.run("error('boom')", 'read-write')
   check(contains(response, '"error"') and contains(response, 'boom'),
     'write-mode runtime error with no prior write still sends a normal JSON error response')
   check(not contains(response, 'writeSessionRolledBack'),
     'write-mode runtime error with no prior write carries no writeSessionRolledBack hint (nothing was written)')
   check(rethrow == nil, 'write-mode runtime error with no prior write returns no second value (nothing to undo)')
+  check(transactionResult == nil, 'write-mode runtime error with no prior write reports no transaction result')
+  check(fhRollbackCalls == 0, 'the rollback primitive is never called when nothing was written')
 end
 
 do
@@ -196,19 +256,23 @@ check(contains(
 -- source never actually executes (dead code): passes the pre-scan (the text is present),
 -- but is caught by the post-run backstop.
 do
-  local response, rethrow = runScript.run(
+  resetCommitRollbackStubs()
+  local response, rethrow, transactionResult = runScript.run(
     "fhu.createIndi('X'); if false then fhBridge.logActivity('ptr', 'never runs') end",
     'read-write')
   check(contains(response, '"error"') and contains(response, 'logActivity'),
     'a write with only dead-code logActivity passes the pre-scan but is caught by the runtime backstop')
-  check(contains(response, '"writeSessionRolledBack":true'),
-    'the runtime backstop response carries the writeSessionRolledBack hint')
-  check(rethrow ~= nil, 'the runtime backstop returns a non-nil second value to re-raise')
+  check(not contains(response, 'writeSessionRolledBack'),
+    'the runtime backstop attempts a rollback first -- a successful one carries no writeSessionRolledBack hint')
+  check(rethrow == nil, 'a successful rollback from the runtime backstop returns no second value -- the plugin stays alive')
+  check(transactionResult == 'rolledback', 'the runtime backstop reports "rolledback" on a successful rollback')
+  check(fhRollbackCalls == 1, 'the runtime backstop attempts the rollback primitive exactly once')
 end
 
 -- Read-write script that calls only fhBridge.logActivity (no other write call): completes
 -- normally, no backstop error -- proves tracker.wrote and tracker.logged both flip from
 -- the same call and don't false-positive against each other.
+resetCommitRollbackStubs()
 check(contains(runScript.run("fhBridge.logActivity('ptr', 'reminder'); return {ok=true}", 'read-write'), '"ok":true'),
   'a script that only calls fhBridge.logActivity (no other write) completes normally with no backstop error')
 
@@ -219,6 +283,74 @@ check(contains(runScript.run(
   "fhu.createIndi('A'); fhu.createIndi('B'); fhu.createIndi('C'); fhBridge.logActivity('ptr', 'created A, B, C'); return {ok=true}",
   'read-write'), '"ok":true'),
   'a script that batches several writes with a single trailing logActivity call completes normally')
+
+-- Commit-on-success (issue #133): a successful write-mode call with a tracked write
+-- commits exactly once, after the script runs, and reports "committed" as the third
+-- return value.
+do
+  resetCommitRollbackStubs()
+  local response, rethrow, transactionResult = runScript.run(
+    "fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); return {ok=true}", 'read-write')
+  check(contains(response, '"ok":true'), 'a successful write-mode call still returns the script\'s own result')
+  check(fhCommitCalls == 1, 'a successful write-mode call with a tracked write commits exactly once')
+  check(rethrow == nil, 'a successful commit returns no second value')
+  check(transactionResult == 'committed', 'a successful write-mode call reports "committed" as the third return value')
+end
+
+-- Encode failure after a successful commit (issue #133): the write already committed by
+-- the time the script's own return value turns out to be unencodable, so the caller still
+-- needs to know via transactionResult, even though the response itself reports an error.
+do
+  resetCommitRollbackStubs()
+  local response, rethrow, transactionResult = runScript.run(
+    "fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); return math.floor", 'read-write')
+  check(contains(response, '"error"') and contains(response, 'failed to encode result'),
+    'a script returning an unencodable value after a successful write reports an encode error')
+  check(fhCommitCalls == 1, 'the commit still happens before the encode failure is discovered')
+  check(rethrow == nil, 'an encode failure after a successful commit is not a rethrow case')
+  check(transactionResult == 'committed',
+    'the caller still learns the write was committed, even though the response itself is an error')
+end
+
+-- No commit when nothing was written (issue #133): a successful call that never triggers
+-- the write tracker (read-only, or a read-write call that only reads) never calls commit.
+do
+  resetCommitRollbackStubs()
+  local response, _, transactionResult = runScript.run('return {ok=true}', 'read-write')
+  check(contains(response, '"ok":true'), 'a read-write call with nothing written still returns the script\'s own result')
+  check(fhCommitCalls == 0, 'commit is never called when the write tracker never fired')
+  check(transactionResult == nil, 'a call with nothing written reports no transaction result')
+end
+
+-- Commit-throws fallback (issue #133): symmetric with the rollback-throws case above -- if
+-- the commit primitive itself throws after a successful script run, tree state can't be
+-- trusted any more, so this falls back to ADR 0005's plugin-ending path too.
+do
+  resetCommitRollbackStubs()
+  forceCommitThrow = true
+  local response, rethrow, transactionResult = runScript.run(
+    "fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); return {ok=true}", 'read-write')
+  check(contains(response, '"error"'), 'a failed commit attempt reports a JSON error, not the script\'s own result')
+  check(contains(response, '"writeSessionRolledBack":true'),
+    'a failed commit attempt falls back to the writeSessionRolledBack hint (ADR 0005)')
+  check(rethrow ~= nil, 'a failed commit attempt returns a non-nil second value to re-raise, ending the plugin')
+  check(transactionResult == nil, 'the ADR-0005 fallback reports no transaction result')
+end
+
+-- Watchdog abort after a tracked write (issue #133): a runaway script is still a runtime
+-- error via pcall, so it goes through the same rollback-first path as any other write-mode
+-- runtime error, not a separate mechanism.
+do
+  resetCommitRollbackStubs()
+  local response, rethrow, transactionResult = runScript.run(
+    "fhu.createIndi('X'); fhBridge.logActivity('ptr', 'created X'); while true do end", 'read-write')
+  check(contains(response, '"error"') and contains(response, 'instruction limit'),
+    'a watchdog abort after a tracked write still reports the instruction-limit error')
+  check(not contains(response, 'writeSessionRolledBack'),
+    'a watchdog abort after a tracked write attempts a rollback first, same as any other runtime error')
+  check(rethrow == nil, 'a successful rollback after a watchdog abort returns no second value -- the plugin stays alive')
+  check(transactionResult == 'rolledback', 'a watchdog abort after a tracked write reports "rolledback" on a successful rollback')
+end
 
 -- Unrecognized-fh*-global pre-scan (issue #81, docs/adr/0022): rejects a script calling a
 -- bare fh* global this sandbox doesn't recognize, before it ever runs -- the real incident
