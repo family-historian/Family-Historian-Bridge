@@ -85,6 +85,18 @@ export function searchEntries<T extends SearchableEntry>(
   query: string,
   limit: number,
 ): SearchMatch<T>[] {
+  return rankEntries(corpus, query)
+    .slice(0, limit)
+    .map((entry) => ({
+      entry,
+      excerpt: buildExcerpt(entry.text, query),
+    }));
+}
+
+/** Same ranking `searchEntries` uses, but returns every ranked match rather than slicing to
+ * `limit` -- for a caller that needs to know the true total match count (e.g. to report
+ * truncation honestly), not just the entries it can afford to return in full. */
+export function rankEntries<T extends SearchableEntry>(corpus: T[], query: string): T[] {
   const needle = query.toLowerCase();
   if (needle.trim().length === 0) return [];
 
@@ -113,10 +125,7 @@ export function searchEntries<T extends SearchableEntry>(
     }
   }
 
-  return matches.slice(0, limit).map(({ entry }) => ({
-    entry,
-    excerpt: buildExcerpt(entry.text, query),
-  }));
+  return matches.map(({ entry }) => entry);
 }
 
 /** Shared by grepFhHelp/grepGedcomKnowledge: a case-insensitive literal-substring matcher

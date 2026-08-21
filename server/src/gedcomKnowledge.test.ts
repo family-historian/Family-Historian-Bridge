@@ -70,33 +70,111 @@ describe("searchGedcomKnowledge", () => {
 
   it("returns FTF markup entries for a table query", () => {
     const results = searchGedcomKnowledge(corpus, "table");
-    expect(results.map((r) => r.id)).toContain("ftf-tables");
+    expect(results.matches.map((r) => r.id)).toContain("ftf-tables");
   });
 
   it("returns FTF markup entries for a private text query", () => {
     const results = searchGedcomKnowledge(corpus, "private text");
-    expect(results.map((r) => r.id)).toContain("private-text");
+    expect(results.matches.map((r) => r.id)).toContain("private-text");
   });
 
   it("returns the Fact Flag / Record Flag entry for a flag query", () => {
     const results = searchGedcomKnowledge(corpus, "record flag");
-    expect(results.map((r) => r.id)).toContain("fact-flag-vs-record-flag");
+    expect(results.matches.map((r) => r.id)).toContain("fact-flag-vs-record-flag");
   });
 
   it("includes confidence and source on each result", () => {
-    const [result] = searchGedcomKnowledge(corpus, "table");
+    const [result] = searchGedcomKnowledge(corpus, "table").matches;
     expect(result?.confidence).toBe("Documented");
     expect(result?.source).toBe("FH help: /help/fh8plugins/api/ftf_syntax.htm");
   });
 
   it("includes the full entry text, not just an excerpt", () => {
-    const [result] = searchGedcomKnowledge(corpus, "table");
+    const [result] = searchGedcomKnowledge(corpus, "table").matches;
     expect(result?.text).toContain("marks a table");
     expect(result?.text).toContain("cells are separated by |");
   });
 
-  it("returns an empty array when nothing matches", () => {
-    expect(searchGedcomKnowledge(corpus, "xyzzy nonsense query")).toEqual([]);
+  it("returns an empty matches array and truncated: false when nothing matches", () => {
+    const result = searchGedcomKnowledge(corpus, "xyzzy nonsense query");
+    expect(result.matches).toEqual([]);
+    expect(result.truncated).toBe(false);
+    expect(result.index).toBeUndefined();
+  });
+
+  it("caps total result size, naming the rest in a compact index rather than dropping them (issue #135)", () => {
+    // Each entry's serialized text is ~1KB; more than SEARCH_MAX_TOTAL_BYTES (20,000) worth
+    // of matches must truncate, not silently overflow the client's own response-size ceiling
+    // the way a bare "run_lua guidance" search once did (issue #135).
+    const bigText = "x".repeat(1000);
+    const manyEntries = Array.from({ length: 30 }, (_, i) =>
+      JSON.stringify({
+        id: `topic-${i}`,
+        title: `Topic ${i}`,
+        breadcrumb: ["Topics"],
+        confidence: "Documented",
+        source: "test",
+        text: `Contains the word needle. ${bigText}`,
+      }),
+    ).join("\n");
+    const bigCorpus = parseGedcomKnowledgeCorpus(manyEntries);
+
+    const result = searchGedcomKnowledge(bigCorpus, "needle", 30);
+
+    expect(result.truncated).toBe(true);
+    expect(result.matches.length).toBeGreaterThan(0);
+    expect(result.matches.length).toBeLessThan(30);
+    const totalBytes = result.matches.reduce((sum, e) => sum + Buffer.byteLength(JSON.stringify(e), "utf8"), 0);
+    expect(totalBytes).toBeLessThanOrEqual(20_000);
+    // Every ranked match -- including ones whose full text didn't fit -- is still named.
+    expect(result.index).toHaveLength(30);
+    expect(result.index?.map((e) => e.id)).toEqual(expect.arrayContaining(result.matches.map((e) => e.id)));
+  });
+
+  it("reports truncation and names every match even when the default limit -- not the byte cap -- is what cuts the result short", () => {
+    // 25 small matching entries, well under 20,000 bytes combined even in full, so the
+    // byte-cap loop alone wouldn't drop anything -- the DEFAULT_SEARCH_LIMIT (20) is what
+    // has to be the thing that bounds `matches` here. Regression for the index/truncated
+    // math being keyed off the limit-bound slice instead of the true total match count.
+    const smallText = "small body";
+    const manyEntries = Array.from({ length: 25 }, (_, i) =>
+      JSON.stringify({
+        id: `small-topic-${i}`,
+        title: `Small Topic ${i}`,
+        breadcrumb: ["Topics"],
+        confidence: "Documented",
+        source: "test",
+        text: `Contains the word needle. ${smallText}`,
+      }),
+    ).join("\n");
+    const corpus = parseGedcomKnowledgeCorpus(manyEntries);
+
+    const result = searchGedcomKnowledge(corpus, "needle"); // default limit
+
+    expect(result.truncated).toBe(true);
+    expect(result.matches.length).toBe(20);
+    expect(result.index).toHaveLength(25);
+    expect(result.index?.map((e) => e.id).sort()).toEqual(
+      Array.from({ length: 25 }, (_, i) => `small-topic-${i}`).sort(),
+    );
+  });
+
+  it("still returns a single oversized entry alone rather than turning a real match into 'no results'", () => {
+    const hugeText = "x".repeat(25_000);
+    const oneHugeEntry = JSON.stringify({
+      id: "huge-entry",
+      title: "Huge entry",
+      breadcrumb: ["Topics"],
+      confidence: "Documented",
+      source: "test",
+      text: hugeText,
+    });
+    const corpusWithHugeEntry = parseGedcomKnowledgeCorpus(oneHugeEntry);
+
+    const result = searchGedcomKnowledge(corpusWithHugeEntry, "huge entry");
+
+    expect(result.matches.map((e) => e.id)).toEqual(["huge-entry"]);
+    expect(result.truncated).toBe(false);
   });
 });
 
@@ -202,32 +280,32 @@ describe("the real bundled corpus", () => {
 
   it("returns FTF markup entries for a table query (acceptance criterion)", () => {
     const results = searchGedcomKnowledge(corpus, "table");
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.matches.length).toBeGreaterThan(0);
   });
 
   it("returns FTF markup entries for a private text query (acceptance criterion)", () => {
     const results = searchGedcomKnowledge(corpus, "private text");
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.matches.length).toBeGreaterThan(0);
   });
 
   it("returns the Shared Facts entry for a shared facts query (acceptance criterion)", () => {
     const results = searchGedcomKnowledge(corpus, "shared facts");
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.matches.length).toBeGreaterThan(0);
   });
 
   it("returns the Fact Flag / Record Flag entry for a flags query (acceptance criterion)", () => {
     const results = searchGedcomKnowledge(corpus, "fact flag record flag");
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.matches.length).toBeGreaterThan(0);
   });
 
   it("returns a Source Template field entry for a source template field query (acceptance criterion)", () => {
     const results = searchGedcomKnowledge(corpus, "source template field");
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.matches.length).toBeGreaterThan(0);
   });
 
   it("returns the Sentence template entry for a sentence template query (acceptance criterion)", () => {
     const results = searchGedcomKnowledge(corpus, "sentence template");
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.matches.length).toBeGreaterThan(0);
   });
 
   it("returns the canonical Name/Date/Place qualifier-code entries for their respective queries, not just fh-help scraps (acceptance criterion)", () => {
@@ -236,16 +314,16 @@ describe("the real bundled corpus", () => {
     // rediscovered ":GIVEN_ALL" indirectly by grepping fh-help sample scripts — see the new
     // bullet on run-lua-guidance-call-shape-gotchas below.
     const nameResults = searchGedcomKnowledge(corpus, "name qualifiers");
-    expect(nameResults.map((r) => r.id)).toContain("data-reference-qualifiers-name");
-    const nameEntry = nameResults.find((r) => r.id === "data-reference-qualifiers-name")!;
+    expect(nameResults.matches.map((r) => r.id)).toContain("data-reference-qualifiers-name");
+    const nameEntry = nameResults.matches.find((r) => r.id === "data-reference-qualifiers-name")!;
     expect(nameEntry.text).toMatch(/GIVEN_ALL/);
     expect(nameEntry.text).toMatch(/SURNAME/);
 
     const dateResults = searchGedcomKnowledge(corpus, "date qualifiers");
-    expect(dateResults.map((r) => r.id)).toContain("data-reference-qualifiers-date");
+    expect(dateResults.matches.map((r) => r.id)).toContain("data-reference-qualifiers-date");
 
     const placeResults = searchGedcomKnowledge(corpus, "place and lat/long qualifiers");
-    expect(placeResults.map((r) => r.id)).toContain("data-reference-qualifiers-place-latlong");
+    expect(placeResults.matches.map((r) => r.id)).toContain("data-reference-qualifiers-place-latlong");
   });
 
   it("does not contain excluded raw-export wire mechanics (ADR 0003 scope)", () => {
@@ -271,8 +349,15 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
   // truncation and tells Claude to fetch this content via search_gedcom_knowledge.
   const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
   const corpus = loadGedcomKnowledgeFromFile(CORPUS_PATH);
-  const results = searchGedcomKnowledge(corpus, "run_lua guidance");
-  const combinedText = results.map((r) => r.text).join("\n");
+  // The family's combined text (~52KB as of this comment) is well past SEARCH_MAX_TOTAL_BYTES
+  // (20,000 -- issue #135), so search_gedcom_knowledge("run_lua guidance") always truncates
+  // to a handful of full matches plus an index naming the rest; that's the documented,
+  // intended behavior (SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION says as much), not a bug to work
+  // around here. grep_gedcom_knowledge has a much higher byte cap (200,000) and is what the
+  // description itself points a caller at once ranking buries something, so tests that need
+  // every family member's full text pull it from there instead.
+  const grepResult = grepGedcomKnowledge(corpus, "run_lua guidance");
+  const combinedText = grepResult.matches.map((r) => r.text).join("\n");
 
   it('finds every "run_lua guidance" family entry with a single query, via breadcrumb match', () => {
     // The family has grown past its original six run-lua-guidance-*-prefixed entries
@@ -283,14 +368,30 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     // family rather than growing RUN_LUA_DESCRIPTION). A hardcoded id list here goes
     // stale every time a new sibling is added — derive the expected set from the
     // corpus's own breadcrumb instead, so this test asserts the invariant that actually
-    // matters (searching "run_lua guidance" surfaces every family member in one call),
-    // not a snapshot of which ones existed when this test was last touched.
+    // matters, not a snapshot of which ones existed when this test was last touched.
+    //
+    // The family is bigger than SEARCH_MAX_TOTAL_BYTES (issue #135), so a direct
+    // search_gedcom_knowledge call truncates -- the invariant that still must hold is that
+    // every family member is named somewhere in the response (full text in matches, or
+    // named in index), never silently missing from both.
     const expectedIds = corpus
       .filter((entry) => entry.breadcrumb.includes("run_lua guidance"))
       .map((entry) => entry.id)
       .sort();
     expect(expectedIds.length).toBeGreaterThanOrEqual(6);
-    expect(results.map((r) => r.id).sort()).toEqual(expectedIds);
+
+    const searchResult = searchGedcomKnowledge(corpus, "run_lua guidance");
+    const namedIds = new Set([
+      ...searchResult.matches.map((r) => r.id),
+      ...(searchResult.index?.map((r) => r.id) ?? []),
+    ]);
+    for (const id of expectedIds) {
+      expect(namedIds.has(id), `${id} should be named in matches or index`).toBe(true);
+    }
+
+    // grep_gedcom_knowledge, meanwhile, is uncapped enough to return every family member's
+    // full text in one call -- the fallback the tool descriptions point callers at.
+    expect(grepResult.matches.map((r) => r.id).sort()).toEqual(expectedIds);
   });
 
   it("lists fhu.records/fhu.allItems/fhu.indiList as the check-first iteration helpers, alongside the mutation helpers (issue #47)", () => {
@@ -364,34 +465,15 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText.toLowerCase()).toMatch(/#todo/);
   });
 
-  it("documents fhBridge's read-only family/detail query helpers (getFamilyGroup/getAncestors/getAllDetails), that they're available under Read-only too, and that they accept a qualified id string as well as a pointer (issue #62)", () => {
+  it("documents fhBridge's read-only family/detail query helpers (getFamilyGroup/getAncestors/getAllDetails) by signature, that they're available under Read-only too, and that they accept a qualified id string as well as a pointer (issue #62)", () => {
+    // The helpers' own parameter/return/edge-case detail (pedigree collapse, DIRECT children,
+    // etc.) now lives in their individual fhbridge-* reference entries -- see the "fhBridge
+    // API reference corpus entries" describe block below for those.
     expect(combinedText).toMatch(/fhBridge\.getFamilyGroup\(indiPtr, type\)/);
     expect(combinedText).toMatch(/fhBridge\.getAncestors\(indiPtr, maxGenerations, dnaLine\)/);
     expect(combinedText).toMatch(/fhBridge\.getAllDetails\(ptr\)/);
     expect(combinedText.toLowerCase()).toMatch(/both read-only and read-write/);
     expect(combinedText).toMatch(/qualified id string/);
-    expect(combinedText).toMatch(/pedigree collapse/);
-  });
-
-  it("documents fhBridge.searchByName's contains-not-exact name matching, that either argument is optional, and which Data Reference qualifiers it matches against (issue #62)", () => {
-    expect(combinedText).toMatch(/fhBridge\.searchByName\(forename, surname\)/);
-    expect(combinedText.toLowerCase()).toMatch(/not exact\/whole-word/);
-    expect(combinedText).toMatch(/GIVEN_ALL\/SURNAME/);
-    expect(combinedText).toMatch(/searchByName\("Robert", "Taubman"\)/);
-  });
-
-  it("documents fhBridge.getFactsByTag's 1st-level-only tag filtering, that it accepts a single tag or an array, and that it works on any record type (issue #62)", () => {
-    expect(combinedText).toMatch(/fhBridge\.getFactsByTag\(ptr, tags\)/);
-    expect(combinedText).toMatch(/DIRECT children/);
-    expect(combinedText).toMatch(/\{"BIRT", "DEAT"\}/);
-    expect(combinedText.toLowerCase()).toMatch(/not just individuals/);
-  });
-
-  it("documents dnaLine=\"blood\" (DnaBloodRelation), shared by getAncestors and getDescendants, and that half-blood was considered and excluded (issue #78)", () => {
-    expect(combinedText).toMatch(/DnaBloodRelation/);
-    expect(combinedText.toLowerCase()).toMatch(/dnaline="blood"/);
-    expect(combinedText.toLowerCase()).toMatch(/does not support|deliberately does not/);
-    expect(combinedText).toMatch(/DnaHalfBlood/);
   });
 
   it("documents that Date has no GetDatePoint() method, naming the correct GetDatePt1()/GetDatePt2() (issue #51)", () => {
@@ -433,6 +515,7 @@ describe("fhBridge API reference corpus entries (issue #102, docs/adr/0024-fhbri
   const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
   const corpus = loadGedcomKnowledgeFromFile(CORPUS_PATH);
   const fhBridgeEntries = corpus.filter((entry) => entry.breadcrumb.includes("fhBridge API reference"));
+  const combinedText = fhBridgeEntries.map((e) => `${e.title}\n${e.text}`).join("\n");
 
   // Unlike toolNames.test.ts's own "derive the expected set from the real thing" pattern
   // (which registers real TS modules against a live MCP client -- a behavioral check
@@ -478,8 +561,17 @@ describe("fhBridge API reference corpus entries (issue #102, docs/adr/0024-fhbri
   });
 
   it('finds every fhBridge API reference entry with a single query, via breadcrumb match', () => {
+    // Whether this family's combined size still fits under SEARCH_MAX_TOTAL_BYTES (so
+    // truncated: false) or has grown past it (truncated: true, spilling into `index`) isn't
+    // pinned here -- that's expected to flip as more fhBridge functions are documented, and
+    // isn't itself a defect. What matters is every entry still shows up somewhere: in
+    // `matches` if it fit, in `index` if it didn't.
     const results = searchGedcomKnowledge(corpus, "fhBridge API reference");
-    expect(results.map((r) => r.id).sort()).toEqual(fhBridgeEntries.map((e) => e.id).sort());
+    const foundIds = new Set([
+      ...results.matches.map((r) => r.id),
+      ...(results.index?.map((r) => r.id) ?? []),
+    ]);
+    expect([...foundIds].sort()).toEqual(fhBridgeEntries.map((e) => e.id).sort());
   });
 
   it("carries no example call snippets or design-history prose -- compact reference only (grilling decision, issue #102)", () => {
@@ -487,6 +579,31 @@ describe("fhBridge API reference corpus entries (issue #102, docs/adr/0024-fhbri
       expect(entry.text).toMatch(/Parameters:/);
       expect(entry.text).toMatch(/Returns:/);
     }
+  });
+
+  it("documents getAncestors' pedigree-collapse dedupe (issue #62, moved here from run-lua-guidance-family-query-helpers)", () => {
+    expect(combinedText).toMatch(/pedigree collapse/);
+  });
+
+  it("documents fhBridge.searchByName's contains-not-exact name matching, that either argument is optional, and which Data Reference qualifiers it matches against (issue #62)", () => {
+    expect(combinedText).toMatch(/fhBridge\.searchByName\(forename, surname\)/);
+    expect(combinedText.toLowerCase()).toMatch(/not exact\/whole-word/);
+    expect(combinedText).toMatch(/GIVEN_ALL\/SURNAME/);
+    expect(combinedText).toMatch(/searchByName\("Robert", "Taubman"\)/);
+  });
+
+  it("documents fhBridge.getFactsByTag's 1st-level-only tag filtering, that it accepts a single tag or an array, and that it works on any record type (issue #62)", () => {
+    expect(combinedText).toMatch(/fhBridge\.getFactsByTag\(ptr, tags\)/);
+    expect(combinedText).toMatch(/DIRECT children/);
+    expect(combinedText).toMatch(/\{"BIRT", "DEAT"\}/);
+    expect(combinedText.toLowerCase()).toMatch(/not just (an )?individual/);
+  });
+
+  it("documents dnaLine=\"blood\" (DnaBloodRelation), shared by getAncestors and getDescendants, and that half-blood was considered and excluded (issue #78)", () => {
+    expect(combinedText).toMatch(/DnaBloodRelation/);
+    expect(combinedText.toLowerCase()).toMatch(/dnaline="blood"/);
+    expect(combinedText.toLowerCase()).toMatch(/does not support|deliberately does not/);
+    expect(combinedText).toMatch(/DnaHalfBlood/);
   });
 });
 
@@ -578,6 +695,74 @@ describe("registerGedcomKnowledgeTools", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     return { client, server };
   }
+
+  describe("search_gedcom_knowledge tool", () => {
+    it("returns matches as JSON, untruncated, when everything fits under the cap", async () => {
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "search_gedcom_knowledge",
+          arguments: { query: "table" },
+        });
+        expect(result.isError).toBeFalsy();
+        const body = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        expect(body.matches.map((m: { id: string }) => m.id)).toContain("ftf-tables");
+        expect(body.truncated).toBe(false);
+        expect(body.note).toBeUndefined();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("returns a no-match message (not an error) when the query matches nothing", async () => {
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(FIXTURE_JSONL) });
+      try {
+        const result = await client.callTool({
+          name: "search_gedcom_knowledge",
+          arguments: { query: "xyzzy nonsense query" },
+        });
+        expect(result.isError).toBeFalsy();
+        const text = (result.content as Array<{ text: string }>)[0].text;
+        expect(text).toContain('No match for "xyzzy nonsense query"');
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+
+    it("adds an index and truncation note when the byte cap is exceeded (issue #135)", async () => {
+      const bigText = "x".repeat(1000);
+      const manyEntries = Array.from({ length: 30 }, (_, i) =>
+        JSON.stringify({
+          id: `topic-${i}`,
+          title: `Topic ${i}`,
+          breadcrumb: ["Topics"],
+          confidence: "Documented",
+          source: "test",
+          text: `Contains the word needle. ${bigText}`,
+        }),
+      ).join("\n");
+      const { client, server } = await connectedClient({ entries: parseGedcomKnowledgeCorpus(manyEntries) });
+      try {
+        const result = await client.callTool({
+          name: "search_gedcom_knowledge",
+          arguments: { query: "needle" },
+        });
+        expect(result.isError).toBeFalsy();
+        const body = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        expect(body.truncated).toBe(true);
+        expect(body.matches.length).toBeGreaterThan(0);
+        expect(body.matches.length).toBeLessThan(30);
+        expect(Array.isArray(body.index)).toBe(true);
+        expect(body.index.length).toBeGreaterThanOrEqual(body.matches.length);
+        expect(body.note).toContain("index");
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    });
+  });
 
   describe("grep_gedcom_knowledge tool", () => {
     it("returns matches as JSON, untruncated, when everything fits under the limit", async () => {
