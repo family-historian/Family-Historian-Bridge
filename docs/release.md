@@ -145,9 +145,9 @@ git branch -f release vX.Y.Z
 git push origin release --force
 ```
 
-**Skip this step until the push mirror is actually set up** (blocked on FH8 GA per #132 —
-as of this writing only the LICENSE/privacy.md prep is done; the mirror itself isn't
-configured yet).
+**Live as of 0.17.0** — the push mirror is configured and confirmed carrying `release`
+over to GitHub automatically (verified via the `remote_mirror_*` ref updating right after
+the push). Run this step for every release from here on.
 
 ## 9. Create the Forgejo release and upload the assets (required — do not skip)
 
