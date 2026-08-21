@@ -70,6 +70,7 @@ export const SANDBOX_EXCLUDED_FUNCTIONS = [
   "fhGetPluginDataFileName",
   "fhExhibitResponsiveness",
   "fhInitialise",
+  "fhOutputNote",
 ] as const;
 
 // Text match, not an AST-based call-site check — can also match the name inside a string
