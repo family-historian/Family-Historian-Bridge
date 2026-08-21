@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Known-names table update (issue #134)
+- Added two new-in-FH8 `fh*` globals surfaced by the help-corpus scan: `fhGetRecordLinks`
+  (read-only — returns the item pointers linking to a record) is now wired through in
+  `sandbox.lua`; `fhOutputNote` is excluded (writes to FH's own Note Window, invisible to
+  run_lua's return-value model, same category as `fhOutputResultSetColumn`/`Titles`).
+
 ## 0.16.0
 
 ### New fhBridge.createFact helper (issue #113)

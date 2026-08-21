@@ -81,6 +81,9 @@ local READ_ONLY_FH_GLOBAL_NAMES = {
   'fhFtfEncode', 'fhFtfParamEncode',
   'fhGetNamedList', 'fhGetNamedListByIndex', 'fhGetNamedListCount',
   'fhBeginsWithVowel',
+  -- Links (issue #134): fhGetRecordLinks takes a record item pointer and returns a table
+  -- of item pointers linking to it -- pure read, no bCreateIfNone-style write branch.
+  'fhGetRecordLinks',
   -- fhGetFlagTag/fhGetFactTag: bare names, present read-only as the guarded wrappers below
   -- -- also appear in WRITE_PRIMITIVE_NAMES above, deduped via a set.
   'fhGetFlagTag', 'fhGetFactTag',
@@ -143,6 +146,7 @@ local EXCLUDED_FH_GLOBAL_REASONS = {
   fhUpdateDisplay = 'it is a UI side effect with no return value run_lua would ever see',
   fhOutputResultSetColumn = 'it writes to FH\'s own Query Window; run_lua only reads a script\'s return value, so this is invisible to Claude',
   fhOutputResultSetTitles = 'it writes to FH\'s own Query Window, the same concern as fhOutputResultSetColumn',
+  fhOutputNote = 'it writes to FH\'s own Note Window; run_lua only reads a script\'s return value, so this is invisible to Claude',
   fhSleep = 'it blocks without executing Lua VM instructions, so watchdog.lua\'s instruction-count hook cannot interrupt it',
   fhOverridePreference = 'it mutates an app-wide preference, not tree data',
   fhExhibitResponsiveness = 'it pumps the Windows message queue mid-script, which could reintroduce UI reentrancy the watchdog design did not account for',
@@ -333,6 +337,9 @@ function M.build(accessMode)
   env.fhGetNamedList = fhGetNamedList
   env.fhGetNamedListByIndex = fhGetNamedListByIndex
   env.fhGetNamedListCount = fhGetNamedListCount
+
+  -- Links
+  env.fhGetRecordLinks = fhGetRecordLinks
 
   -- Miscellaneous
   env.fhBeginsWithVowel = fhBeginsWithVowel

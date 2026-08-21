@@ -82,6 +82,7 @@ fhGetNamedList = function() end
 fhGetNamedListByIndex = function() end
 fhGetNamedListCount = function() end
 fhBeginsWithVowel = function() end
+fhGetRecordLinks = function() end
 
 -- Read-write write API (issue #14): stubbed the same way as the read-only surface above,
 -- so the read-write assertions below (present, by reference) and the read-only exclusion
@@ -131,6 +132,7 @@ fhPromptUserForRichText = function() end
 fhUpdateDisplay = function() end
 fhOutputResultSetColumn = function() end
 fhOutputResultSetTitles = function() end
+fhOutputNote = function() end
 fhGetValueAsBlob = function() end
 fhSetValueAsBlob = function() end
 fhGetPluginDataFileName = function() end
@@ -373,6 +375,7 @@ check(env.fhGetNamedList == fhGetNamedList, 'fhGetNamedList present')
 check(env.fhGetNamedListByIndex == fhGetNamedListByIndex, 'fhGetNamedListByIndex present')
 check(env.fhGetNamedListCount == fhGetNamedListCount, 'fhGetNamedListCount present')
 check(env.fhBeginsWithVowel == fhBeginsWithVowel, 'fhBeginsWithVowel present')
+check(env.fhGetRecordLinks == fhGetRecordLinks, 'fhGetRecordLinks present (issue #134)')
 
 -- fhUtils (require('fhUtils')) is present via a proxy, not the raw module — its
 -- non-write methods (e.g. records) are still the real thing, by reference.
@@ -460,6 +463,7 @@ do
   check(nameSet['fhSetValueAsLink'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhSetValueAsLink (from WRITE_PRIMITIVE_NAMES, mode-independent)')
   check(nameSet['fhGetFactTag'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhGetFactTag exactly once despite appearing in both source lists')
   check(nameSet['fhGetQualifiedId'] == nil, 'KNOWN_FH_GLOBAL_NAMES does not include the guessed/hallucinated fhGetQualifiedId (the real incident behind issue #81)')
+  check(nameSet['fhGetRecordLinks'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhGetRecordLinks (read-only, issue #134)')
 end
 
 -- Excluded-fh*-global reasons (issue #81): a sample from each prose category, proving the
@@ -469,6 +473,7 @@ check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhShellExecute'] ~= nil, 'EXCLUDED_FH_
 check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhMessageBox'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhMessageBox')
 check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhSleep'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhSleep')
 check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhGetQualifiedRecordId'] == nil, 'EXCLUDED_FH_GLOBAL_REASONS has no entry for a genuinely known-good function')
+check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhOutputNote'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhOutputNote (issue #134)')
 
 -- Dangerous globals must be absent — the whole point of an allowlist sandbox.
 check(env.os.execute == nil, 'os.execute absent')
@@ -547,6 +552,7 @@ check(env.fhPromptUserForRichText == nil, 'fhPromptUserForRichText absent (same 
 check(env.fhUpdateDisplay == nil, 'fhUpdateDisplay absent (UI side effect with no return value run_lua would ever see)')
 check(env.fhOutputResultSetColumn == nil, 'fhOutputResultSetColumn absent (writes to FH\'s own Query Window; run_lua only reads a script\'s `return` value, so this is invisible to Claude)')
 check(env.fhOutputResultSetTitles == nil, 'fhOutputResultSetTitles absent (same Query Window concern as fhOutputResultSetColumn)')
+check(env.fhOutputNote == nil, 'fhOutputNote absent (writes to FH\'s own Note Window; run_lua only reads a script\'s `return` value, so this is invisible to Claude — issue #134)')
 check(env.fhGetValueAsBlob == nil, 'fhGetValueAsBlob absent (writes an attached media file to an arbitrary local path — permanently excluded; rare enough to just block per 2026-07-29 discussion)')
 check(env.fhSetValueAsBlob == nil, 'fhSetValueAsBlob absent (reads an arbitrary local file to attach as media — same rationale as fhGetValueAsBlob)')
 check(env.fhGetPluginDataFileName == nil, 'fhGetPluginDataFileName absent (returns a filesystem path; inert without the excluded Load/Save functions, and needlessly discloses internal paths)')
