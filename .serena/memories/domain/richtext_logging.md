@@ -27,6 +27,13 @@
   `Type="mcp-log"`/`Status="closed"` are fixed constants (enables Smart-Folder cleanup
   queries). Enforced by the write-then-log invariant — see `mem:conventions`. Distinct
   from a Whole-record citation — this is a Claude-authored log, not a source attachment.
+  `M.getNotePtr()` exposes the module-level note pointer (nil until the first
+  `logActivity` call, and not reset between Start/Stop — scoped to the whole plugin load,
+  not one Session) — `bridgeSession.lua` reads it on close to decide whether to show the
+  note via `fhOutputNote` (issue #115, FH-8-beta-only — `fhGetAppVersion()` returns its 3
+  version numbers as separate integers, not a dotted string, so its first return value is
+  compared to 8 directly, no `versionCompare` parse involved; skipped when
+  `pendingRethrow` is set since FH's own rollback is about to undo the note anyway).
 - **run_lua guidance (corpus entries)**: see `mem:server`'s RUN_LUA_DESCRIPTION-truncation
   note and `mem:corpora` — the "run_lua guidance"-titled GEDCOM-corpus entries carry the
   overflow that a deferred/lazy MCP tool-schema loader would silently truncate past ~2KB

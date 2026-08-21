@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Bridge close now shows the plugin load's `_RNOT` log note via `fhOutputNote` (FH 8 beta+) if one was created and no rollback is pending.
 
 ### sourceHelper.lua: fhGetRecordLinks replaces manual link scans (issue #66, ADR 0034)
 - `findSources`/`getTemplateFieldCensus` no longer walk every SOUR record (or every INDI/FAM

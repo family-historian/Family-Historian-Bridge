@@ -82,6 +82,14 @@ function M.validateLogActivity(ptrRecord, action, media)
   return ptrRecord
 end
 
+-- sessionLogHelper.getNotePtr()
+-- Read-only accessor for the module-level _RNOT note pointer (nil until logActivity's
+-- first call creates one), so callers can check whether a note exists without reaching
+-- into this module's private state.
+function M.getNotePtr()
+  return notePtr
+end
+
 function M.logActivity(ptrRecord, action, media)
   local ptr = M.validateLogActivity(ptrRecord, action, media)
 

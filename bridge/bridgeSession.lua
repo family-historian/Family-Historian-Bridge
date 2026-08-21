@@ -51,6 +51,7 @@ local timeoutDisplay = require("timeoutDisplay")
 local versionCompare = require("versionCompare")
 local sessionSettings = require("sessionSettings")
 local debugLog = require("debugLog")
+local sessionLogHelper = require("sessionLogHelper")
 
 local PORT = 8734
 -- Last-used Access mode and idle-timeout minutes, loaded once here so the widgets below
@@ -400,6 +401,18 @@ if (iup.MainLoopLevel() == 0) then
     iup.MainLoop()
 end
 dlg:destroy()
+
+-- Show this plugin load's log note on close (FH 8 beta's fhOutputNote): only when
+-- logActivity actually created one, no write-mode error is about to trigger FH's own
+-- rollback prompt (ADR 0005 -- that undoes this whole plugin load's writes, including the
+-- note itself, so popping it first would be wrong), and FH's own major version supports
+-- fhOutputNote (FH-8-beta-only). fhGetAppVersion() returns its 3 version numbers as
+-- separate return values, not a dotted string, so only the first (the major) is read here.
+local sessionNotePtr = sessionLogHelper.getNotePtr()
+local appVersionMajor = fhGetAppVersion()
+if sessionNotePtr ~= nil and pendingRethrow == nil and appVersionMajor ~= nil and appVersionMajor >= 8 then
+    fhOutputNote(sessionNotePtr)
+end
 
 -- Re-raise a write-mode script's error here, past every other statement in this file,
 -- genuinely uncaught.

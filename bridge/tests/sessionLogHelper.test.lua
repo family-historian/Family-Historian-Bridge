@@ -602,4 +602,24 @@ local okSave, errSave = pcall(writeCheckSessionLogHelper.logActivity, indiWriteC
 check(okSave == false, 'logActivity raises when the entry save (fhSetValueAsRichText) fails')
 check(contains(errSave, "logActivity"), 'the save-failure error names the function')
 
+------------------------------------------------------------------
+-- M.getNotePtr (issue #115): read-only accessor for the module-level notePtr, since it was
+-- previously a private local -- bridgeSession.lua needs to read it (without creating one)
+-- to decide whether to call fhOutputNote on Bridge close.
+------------------------------------------------------------------
+
+package.loaded['sessionLogHelper'] = nil
+local accessorSessionLogHelper = require('sessionLogHelper')
+
+check(accessorSessionLogHelper.getNotePtr() == nil,
+  'getNotePtr returns nil before logActivity has ever been called this Session')
+
+local indiAccessor = fhCreateItem("INDI")
+accessorSessionLogHelper.logActivity(indiAccessor, "created")
+
+check(accessorSessionLogHelper.getNotePtr() ~= nil,
+  'getNotePtr returns non-nil once logActivity has created this Session\'s note')
+check(currentNode(accessorSessionLogHelper.getNotePtr()).tag == '_RNOT',
+  'getNotePtr returns the _RNOT record pointer itself, not its TEXT subfield')
+
 t.report()
