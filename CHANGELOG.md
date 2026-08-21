@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### sourceHelper.lua: fhGetRecordLinks replaces manual link scans (issue #66, ADR 0034)
+- `findSources`/`getTemplateFieldCensus` no longer walk every SOUR record (or every INDI/FAM
+  record, for citation detail) to find records linking to a template/source. Both now call
+  `fhGetRecordLinks` directly, climbing to the enclosing Fact/record via `MoveToParentItem`/
+  `MoveToRecordItem` where needed. No project-wide scan remains. Behavior/output unchanged;
+  internal implementation only.
+
 ### Known-names table update (issue #134)
 - Added two new-in-FH8 `fh*` globals surfaced by the help-corpus scan: `fhGetRecordLinks`
   (read-only — returns the item pointers linking to a record) is now wired through in

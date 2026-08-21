@@ -531,49 +531,32 @@ function M.getPopulatedTemplateFields(sourPtr)
   return result
 end
 
--- Recursively scans ptr's live children for every SOUR-tagged citation at any depth,
--- grouping them by the id of the source each one links to. ownTag/ownQualifiedId identify
--- the enclosing item -- the record itself for a Whole-record citation, or the nearest
--- enclosing Fact for a Fact-level one.
---
--- Walks the live tree directly rather than a getAllDetails JSON tree, so each citation's
--- own live pointer (Clone()'d) is retained -- needed for matchesFilters to resolve a
--- citation-level field by its shortcut Data Reference, which a JSON tree can't carry.
-local function collectCitations(ptr, ownTag, ownQualifiedId, bySourceId)
-  local child = fhNewItemPtr()
-  child:MoveToFirstChildItem(ptr)
-  while child:IsNotNull() do
-    local childTag = fhGetTag(child)
-    if childTag == "SOUR" then
-      local target = fhGetValueAsLink(child)
-      if target and not target:IsNull() then
-        local sourceId = fhGetRecordId(target)
-        local list = bySourceId[sourceId]
-        if not list then
-          list = {}
-          bySourceId[sourceId] = list
-        end
-        table.insert(list, { ptr = child:Clone(), tag = ownTag, qualifiedId = ownQualifiedId })
+-- fhGetRecordLinks(sourPtr) returns each linking item itself (issue #66; live-confirmed
+-- against a running Bridge -- item-level, arbitrary depth, not resolved up to a record).
+-- For a SOUR target, that's the citation item (tag "SOUR") directly. MoveToParentItem
+-- gives the enclosing Fact/record's own tag (ownTag); MoveToRecordItem gives the owning
+-- INDI/FAM (ownQualifiedId). The citation's own live pointer (Clone()'d) is retained --
+-- needed for matchesFilters to resolve a citation-level field by its shortcut Data
+-- Reference, which a JSON tree can't carry.
+local function citationsForSource(sourPtr)
+  local entries = {}
+  for _, citationPtr in ipairs(fhGetRecordLinks(sourPtr)) do
+    if fhGetTag(citationPtr) == "SOUR" then
+      local parent = fhNewItemPtr()
+      parent:MoveToParentItem(citationPtr)
+      local owner = fhNewItemPtr()
+      owner:MoveToRecordItem(citationPtr)
+      local ownerTag = fhGetTag(owner)
+      if ownerTag == "INDI" or ownerTag == "FAM" then
+        table.insert(entries, {
+          ptr = citationPtr:Clone(),
+          tag = fhGetTag(parent),
+          qualifiedId = fhGetQualifiedRecordId(owner),
+        })
       end
     end
-    collectCitations(child, childTag, ownQualifiedId, bySourceId)
-    child:MoveNext()
   end
-end
-
--- One pass over every INDI/FAM record, grouping every SOUR citation by the id of the
--- source it links to -- cheaper than re-scanning the whole project per candidate source.
-local function allCitationsBySourceId()
-  local bySourceId = {}
-  for _, recTag in ipairs({ "INDI", "FAM" }) do
-    local ptr = fhNewItemPtr()
-    ptr:MoveToFirstRecord(recTag)
-    while ptr:IsNotNull() do
-      collectCitations(ptr, fhGetTag(ptr), fhGetQualifiedRecordId(ptr), bySourceId)
-      ptr:MoveNext()
-    end
-  end
-  return bySourceId
+  return entries
 end
 
 -- sourceHelper.findSources(templateNameOrId, fieldFilters)
@@ -593,7 +576,6 @@ function M.findSources(templateNameOrId, fieldFilters)
   fieldFilters = fieldFilters or {}
 
   local template = resolveTemplate(templateNameOrId)
-  local templateId = fhGetRecordId(template)
   local defs = fieldDefs(template)
 
   local recordFilters, citationFilters = {}, {}
@@ -606,19 +588,22 @@ function M.findSources(templateNameOrId, fieldFilters)
     end
   end
 
-  local citationsBySourceId = allCitationsBySourceId()
-
   local results = {}
-  local sourPtr = fhNewItemPtr()
-  sourPtr:MoveToFirstRecord("SOUR")
-  while sourPtr:IsNotNull() do
-    local candidateTemplate = linkedTemplate(sourPtr)
-    if candidateTemplate and not candidateTemplate:IsNull() and fhGetRecordId(candidateTemplate) == templateId then
+  local seen = {}
+  -- fhGetRecordLinks(template) returns the linking _SRCT item itself (issue #66) --
+  -- MoveToRecordItem climbs to the owning SOUR record. Replaces the old whole-SOUR-table
+  -- scan + linkedTemplate(sourPtr) check.
+  for _, linkItem in ipairs(fhGetRecordLinks(template)) do
+    local sourPtr = fhNewItemPtr()
+    sourPtr:MoveToRecordItem(linkItem)
+    local recordId = fhGetRecordId(sourPtr)
+    if fhGetTag(sourPtr) == "SOUR" and not seen[recordId] then
+      seen[recordId] = true
       -- Record-level filters are checked off the live pointer first (cheap) -- sourTree is
       -- only built once we know this candidate is worth keeping.
       if matchesFilters(sourPtr, recordFilters, defs) then
         local sourTree = familyHelper.getAllDetails(sourPtr)
-        local citationEntries = citationsBySourceId[fhGetRecordId(sourPtr)] or {}
+        local citationEntries = citationsForSource(sourPtr)
         local citationFiltersOk = next(citationFilters) == nil
         local citedBy = {}
         for _, entry in ipairs(citationEntries) do
@@ -632,7 +617,6 @@ function M.findSources(templateNameOrId, fieldFilters)
         end
       end
     end
-    sourPtr:MoveNext()
   end
 
   return results
@@ -649,11 +633,10 @@ end
 -- (which errors, same as findSources/createSourceFromTemplate). recordFields counts SOUR
 -- records; citationFields counts individual citations.
 --
--- The whole-project citation walk only runs when the template defines at least one
--- citation-level field.
+-- The per-source citation walk (citationsForSource) only runs when the template defines at
+-- least one citation-level field.
 function M.getTemplateFieldCensus(templateNameOrId)
   local template = resolveTemplate(templateNameOrId)
-  local templateId = fhGetRecordId(template)
   local defs = fieldDefs(template)
 
   local recordFields, citationFields = {}, {}
@@ -667,21 +650,23 @@ function M.getTemplateFieldCensus(templateNameOrId)
     end
   end
 
-  local citationsBySourceId = hasCitationFields and allCitationsBySourceId() or nil
-
-  local sourPtr = fhNewItemPtr()
-  sourPtr:MoveToFirstRecord("SOUR")
-  while sourPtr:IsNotNull() do
-    local candidateTemplate = linkedTemplate(sourPtr)
-    if candidateTemplate and not candidateTemplate:IsNull() and fhGetRecordId(candidateTemplate) == templateId then
+  local seen = {}
+  -- fhGetRecordLinks(template) returns the linking _SRCT item itself (issue #66) --
+  -- MoveToRecordItem climbs to the owning SOUR record. Replaces the old whole-SOUR-table
+  -- scan + linkedTemplate(sourPtr) check.
+  for _, linkItem in ipairs(fhGetRecordLinks(template)) do
+    local sourPtr = fhNewItemPtr()
+    sourPtr:MoveToRecordItem(linkItem)
+    local recordId = fhGetRecordId(sourPtr)
+    if fhGetTag(sourPtr) == "SOUR" and not seen[recordId] then
+      seen[recordId] = true
       for code in pairs(recordFields) do
         if resolvedFieldValue(sourPtr, defs[code]) then
           recordFields[code] = recordFields[code] + 1
         end
       end
-      if citationsBySourceId then
-        local entries = citationsBySourceId[fhGetRecordId(sourPtr)] or {}
-        for _, entry in ipairs(entries) do
+      if hasCitationFields then
+        for _, entry in ipairs(citationsForSource(sourPtr)) do
           for code in pairs(citationFields) do
             if resolvedFieldValue(entry.ptr, defs[code]) then
               citationFields[code] = citationFields[code] + 1
@@ -690,7 +675,6 @@ function M.getTemplateFieldCensus(templateNameOrId)
         end
       end
     end
-    sourPtr:MoveNext()
   end
 
   return { recordFields = recordFields, citationFields = citationFields }

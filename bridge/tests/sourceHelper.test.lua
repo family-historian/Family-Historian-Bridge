@@ -6,7 +6,8 @@
 -- sourceHelper.lua actually calls: item-pointer methods MoveToFirstRecord/
 -- MoveToFirstChildItem/MoveNext/IsNotNull/IsNull/Clone, plus globals fhGetTag/fhGetItemText/
 -- fhGetRecordId/fhCreateItem/fhSetValueAsText/fhSetValueAsDate/fhSetValueAsLink/
--- fhSetValueAsRichText/fhNewDate/fhNewRichText/fhSrcEnableAutoTitle.
+-- fhSetValueAsRichText/fhNewDate/fhNewRichText/fhSrcEnableAutoTitle/fhGetRecordLinks
+-- (issue #66).
 --
 -- findSources (issue #65) additionally pulls in familyHelper.lua for real (require
 -- isn't stubbed away the way sandbox.test.lua/runScript.test.lua stub it, since this
@@ -87,6 +88,28 @@ function PtrMethods:MoveToFirstChildItem(parentPtr)
   local node = currentNode(parentPtr)
   self.list = node and node.children or {}
   self.index = 1
+end
+
+-- Needed for citationsForSource (issue #66): parentLoc/recordLoc are stamped on every node
+-- by fhCreateItem below (nil for a top-level record, since it has no parent/isn't nested).
+function PtrMethods:MoveToParentItem(ptrRef)
+  local node = currentNode(ptrRef)
+  local loc = node and node.parentLoc
+  self.list = loc and loc.list or nil
+  self.index = loc and loc.index or nil
+end
+
+function PtrMethods:MoveToRecordItem(ptrRef)
+  local node = currentNode(ptrRef)
+  local loc = node and node.recordLoc
+  if loc then
+    self.list = loc.list
+    self.index = loc.index
+  else
+    -- No recordLoc means ptrRef already points at the record itself.
+    self.list = ptrRef.list
+    self.index = ptrRef.index
+  end
 end
 
 function PtrMethods:MoveNext()
@@ -239,11 +262,17 @@ fhCreateItem = function(tagOrShortcut, parentPtr)
     table.insert(recordsByTag[tagOrShortcut], node)
     ptr.list = recordsByTag[tagOrShortcut]
     ptr.index = #recordsByTag[tagOrShortcut]
+    -- No parentLoc/recordLoc: a top-level record has no parent and is its own record.
   else
     local parentNode = currentNode(parentPtr)
     table.insert(parentNode.children, node)
     ptr.list = parentNode.children
     ptr.index = #parentNode.children
+    -- MoveToParentItem/MoveToRecordItem (issue #66): parentLoc is always parentPtr's own
+    -- location; recordLoc inherits from parentNode, or is parentLoc itself if parentNode
+    -- is the record (parentNode.recordLoc == nil).
+    node.parentLoc = { list = parentPtr.list, index = parentPtr.index }
+    node.recordLoc = parentNode.recordLoc or node.parentLoc
   end
   return ptr
 end
@@ -306,6 +335,36 @@ fhGetValueAsLink = function(ptr)
   linkPtr.list = { target }
   linkPtr.index = 1
   return linkPtr
+end
+
+-- fhGetRecordLinks(ptr) -- issue #66. Real FH returns the linking item itself, item-level
+-- and at whatever depth it lives, not resolved up to its owning record (live-confirmed
+-- against a running Bridge). This fake walks every record's own child tree (any depth) for
+-- a link value pointing at ptr's node, returning a fake pointer to each such linking item --
+-- each already carries the parentLoc/recordLoc stamped on it by fhCreateItem, so
+-- MoveToParentItem/MoveToRecordItem on the result work the same as in the real Bridge.
+local function collectLinksTo(containerNode, targetNode, results)
+  for i, child in ipairs(containerNode.children) do
+    if type(child.value) == 'table' and child.value == targetNode then
+      local p = newPtr()
+      p.list = containerNode.children
+      p.index = i
+      table.insert(results, p)
+    end
+    collectLinksTo(child, targetNode, results)
+  end
+end
+
+fhGetRecordLinks = function(ptr)
+  local targetNode = currentNode(ptr)
+  local results = {}
+  if not targetNode then return results end
+  for _, list in pairs(recordsByTag) do
+    for _, recordNode in ipairs(list) do
+      collectLinksTo(recordNode, targetNode, results)
+    end
+  end
+  return results
 end
 
 -- Real FH's fhNewDate returns a Date *object* (userdata, per the API's own Hungarian-
