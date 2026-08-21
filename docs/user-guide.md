@@ -10,10 +10,9 @@ tree, but not change anything. Pick **Read-write** at Start instead to additiona
 Claude create, edit, and delete records while answering your question (see
 [What it can do right now](#what-it-can-do-right-now)).
 
-*(On Windows, installing from a `FH-MCP-Bridge-Setup-X.Y.Z.exe` file instead of this
-project's source? Use [docs/windows-installer-guide.md](windows-installer-guide.md) for
-install steps, no Node.js and no command line needed, then come back here from its
-[Step 5](windows-installer-guide.md#step-5--use-it) onward for day-to-day use.)*
+This guide assumes both halves are already installed. Not installed yet? See
+[docs/install.md](install.md) (end users — no building, no command line) or
+[docs/build.md](build.md) (building from source instead).
 
 ## How it works, in short
 
@@ -29,80 +28,6 @@ content, see [What it can do right now](#what-it-can-do-right-now)):
 You start a **Session** in FH (click Start) before asking Claude anything; FH's main
 window is locked for the duration (that's expected, not a bug) and you get it back the
 moment you click Stop.
-
-## Requirements
-
-- Family Historian, installed and working (Windows natively, or via CrossOver on a Mac).
-- [Claude Desktop](https://claude.ai/download).
-- [Node.js](https://nodejs.org) (any current LTS release); only needed to build the MCP
-  server once; nothing to install FH-side beyond copying files.
-
-## Install (clean machine)
-
-### 1. Get the project files
-
-Copy or clone this whole project folder onto the machine running FH.
-
-### 2. Build the MCP server
-
-In a terminal, from the project's `server` folder:
-
-```bash
-cd server
-npm install
-npm run build
-```
-
-This produces `server/dist/index.js`, the file Claude Desktop will run.
-
-### 3. Install the Bridge plugin into FH
-
-Build the single-file plugin (from the project's root folder):
-
-```bash
-lua bridge/scripts/build.lua
-```
-
-This produces `bridge/dist/Claude MCP Bridge.fh_lua`, a self-contained bundle of the
-plugin and its supporting modules (see docs/adr/0009-bundle-bridge-plugin-for-install.md).
-Copy just that one file into FH's Plugins folder.
-
-**Where FH's Plugins folder is:**
-- Native Windows, **FH8**: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\`. Note
-  the `8`. If you also have FH7 installed, it has its own `Family Historian\Plugins\` (no
-  version number) sitting right next to this one, already populated with real plugins.
-  It's easy to copy into by mistake, and FH won't tell you if you do.
-- Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
-
-In FH: **Tools -> Plugins -> New**, open `Claude MCP Bridge.fh_lua` from that folder, click **Run**. A
-small "Claude MCP Bridge" dialog appears. Leave it there; you'll use it every time you want
-Claude to look at your tree.
-
-### 4. Connect Claude Desktop to the server
-
-Open (or create) Claude Desktop's MCP config file:
-
-- Mac: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Add an entry for the server, using the **absolute path** to the file built in step 2:
-
-```json
-{
-  "mcpServers": {
-    "fh-mcp-bridge": {
-      "command": "node",
-      "args": ["/absolute/path/to/server/dist/index.js"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop. You should now be able to ask it to use the `run_lua` tool (it'll
-usually pick it up automatically when you ask a genealogy question). If you're using
-Claude Code rather than Claude Desktop, a session started *before* the server was
-registered in its config won't have `run_lua` in its tool list. Start a fresh session (or
-restart Claude Desktop) after adding the config, not before.
 
 ## Using it
 
@@ -244,11 +169,14 @@ just ran. For a harder case, Stop the Session, tick **Debug logging**, Start aga
 reproduce the question. Every `run_lua` script and its result gets written to a
 plain-text log file under your project's public folder for the rest of that Session.
 
-**`run_lua` never shows up in Claude Desktop, and step 4's config file looks correct**:
-newer Claude Desktop builds (the unified/MSIX-packaged version, not the older Squirrel
-one) don't read `claude_desktop_config.json` at all, so hand-editing it does nothing on
-those builds. There's no supported workaround yet if you're on one of these; this is a
-known gap, not something you're doing wrong.
+**`run_lua` never shows up in Claude Desktop, and `claude_desktop_config.json` looks
+correct** (only relevant if you installed via [docs/build.md](build.md)'s manual config-file
+step, not the `.mcpb` in [docs/install.md](install.md)): newer Claude Desktop builds (the
+unified/MSIX-packaged version, not the older Squirrel one) don't read
+`claude_desktop_config.json` at all, so hand-editing it does nothing on those builds. There's
+no supported workaround yet for that path if you're on one of these — switch to
+[docs/install.md](install.md)'s `.mcpb` install instead; this is a known gap, not something
+you're doing wrong.
 
 ## Privacy and security notes
 

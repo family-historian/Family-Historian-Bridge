@@ -47,60 +47,15 @@ A user starts a **Session** in FH (clicking Start in the Bridge's dialog) before
 Claude anything; FH's main window is locked for the session's duration, and released the
 moment they click Stop (or after 5 minutes idle).
 
-## Install (clean machine)
+## Install
 
-Full walkthrough, troubleshooting, and day-to-day usage: **[docs/user-guide.md](docs/user-guide.md)**.
+Download two files from the [latest release](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/releases)
+— the `.mcpb` (install via Claude Desktop's own Settings → Extensions → Advanced Settings →
+Install Extension) and `Claude MCP Bridge.fh_lua` (load via FH's Tools → Plugins → New, or
+just double-click it). No building, no command line.
 
-**Windows end user, installer in hand?** If you were given a `FH-MCP-Bridge-Setup-X.Y.Z.exe`
-file rather than this project's source, skip the build steps below and use
-**[docs/windows-installer-guide.md](docs/windows-installer-guide.md)** instead. It needs
-no Node.js and no command line.
-
-Short version (building from source):
-
-1. **Get the project files**: copy or clone this whole folder onto the machine running FH.
-2. **Build the MCP server**:
-   ```bash
-   cd server
-   npm install
-   npm run build
-   ```
-   This produces `server/dist/index.js`.
-3. **Install the Bridge plugin into FH**: build the single-file plugin, then copy just
-   that one file:
-   ```bash
-   lua bridge/scripts/build.lua
-   ```
-   This produces `bridge/dist/Claude MCP Bridge.fh_lua`, a self-contained bundle of the
-   plugin and its supporting modules (see
-   [docs/adr/0009-bundle-bridge-plugin-for-install.md](docs/adr/0009-bundle-bridge-plugin-for-install.md)).
-   Copy that one file into FH's Plugins folder:
-   - Native Windows, FH8: `C:\ProgramData\Calico Pie\Family Historian 8\Plugins\`.
-     Note the `8`. A same-machine FH7 install has its own `Family Historian\Plugins\`
-     (no version number) sitting right next to it, already populated with real plugins,
-     and it's easy to copy into the wrong one (confirmed on a beta install).
-   - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
-
-   Then in FH: **Tools -> Plugins -> New**, open `Claude MCP Bridge.fh_lua` from that folder, click
-   **Run**.
-4. **Connect Claude Desktop**: add an entry to Claude Desktop's MCP config
-   (`~/Library/Application Support/Claude/claude_desktop_config.json` on Mac,
-   `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
-   ```json
-   {
-     "mcpServers": {
-       "fh-mcp-bridge": {
-         "command": "node",
-         "args": ["/absolute/path/to/server/dist/index.js"]
-       }
-     }
-   }
-   ```
-   Restart Claude Desktop.
-
-**Requirements:** Family Historian (Windows native, or via CrossOver on Mac), [Claude
-Desktop](https://claude.ai/download), and [Node.js](https://nodejs.org) (any current LTS;
-only needed to build the server once).
+Full walkthrough: **[docs/install.md](docs/install.md)**. Building from source instead
+(contributors/developers): **[docs/build.md](docs/build.md)**.
 
 ## Using it
 

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Install docs restructured around a new interim distribution path (docs/adr/0035): `docs/install.md` is now the canonical end-user install doc (download the `.mcpb` + `Claude MCP Bridge.fh_lua`, no building); `docs/build.md` split off build-from-source steps for developers; README's Install section trimmed to a short pointer; `docs/user-guide.md` no longer duplicates install steps; `docs/windows-installer-guide.md` retired to uninstall-only. `docs/release.md` updated to ship just those two release assets, dropping the hand-assembled `.zip` and Windows `.exe` installer. Resolves #56.
 - Bridge close now shows the plugin load's `_RNOT` log note via `fhOutputNote` (FH 8 beta+) if one was created and no rollback is pending.
 
 ### sourceHelper.lua: fhGetRecordLinks replaces manual link scans (issue #66, ADR 0034)
