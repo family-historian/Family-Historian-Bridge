@@ -13,6 +13,13 @@ source: https://claude.com/docs/connectors/building/submission
 - **Desktop extensions (MCPB)** — local MCP servers packaged as MCP Bundles for [[Claude Desktop]]
 - **MCP Apps** — servers with interactive UI elements (require extra screenshots)
 
+## Which Path Applies to This Project
+FH MCP Bridge stays local/desktop (talks to FH over a local socket) → submit as a **Desktop Extension (MCPB)** via the separate desktop extension submission form, **not** the admin-settings portal.
+
+MCPB-specific requirements on top of the general list below:
+- **Open source** — non-waivable for MCPB per Anthropic's directory terms
+- **Packaging** — server must be packaged per the [MCPB spec](https://claude.com/docs/connectors/building/mcpb)
+
 ## Submission Requirements
 1. **Security** — must meet Anthropic's security standards
 2. **Tool annotations** — every tool needs a `title` and the applicable `readOnlyHint`/`destructiveHint`

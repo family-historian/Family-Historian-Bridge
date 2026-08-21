@@ -9,6 +9,9 @@ Solo project (Jane_t), self-hosted Forgejo issue tracker, pre-1.0 (currently 0.1
 - `server/` — TypeScript MCP server, runs alongside Claude Desktop. See `mem:server`.
 - `installer/` — packages both into a Windows .exe / .mcpb bundle. Not yet memoried in
   depth; see `installer/README.md` and `docs/release.md` if touching it.
+- `mem:distribution` — how the server/bridge actually reach users (Claude Connectors
+  Directory, FH Plugin Store, GitHub mirror), and the FH8-GA blocker on all of it. Read
+  before touching installer/release/submission work.
 
 ## Domain glossary (moved from CONTEXT.md into memories, split by topic — read only the
 cluster relevant to what you're touching, not all of them)
