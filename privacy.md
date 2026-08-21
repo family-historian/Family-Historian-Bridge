@@ -34,4 +34,4 @@ user-triggered help-content fetch from family-historian.co.uk.
 cached help content and any plugin files you asked Claude to write stay on your machine
 under your control until you delete them yourself.
 
-**Contact:** [fhmcp@rjt.org.uk](mailto:fhmcp@rjt.org.uk)
+**Contact:** [fhmcp@family-historian.co.uk](mailto:fhmcp@family-historian.co.uk)
