@@ -16,3 +16,7 @@
 # Added by code-review-graph
 .code-review-graph/
 .envrc
+
+# Internal-only notes never meant for the repo's public history (secrecy-sensitive plans,
+# undocumented-API notes) -- see docs/INTERNAL-*.md naming convention
+INTERNAL*
