@@ -502,6 +502,19 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     expect(combinedText.toLowerCase()).toMatch(/silently leaves the pointer null|silently null/);
     expect(combinedText).toMatch(/writeSessionRolledBack/);
   });
+
+  it("documents fhBridge's write helpers (createFact/citeSource/createSourceFromTemplate/getTftfText/setTftfText/logActivity) by signature, and that they're Read-write-Session only unlike the read-only query helpers (issue #133 follow-up)", () => {
+    // Mirrors the read-only family/detail query helpers test above — the write side's own
+    // parameter/return/edge-case detail lives in each function's individual fhbridge-*
+    // reference entry, not repeated here.
+    expect(combinedText).toMatch(/fhBridge\.createFact\(ptrRecord, sTag, sPlace, dtDate, sAddress, sValue, sAge\)/);
+    expect(combinedText).toMatch(/fhBridge\.citeSource\(ptrTarget, sourceNameOrId, fields\)/);
+    expect(combinedText).toMatch(/fhBridge\.createSourceFromTemplate\(templateNameOrId, fields, transcription\)/);
+    expect(combinedText).toMatch(/fhBridge\.getTftfText\(ptr\)/);
+    expect(combinedText).toMatch(/fhBridge\.setTftfText\(ptr, text\)/);
+    expect(combinedText).toMatch(/fhBridge\.logActivity\(ptrRecord, action, media\)/);
+    expect(combinedText.toLowerCase()).toMatch(/read-write-session only/);
+  });
 });
 
 describe("fhBridge API reference corpus entries (issue #102, docs/adr/0024-fhbridge-api-reference-lives-in-gedcom-knowledge-corpus.md)", () => {

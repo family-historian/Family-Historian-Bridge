@@ -21,3 +21,10 @@ effects, e.g. creating records, even when called "just to see the error"):
 
 Search for "name/date/place qualifiers" specifically → use `search_gedcom_knowledge`, not
 grepping fh-help sample scripts (that corpus doesn't cover Data Reference qualifiers well).
+
+## Editing gedcom-knowledge-corpus.jsonl
+
+Use `server/scripts/corpus-entry.mjs`, not hand-rolled Python/jq one-liners — `add
+<entry.json>` validates (JSON-parseable, required fields, `confidence` enum, id-uniqueness,
+soft breadcrumb-family title-prefix check) then appends; `get <id>` pretty-prints one entry;
+`check` validates the whole file. See ADR 0036.

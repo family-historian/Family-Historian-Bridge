@@ -329,4 +329,28 @@ describe("RUN_LUA_DESCRIPTION", () => {
   it("keeps the whole description well under the ~2KB truncation point, not just up to the notice", () => {
     expect(Buffer.byteLength(RUN_LUA_DESCRIPTION, "utf8")).toBeLessThan(1950);
   });
+
+  it("reaches for fhBridge's purpose-built helper before fhu, and fhu before hand-rolling, within the safe zone", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET);
+    const fhBridgeIdx = safeZone.indexOf("fhBridge");
+    const fhuIdx = safeZone.indexOf("fhu");
+    expect(fhBridgeIdx).toBeGreaterThan(-1);
+    expect(fhuIdx).toBeGreaterThan(-1);
+    expect(fhBridgeIdx).toBeLessThan(fhuIdx);
+  });
+
+  it("gates any write-mode script on fetching the write-helper reference from the corpus, naming a helper not spelled out inline (issue #133 follow-up)", () => {
+    const SAFE_ZONE_BUDGET = 2000;
+    const safeZone = RUN_LUA_DESCRIPTION.slice(0, SAFE_ZONE_BUDGET);
+    expect(safeZone.toLowerCase()).toMatch(/before any write-mode script/);
+    expect(safeZone).toMatch(/write-helper reference/);
+    expect(safeZone).toContain('search_gedcom_knowledge("run_lua guidance")');
+    // createSourceFromTemplate/getTftfText/setTftfText are deliberately corpus-only, not
+    // spelled out with their own fhBridge.-prefixed call shape inline (unlike
+    // createFact/citeSource) -- this guards against them creeping back in and reopening the
+    // byte budget the way issue #55's logActivity detail once did.
+    expect(safeZone).toMatch(/createSourceFromTemplate/);
+    expect(safeZone).not.toMatch(/fhBridge\.createSourceFromTemplate/);
+  });
 });

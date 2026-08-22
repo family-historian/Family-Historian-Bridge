@@ -21,13 +21,13 @@ export const RUN_LUA_DESCRIPTION = `Execute a Lua script inside the FH Bridge's 
 
 Requires an active Bridge Session (user clicks Start in the Bridge dialog). If no Session is running, tell the user to click Start — don't retry automatically; it can't start one.
 
-Resolve ambiguity in the user's question before calling this tool — an unspecified generation depth, ambiguous place-name spelling, or unclear date boundary gets confirmed with the user first, not guessed at.
+Never guess function or method names — search first, always, reads and writes alike. Reach for fhBridge's purpose-built helper before fhu, and fhu before hand-rolling MoveToFirstRecord/MoveNext or a raw fh* write — fhBridge.getFamilyGroup/getAncestors/getDescendants/getFactsByTag/searchByName/getAllDetails for family/detail queries, fhBridge.createFact/citeSource for writes; fhu.records/allItems for iteration (already a global here, never require('fhUtils')). Before ANY write-mode script, fetch the write-helper reference (createSourceFromTemplate, getTftfText/setTftfText, logActivity too) via search_gedcom_knowledge("run_lua guidance") if you haven't this task — an unlogged write gets rolled back, not just warned about.
 
-Search first, not optional — call search_fh_help/search_gedcom_knowledge for any FH function, item-pointer method, or fhUtils call not yet confirmed this conversation, for reads and writes alike. Before hand-rolling MoveToFirstRecord/MoveNext or fhCreateItem/fhSetValueAsLink/fhDeleteItem, check whether fhu (already a global here — never require('fhUtils')) or fhBridge has a purpose-built helper: fhu.records/fhu.allItems for iteration, fhu.createIndi for mutation, fhBridge.getFamilyGroup/getAncestors for tree walks, .searchByName for name lookups.
+Resolve ambiguity (generation depth, place-name spelling, date boundary) with the user before calling — never guess.
 
-This description may be truncated by your MCP client around 2KB. On your first run_lua call this conversation, call search_gedcom_knowledge("run_lua guidance") once regardless — it surfaces the gotchas, citeSource, writeSessionRolledBack, fhu-global, logActivity/session-log, and family-query-helper guidance below, in full or via a compact index if truncated.
+The write-helper/gotcha detail below may not reach you — some MCP clients truncate long tool descriptions. Call search_gedcom_knowledge("run_lua guidance") once, on your first run_lua call this conversation, regardless.
 
-In a read-write Session, call \`fhBridge.logActivity(ptrRecord, action)\` after every record-touching action, not just once at the end — an unlogged write gets rolled back (see the corpus entry above for call shape, the Research Note it creates, and the media/#ToDo option).
+Call fhBridge.logActivity(ptrRecord, action) after every record-touching action, not just once at the end, in a read-write Session — an unlogged write gets rolled back.
 
 Write a fresh script per question — never a guessed-at reuse of a remembered API shape; no predefined query set exists.`;
 
