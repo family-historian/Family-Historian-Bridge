@@ -736,7 +736,7 @@ end
 ------------------------------------------------------------------
 
 do
-  local robertHenry = newIndi("Robert Henry TAUBMANONE", "Male")
+  newIndi("Robert Henry TAUBMANONE", "Male") -- fixture only, not referenced by id below
   local robertJones = newIndi("Robert JONESONE", "Male")
   local janeTaubman = newIndi("Jane TAUBMANONE", "Female")
   local rob = newIndi("Rob TAUBMANONE", "Male")
