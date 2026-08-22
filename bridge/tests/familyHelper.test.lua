@@ -230,8 +230,16 @@ end
 -- can assert the right builtin name and the right two pointers were passed) and returns
 -- a fixed, simple "matches" rule (Dad Plugin and Self Plugin only) that's just enough to
 -- prove getDescendants actually filters its results by the call's return value.
+-- findByNames' lifeDates also goes through this same fake fhCallBuiltInFunction, but with
+-- its own signature (strFunctionName, ptr, "STD") -- ptrB there is a string, not a
+-- pointer, so it's branched off before the DNA logging/matching below ever touches it.
+-- Reads a `lifeDates` field set directly on the fixture node (see newIndi's callers),
+-- returning "" (the fake's stand-in for FH's own "nothing recorded" case) when absent.
 local dnaCallLog = {}
 fhCallBuiltInFunction = function(strFunctionName, ptrA, ptrB)
+  if strFunctionName == "LifeDates" then
+    return (ptrA.node and ptrA.node.lifeDates) or ""
+  end
   table.insert(dnaCallLog, { fn = strFunctionName, a = ptrA.node, b = ptrB.node })
   return ptrB.node.name == "Dad Plugin" or ptrB.node.name == "Self Plugin"
 end
@@ -365,6 +373,7 @@ do
   check(byRelationship.father.individual.id == dad.id, 'father entry carries the right record id')
   check(byRelationship.father.individual.qualifiedId == "I" .. dad.id, 'father entry carries a qualified id')
   check(byRelationship.father.family.id == byRelationship.mother.family.id, 'father and mother entries point at the same FAMC record')
+  check(byRelationship.father.individual.lifeDates == nil, 'getFamilyGroup individuals carry no lifeDates -- indiDescriptor is untouched by issue #138')
 end
 
 ------------------------------------------------------------------
@@ -770,6 +779,26 @@ do
 
   -- silence "unused local" style nags for fixtures only referenced via search results
   check(robertJones ~= nil and janeTaubman ~= nil and rob ~= nil, 'fixtures created')
+end
+
+------------------------------------------------------------------
+-- findByNames: lifeDates -- present (via fhCallBuiltInFunction("LifeDates", ...)) when
+-- FH has one to report, omitted entirely (not "") when it doesn't
+------------------------------------------------------------------
+
+do
+  local withDates = newIndi("Hasdates TAUBMANFIVE", "Male")
+  withDates.lifeDates = "1865-1932"
+  newIndi("Nodates TAUBMANFIVE", "Male") -- fake fhCallBuiltInFunction returns "" for this one
+
+  local found = familyHelper.findByNames("Taubmanfive")
+  local byName = {}
+  for _, entry in ipairs(found.matches) do byName[entry.name] = entry end
+
+  check(byName["Hasdates TAUBMANFIVE"].lifeDates == "1865-1932",
+    'findByNames carries lifeDates on a match FH can compute one for')
+  check(byName["Nodates TAUBMANFIVE"].lifeDates == nil,
+    'findByNames omits the lifeDates key entirely (not "") when FH has nothing to report')
 end
 
 ------------------------------------------------------------------

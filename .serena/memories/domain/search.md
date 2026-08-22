@@ -20,5 +20,11 @@
   `totalMatches: 0`) for a list. Wire note: `jsonEncode.lua` can't mark an empty Lua table
   as an array, so an empty `matches` crosses as `{}`, not `[]` — deliberate, project-wide,
   not a findByNames-specific gap.
+- **lifeDates** (issue #138): each match in `matches` carries a `lifeDates` string field
+  (e.g. `"1865-1932"`), computed once per match during the same scan via
+  `fhCallBuiltInFunction("LifeDates", ptr, "STD")` — local to `findByNames` only, not
+  folded into the shared `indiDescriptor` (`getFamilyGroup`/`getAncestors`/
+  `getDescendants` output is untouched). Key is omitted entirely, not `""`, when FH has
+  nothing to report.
 - **Ranking**: exact-word match outranks substring-only match; ties break by closer overall
   `NAME:FULL` length to the query.

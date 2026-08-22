@@ -643,6 +643,20 @@ end
 -- searchByName had, and matching "everyone" silently is never what a name-resolution call
 -- wants. Walks the INDI table once regardless of list length -- every query is tested
 -- against each record as it's visited, not once per query.
+--
+-- Each match also carries lifeDates (e.g. "1865-1932"), FH's own built-in
+-- fhCallBuiltInFunction("LifeDates", ptr, "STD") -- omitted entirely (not "") when FH has
+-- nothing to report, not shared with indiDescriptor (getFamilyGroup/getAncestors/
+-- getDescendants stay unchanged).
+
+-- Local to findByNames only -- see the doc comment above for why.
+local function lifeDatesFor(ptr)
+  local dates = fhCallBuiltInFunction("LifeDates", ptr, "STD")
+  if dates == nil or dates == "" then
+    return nil
+  end
+  return dates
+end
 function M.findByNames(query, exactMatch)
   if exactMatch ~= nil and type(exactMatch) ~= "boolean" then
     error("findByNames: exactMatch must be a boolean; pass a list as the first argument to search several names at once")
@@ -674,8 +688,10 @@ function M.findByNames(query, exactMatch)
     for _, p in ipairs(prepared) do
       local matched, exactCount = matchQuery(p.words, nameFullLower, nameWords, exactMatch)
       if matched then
+        local descriptor = indiDescriptor(ptr)
+        descriptor.lifeDates = lifeDatesFor(ptr)
         table.insert(p.results, {
-          descriptor = indiDescriptor(ptr),
+          descriptor = descriptor,
           exactCount = exactCount,
           lengthDelta = math.abs(#nameFull - #p.raw),
           walkIndex = walkIndex,
