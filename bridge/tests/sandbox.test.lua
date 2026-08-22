@@ -266,7 +266,7 @@ local fakeFamilyHelper = {
   getAllDetails = function(ptr) return 'alldetails' end,
   getAncestors = function(ptr, maxGenerations) return 'ancestors:' .. tostring(maxGenerations) end,
   getDescendants = function(ptr, maxGenerations, dnaLine) return 'descendants:' .. tostring(maxGenerations) .. ':' .. tostring(dnaLine) end,
-  searchByName = function(forename, surname) return 'searchbyname:' .. tostring(forename) .. ':' .. tostring(surname) end,
+  findByNames = function(query, exactMatch) return 'findbynames:' .. tostring(query) .. ':' .. tostring(exactMatch) end,
   getFactsByTag = function(ptr, tags) return 'factsbytag:' .. tostring(tags) end,
 }
 package.loaded.familyHelper = fakeFamilyHelper
@@ -411,7 +411,7 @@ check(env.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 'fhBridge.
 check(env.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails present under read-only, by reference')
 check(env.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors present under read-only, by reference')
 check(env.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants present under read-only, by reference')
-check(env.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName present under read-only, by reference')
+check(env.fhBridge.findByNames == fakeFamilyHelper.findByNames, 'fhBridge.findByNames present under read-only, by reference')
 check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag present under read-only, by reference')
 check(env.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources present under read-only, by reference (a pure read, unlike sourceHelper.lua\'s other two members)')
 check(env.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields present under read-only, by reference (issue #73 -- a pure read, same as findSources)')
@@ -683,7 +683,7 @@ check(envReadWrite3.fhBridge.getFamilyGroup == fakeFamilyHelper.getFamilyGroup, 
 check(envReadWrite3.fhBridge.getAllDetails == fakeFamilyHelper.getAllDetails, 'fhBridge.getAllDetails still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhBridge.getAncestors still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants still present under read-write, by reference')
-check(envReadWrite3.fhBridge.searchByName == fakeFamilyHelper.searchByName, 'fhBridge.searchByName still present under read-write, by reference')
+check(envReadWrite3.fhBridge.findByNames == fakeFamilyHelper.findByNames, 'fhBridge.findByNames still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag still present under read-write, by reference')
 check(envReadWrite3.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources still present under read-write, by reference (still unwrapped -- it never writes)')
 check(envReadWrite3.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields still present under read-write, by reference (issue #73 -- still unwrapped, it never writes)')

@@ -168,18 +168,26 @@ implements.
   it to a live pointer by hand. `getFamilyGroup`/`getAncestors`/`getDescendants`
   (Individual-only) raise a clear error if the qualified id resolves to a non-`INDI` record
   (e.g. passing a family's `"F13"` by mistake); `getAllDetails` accepts any record type's
-  qualified id, matching its own "any record pointer" contract. `fhBridge.searchByName
-  (forename, surname)` finds every Individual whose given name(s) contain `forename` and
-  whose surname contains `surname`, matched case-insensitively as substrings, not
-  exact/whole-word: `searchByName("Robert", "Taubman")` also matches "Robert Henry TAUBMAN".
-  Either argument may be omitted/`""` to skip filtering on that part of the name; at least
-  one must be given non-empty, or it errors. Matches against the NAME field's
-  `GIVEN_ALL`/`SURNAME` Data Reference qualifiers (not the raw stored NAME text), so it
-  matches consistently regardless of how a given record orders/prefixes its name parts.
-  Returns an array of the same descriptor shape as `getFamilyGroup`/`getAncestors`' own
-  `.individual` field, in FH's own record order (not sorted). Unlike the other five, it
-  doesn't take a pointer/qualified-id argument: it scans every Individual record in the
-  project itself (`MoveToFirstRecord("INDI")` + `MoveNext()`). `fhBridge.getFactsByTag(ptr,
+  qualified id, matching its own "any record pointer" contract. `fhBridge.findByNames(query,
+  exactMatch)` resolves one or a batch of plain-text names in a single call: `query` is a
+  name string, or an array of them; `exactMatch` (default `false`, scoped to the whole call)
+  switches from substring to exact-whole-word matching. Matching is word-set containment --
+  `query` splits on whitespace and every word must independently match, case-insensitive,
+  against the NAME field's `FULL` Data Reference qualifier (the resolved complete name, not
+  the raw stored NAME text), so word order never matters: `findByNames("Crabb Issac")` and
+  `findByNames("Issac Crabb")` match the same people, and both also match "Robert Henry
+  TAUBMAN" for the query "Robert Taubman". Each search's result is `{matches, totalMatches}`
+  -- `matches` holds up to the top 30 ranked entries (exact-word matches outrank
+  substring-only, ties broken by closer overall name length to the query), `totalMatches`
+  the true pre-cap count, never a silent slice. Output shape mirrors input shape: a single
+  `query` string returns one such object; a list returns an array of them, one per entry,
+  position-preserving -- a no-match entry stays in place (empty `matches`, `totalMatches:
+  0`) rather than being dropped; note `jsonEncode.lua` sends an empty `matches` over the
+  wire as `{}`, not `[]`, since an empty Lua table can't self-report as an array. Any
+  blank/whitespace-only query entry errors the whole
+  call. Unlike the other five, it doesn't take a pointer/qualified-id argument: it scans
+  every Individual record in the project itself (`MoveToFirstRecord("INDI")` +
+  `MoveNext()`), once regardless of how many queries are batched in. `fhBridge.getFactsByTag(ptr,
   tags)` filters `ptr`'s own direct children (a record's "1st level", the level a Fact tag
   actually lives at) to just the ones matching `tags`, an exact/case-sensitive FH tag string
   (e.g. `"CENS"`) or an array of them (e.g. `{"BIRT", "DEAT"}`), and returns an array with
@@ -541,7 +549,7 @@ It's tested manually, inside FH:
    matches the Bridge's own version (check the dialog title bar/`@Version` header for the
    exact string, or just send the same one back) and confirm the mismatch line disappears
    from the next status update.
-19. `fhBridge.getFamilyGroup`/`getAllDetails`/`getAncestors`/`searchByName`/`getFactsByTag`
+19. `fhBridge.getFamilyGroup`/`getAllDetails`/`getAncestors`/`findByNames`/`getFactsByTag`
    (familyHelper.lua): with a real FH project open, select **Read-only** (not Read-write,
    the point of this step is that these five work without the write gate), click Start:
    ```bash
@@ -554,7 +562,7 @@ It's tested manually, inside FH:
      group = fhBridge.getFamilyGroup(p, \"all\"),
      details = fhBridge.getAllDetails(p),
      ancestors = fhBridge.getAncestors(p, 3),
-     byName = fhBridge.searchByName(fhGetItemText(p, \"~.NAME:GIVEN_ALL\"), nil),
+     byName = fhBridge.findByNames(fhGetItemText(p, \"~.NAME:FULL\")),
      byTag = fhBridge.getFactsByTag(p, {\"BIRT\", \"CENS\"}),
    }
    '''

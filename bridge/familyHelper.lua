@@ -1,5 +1,5 @@
 -- Read-only query helpers -- fhBridge.getFamilyGroup, getAllDetails, getAncestors,
--- getDescendants, searchByName, getFactsByTag. Every fh* call here is a read primitive,
+-- getDescendants, findByNames, getFactsByTag. Every fh* call here is a read primitive,
 -- so sandbox.lua wires this whole module through for both access modes.
 --
 -- Every function returns plain JSON-safe tables, never a raw Item Pointer (jsonEncode.lua
@@ -61,7 +61,7 @@ local function resolvePointer(value)
   if type(value) == "number" then
     error("expected a qualified id string like 'I219', got the number " .. tostring(value) ..
       " -- pass the .qualifiedId field (e.g. from getFamilyGroup/getAncestors/getDescendants/" ..
-      "searchByName), not .id")
+      "findByNames), not .id")
   end
   return value
 end
@@ -157,7 +157,7 @@ local function resolveDate(value, callerName)
 end
 M.resolveDate = resolveDate
 
--- Individual summary every getFamilyGroup/getAncestors/getDescendants/searchByName entry
+-- Individual summary every getFamilyGroup/getAncestors/getDescendants/findByNames entry
 -- carries instead of a live pointer.
 local function indiDescriptor(ptr)
   return {
@@ -168,13 +168,53 @@ local function indiDescriptor(ptr)
   }
 end
 
--- Case-insensitive substring test. An empty/nil needle always matches (searchByName
--- treats an omitted forename/surname as "don't filter"); a nil haystack is treated as "".
-local function containsCI(haystack, needle)
-  if needle == nil or needle == "" then
-    return true
+-- Whitespace-separated words, unchanged case. Callers that don't already have a lowercased
+-- string in hand should use splitWordsLower below instead.
+local function splitWords(s)
+  local words = {}
+  for w in tostring(s):gmatch("%S+") do
+    table.insert(words, w)
   end
-  return (haystack or ""):lower():find(needle:lower(), 1, true) ~= nil
+  return words
+end
+
+-- Lowercased whitespace-separated words, for findByNames' word-set containment.
+local function splitWordsLower(s)
+  local words = {}
+  for w in tostring(s):gmatch("%S+") do
+    table.insert(words, w:lower())
+  end
+  return words
+end
+
+-- true iff q is not a usable findByNames query entry: not a string, or blank/whitespace-only
+-- (which would split to zero words and vacuously match everyone).
+local function isBlankQuery(q)
+  return type(q) ~= "string" or q:match("^%s*$") ~= nil
+end
+
+-- Word-set containment test for one query against one candidate's NAME:FULL: every word in
+-- queryWords must match, case-insensitively, as an exact whole word in nameWords or (unless
+-- exactMatch) a substring anywhere in nameFullLower. Returns matched (bool) and exactCount --
+-- how many query words matched a whole name-word exactly, the ranking signal below (always
+-- equal to #queryWords when exactMatch, since containment already requires it there).
+local function matchQuery(queryWords, nameFullLower, nameWords, exactMatch)
+  local exactCount = 0
+  for _, qWord in ipairs(queryWords) do
+    local isExact = false
+    for _, nWord in ipairs(nameWords) do
+      if nWord == qWord then
+        isExact = true
+        break
+      end
+    end
+    if isExact then
+      exactCount = exactCount + 1
+    elseif exactMatch or not nameFullLower:find(qWord, 1, true) then
+      return false, 0
+    end
+  end
+  return true, exactCount
 end
 
 -- Builds a lookup set from getFactsByTag's `tags` (a single tag string or an array of tag
@@ -575,35 +615,98 @@ function M.getFactsByTag(ptr, tags)
   return results
 end
 
--- familyHelper.searchByName(forename, surname)
--- Finds every Individual whose given name(s) contain forename and surname contains
--- surname, both case-insensitive substring matches. Either may be omitted/"" to skip
--- filtering that part; at least one must be given, or this errors.
+-- familyHelper.findByNames(query, exactMatch)
+-- Resolves one or a batch of plain-text names against every Individual in the project in
+-- one pass. query is a single name string, or an array of them for a batch call; exactMatch
+-- is an optional boolean (default false), scoped to the whole call, not per entry.
 --
--- Matches against the NAME field's GIVEN_ALL/SURNAME qualifiers (FH's own resolved given
--- names/surname), not the raw NAME text or fhIndGetName's display string, so matching is
--- consistent across records that order/format their name parts differently.
+-- Matching is word-set containment: query splits on whitespace, and every resulting word
+-- must independently match, case-insensitive, against ~.NAME:FULL (the resolved complete
+-- name, not the raw slash-delimited NAME text) -- substring anywhere in it by default, an
+-- exact whole word under exactMatch. Word order never matters on either side, so "Issac
+-- Crabb" and "Crabb Issac" match the same people.
 --
--- Returns an array of indiDescriptor in FH's own record order (not sorted). Walks every
--- Individual in the project once -- fine for an interactive lookup, not a tight loop.
-function M.searchByName(forename, surname)
-  if (forename == nil or forename == "") and (surname == nil or surname == "") then
-    error("searchByName: supply at least one of forename or surname to search on")
+-- Ranking: a query word that exactly equals a whole name-word outranks one that only
+-- matched as a substring; ties break by which candidate's NAME:FULL is closer in length to
+-- the query.
+--
+-- Each search's result is {matches = {...}, totalMatches = N} -- matches capped at the top
+-- 30 ranked entries, totalMatches the true pre-cap count, never a silent slice (large
+-- projects can run 400k+ Individuals, and a query like "William Williams" can legitimately
+-- match dozens). Output shape mirrors input shape: a single query string returns one such
+-- object; a list returns an array of them, one per entry, position-preserving -- a
+-- no-match entry stays in place as {matches = {}, totalMatches = 0} rather than being
+-- dropped.
+--
+-- Any blank/whitespace-only query entry (the single query, or any item in a list) errors
+-- the whole call -- there's no field to fall back to the way the old two-argument
+-- searchByName had, and matching "everyone" silently is never what a name-resolution call
+-- wants. Walks the INDI table once regardless of list length -- every query is tested
+-- against each record as it's visited, not once per query.
+function M.findByNames(query, exactMatch)
+  if exactMatch ~= nil and type(exactMatch) ~= "boolean" then
+    error("findByNames: exactMatch must be a boolean; pass a list as the first argument to search several names at once")
   end
 
-  local results = {}
+  local isBatch = type(query) == "table"
+  local queries = isBatch and query or { query }
+
+  if #queries == 0 then
+    error("findByNames: query must be a non-blank string or a non-empty array of them")
+  end
+
+  local prepared = {}
+  for i, q in ipairs(queries) do
+    if isBlankQuery(q) then
+      error("findByNames: query entries must be non-blank strings (entry " .. i .. ")")
+    end
+    prepared[i] = { raw = q, words = splitWordsLower(q), results = {} }
+  end
+
   local ptr = fhNewItemPtr()
   ptr:MoveToFirstRecord("INDI")
+  local walkIndex = 0
   while ptr:IsNotNull() do
-    local given = fhGetItemText(ptr, "~.NAME:GIVEN_ALL")
-    local family = fhGetItemText(ptr, "~.NAME:SURNAME")
-    if containsCI(given, forename) and containsCI(family, surname) then
-      table.insert(results, indiDescriptor(ptr))
+    walkIndex = walkIndex + 1
+    local nameFull = fhGetItemText(ptr, "~.NAME:FULL")
+    local nameFullLower = nameFull:lower()
+    local nameWords = splitWords(nameFullLower) -- already lowercase; avoids re-lowering per word
+    for _, p in ipairs(prepared) do
+      local matched, exactCount = matchQuery(p.words, nameFullLower, nameWords, exactMatch)
+      if matched then
+        table.insert(p.results, {
+          descriptor = indiDescriptor(ptr),
+          exactCount = exactCount,
+          lengthDelta = math.abs(#nameFull - #p.raw),
+          walkIndex = walkIndex,
+        })
+      end
     end
     ptr:MoveNext()
   end
 
-  return results
+  local function finalize(p)
+    table.sort(p.results, function(a, b)
+      if a.exactCount ~= b.exactCount then return a.exactCount > b.exactCount end
+      if a.lengthDelta ~= b.lengthDelta then return a.lengthDelta < b.lengthDelta end
+      return a.walkIndex < b.walkIndex
+    end)
+    local totalMatches = #p.results
+    local matches = {}
+    for i = 1, math.min(30, totalMatches) do
+      matches[i] = p.results[i].descriptor
+    end
+    return { matches = matches, totalMatches = totalMatches }
+  end
+
+  if isBatch then
+    local out = {}
+    for i, p in ipairs(prepared) do
+      out[i] = finalize(p)
+    end
+    return out
+  end
+  return finalize(prepared[1])
 end
 
 return M

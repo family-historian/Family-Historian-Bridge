@@ -598,11 +598,11 @@ describe("fhBridge API reference corpus entries (issue #102, docs/adr/0024-fhbri
     expect(combinedText).toMatch(/pedigree collapse/);
   });
 
-  it("documents fhBridge.searchByName's contains-not-exact name matching, that either argument is optional, and which Data Reference qualifiers it matches against (issue #62)", () => {
-    expect(combinedText).toMatch(/fhBridge\.searchByName\(forename, surname\)/);
-    expect(combinedText.toLowerCase()).toMatch(/not exact\/whole-word/);
-    expect(combinedText).toMatch(/GIVEN_ALL\/SURNAME/);
-    expect(combinedText).toMatch(/searchByName\("Robert", "Taubman"\)/);
+  it("documents fhBridge.findByNames' word-set containment, batch/exactMatch shape, and NAME:FULL qualifier (issue #137)", () => {
+    expect(combinedText).toMatch(/fhBridge\.findByNames\(query, exactMatch\)/);
+    expect(combinedText.toLowerCase()).toMatch(/word-set containment/);
+    expect(combinedText).toMatch(/NAME:FULL/);
+    expect(combinedText).toMatch(/totalMatches/);
   });
 
   it("documents fhBridge.getFactsByTag's 1st-level-only tag filtering, that it accepts a single tag or an array, and that it works on any record type (issue #62)", () => {

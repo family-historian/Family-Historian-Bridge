@@ -391,7 +391,7 @@ function M.build(accessMode)
     getAllDetails = realFamilyHelper.getAllDetails,
     getAncestors = realFamilyHelper.getAncestors,
     getDescendants = realFamilyHelper.getDescendants,
-    searchByName = realFamilyHelper.searchByName,
+    findByNames = realFamilyHelper.findByNames,
     getFactsByTag = realFamilyHelper.getFactsByTag,
     findSources = realSourceHelper.findSources,
     getPopulatedTemplateFields = realSourceHelper.getPopulatedTemplateFields,

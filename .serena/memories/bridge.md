@@ -12,7 +12,7 @@ budget abort), `timeoutDisplay.lua`, `versionCompare.lua` (match/warn/block, str
 major-only, inert pre-1.0), `sourceHelper.lua` (`fhBridge.createSourceFromTemplate`,
 `citeSource`, `findSources`, `getTemplateFieldCensus`), `sessionLogHelper.lua`
 (`fhBridge.logActivity`), `familyHelper.lua` (6 read-only query helpers: getFamilyGroup,
-getAncestors, getDescendants, getAllDetails, searchByName, getFactsByTag — all accept
+getAncestors, getDescendants, getAllDetails, findByNames, getFactsByTag — all accept
 either a live pointer or a qualified-id string like `"I219"`).
 
 `Claude MCP Bridge.fh_lua` itself (IUP dialog + TCP listener + framing) has no automatable

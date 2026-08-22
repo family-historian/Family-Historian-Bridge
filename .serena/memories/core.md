@@ -28,6 +28,9 @@ cluster relevant to what you're touching, not all of them)
 - `mem:domain/facts` — createFact, Shared Fact, Fact/Record Flag, Direct ancestor,
   Qualified id string, Clarifying question. Read when touching `factHelper.lua`/
   `familyHelper.lua` or Fact-shaped queries.
+- `mem:domain/search` — findByNames (replaces searchByName, ADR 0037), word-set
+  containment, its `{matches, totalMatches}` result shape. Read when touching
+  `familyHelper.lua`'s name-search helper.
 - `mem:domain/richtext_logging` — FTF/tFTF, getTftfText/setTftfText, logActivity,
   run_lua-guidance corpus entries. Read when touching `richTextHelper.lua`/
   `sessionLogHelper.lua`.

@@ -168,20 +168,22 @@ fhIndGetName = function(ptr)
 end
 
 -- Scoped to how familyHelper.lua actually calls it: fhGetItemText(ptr, "~.SEX")
--- (indiDescriptor), plus searchByName's "~.NAME:GIVEN_ALL"/"~.NAME:SURNAME" qualified
--- reads -- the fake NAME fixture stores a { given, surname } pair directly on the
--- NAME child (see newIndi below) rather than actually splitting a full-name string
--- the way FH's own qualifier resolution would, since reimplementing FH's own name-
--- parsing isn't this fake's job.
+-- (indiDescriptor), plus findByNames' "~.NAME:FULL" qualified read -- the fake NAME
+-- fixture stores the resolved full name directly as the NAME child's value (see newIndi
+-- below), so NAME:FULL is just that value; it's not slash-delimited GEDCOM text, since
+-- reimplementing FH's own qualifier resolution isn't this fake's job. NAME is strict about
+-- which qualifier it accepts (FULL, or none) so a test typo'd to a different qualifier
+-- fails loudly instead of the fake silently answering with the same value regardless.
 fhGetItemText = function(ptr, dataReference)
   local node = ptr.node
   if not node then return "" end
   local tag, qualifier = dataReference:match("^~%.([%w]+):?([%w_]*)$")
   if not tag then return "" end
+  if tag == "NAME" and qualifier ~= "" and qualifier ~= "FULL" then
+    error("fake fhGetItemText: unexpected NAME qualifier '" .. qualifier .. "'")
+  end
   for _, child in ipairs(node.children) do
     if child.tag == tag then
-      if qualifier == "GIVEN_ALL" then return child.given or "" end
-      if qualifier == "SURNAME" then return child.surname or "" end
       return child.value or ""
     end
   end
@@ -293,19 +295,15 @@ local function addLinkChild(parent, tag, targetNode)
   return child
 end
 
--- given/surname are optional overrides for the fake NAME:GIVEN_ALL/NAME:SURNAME
--- qualifier reads searchByName relies on -- when omitted, derived from name by
--- splitting off the last space-separated word as the surname (a fixture-only
--- heuristic; real FH qualifier resolution is exercised by search_gedcom_knowledge's
--- "name qualifiers" reference, not re-implemented here).
-local function newIndi(name, sex, given, surname)
+-- The NAME:FULL qualifier findByNames relies on reads straight off `name` (see
+-- fhGetItemText's fake above), so no given/surname split is needed here -- real FH
+-- qualifier resolution is exercised by search_gedcom_knowledge's "name qualifiers"
+-- reference, not re-implemented in this fixture.
+local function newIndi(name, sex)
   local indi = newRecord("INDI")
   indi.name = name
   indi.display = name
-  local nameChild = addTextChild(indi, "NAME", name)
-  local derivedGiven, derivedSurname = name:match("^(.-)%s+(%S+)$")
-  nameChild.given = given or derivedGiven or name
-  nameChild.surname = surname or derivedSurname or ""
+  addTextChild(indi, "NAME", name)
   addTextChild(indi, "SEX", sex)
   return indi
 end
@@ -734,57 +732,165 @@ do
 end
 
 ------------------------------------------------------------------
--- searchByName: contains (not exact) matching on forename and/or surname
+-- findByNames: word-set containment, case- and order-insensitive, single query string
 ------------------------------------------------------------------
 
 do
-  local robertHenry = newIndi("Robert Henry TAUBMAN", "Male", "Robert Henry", "TAUBMAN")
-  local robertJones = newIndi("Robert JONES", "Male", "Robert", "JONES")
-  local janeTaubman = newIndi("Jane TAUBMAN", "Female", "Jane", "TAUBMAN")
+  local robertHenry = newIndi("Robert Henry TAUBMANONE", "Male")
+  local robertJones = newIndi("Robert JONESONE", "Male")
+  local janeTaubman = newIndi("Jane TAUBMANONE", "Female")
+  local rob = newIndi("Rob TAUBMANONE", "Male")
 
-  local byBoth = familyHelper.searchByName("Robert", "Taubman")
-  check(#byBoth == 1 and byBoth[1].name == "Robert Henry TAUBMAN",
-    'searchByName("Robert", "Taubman") matches "Robert Henry TAUBMAN" via contains, not exact, on both parts')
+  local byBoth = familyHelper.findByNames("Rob Taubmanone")
+  local byBothNames = {}
+  for _, entry in ipairs(byBoth.matches) do byBothNames[entry.name] = true end
+  check(byBoth.totalMatches == 2 and byBothNames["Robert Henry TAUBMANONE"] and byBothNames["Rob TAUBMANONE"],
+    'findByNames("Rob Taubmanone") matches every name containing both words as substrings, not just exact words')
+  check(not byBothNames["Robert JONESONE"] and not byBothNames["Jane TAUBMANONE"],
+    'findByNames("Rob Taubmanone") excludes names missing either query word')
 
-  local byForenameOnly = familyHelper.searchByName("Robert", nil)
-  local byForenameNames = {}
-  for _, entry in ipairs(byForenameOnly) do byForenameNames[entry.name] = true end
-  check(#byForenameOnly == 2 and byForenameNames["Robert Henry TAUBMAN"] and byForenameNames["Robert JONES"],
-    'searchByName("Robert", nil) matches every Robert regardless of surname')
+  local reordered = familyHelper.findByNames("Taubmanone Rob")
+  local reorderedNames = {}
+  for _, entry in ipairs(reordered.matches) do table.insert(reorderedNames, entry.name) end
+  local byBothNamesOrdered = {}
+  for _, entry in ipairs(byBoth.matches) do table.insert(byBothNamesOrdered, entry.name) end
+  check(reordered.totalMatches == byBoth.totalMatches and reorderedNames[1] == byBothNamesOrdered[1] and reorderedNames[2] == byBothNamesOrdered[2],
+    'findByNames("Taubmanone Rob") returns the same matches in the same order as "Rob Taubmanone" -- word order never matters (issue #137 comment)')
 
-  local bySurnameOnly = familyHelper.searchByName("", "Taubman")
-  local bySurnameNames = {}
-  for _, entry in ipairs(bySurnameOnly) do bySurnameNames[entry.name] = true end
-  check(#bySurnameOnly == 2 and bySurnameNames["Robert Henry TAUBMAN"] and bySurnameNames["Jane TAUBMAN"],
-    'searchByName("", "Taubman") matches every Taubman regardless of forename ("" treated the same as omitted)')
+  local caseInsensitive = familyHelper.findByNames("rob taubmanone")
+  check(caseInsensitive.totalMatches == byBoth.totalMatches,
+    'findByNames matches case-insensitively regardless of the query string\'s own casing')
 
-  local caseInsensitive = familyHelper.searchByName("robert", "taubman")
-  check(#caseInsensitive == 1 and caseInsensitive[1].name == "Robert Henry TAUBMAN",
-    'searchByName matches case-insensitively regardless of the search string\'s own casing')
+  local noMatch = familyHelper.findByNames("Zzznomatch")
+  check(type(noMatch.matches) == 'table' and #noMatch.matches == 0 and noMatch.totalMatches == 0,
+    'findByNames returns {matches = {}, totalMatches = 0}, not an error, when nothing matches')
 
-  local noMatch = familyHelper.searchByName("Zzz", nil)
-  check(type(noMatch) == 'table' and #noMatch == 0, 'searchByName returns an empty array, not an error, when nothing matches')
-
-  check(byBoth[1].id == robertHenry.id and byBoth[1].qualifiedId == "I" .. robertHenry.id,
-    'a searchByName result entry is a full indiDescriptor (id/qualifiedId/name/sex), same shape as getFamilyGroup/getAncestors')
-  check(byBoth[1].sex == "Male", 'a searchByName result entry carries sex')
+  check(byBoth.matches[1].id ~= nil and byBoth.matches[1].qualifiedId ~= nil and byBoth.matches[1].sex ~= nil,
+    'a findByNames match entry is a full indiDescriptor (id/qualifiedId/name/sex), same shape as getFamilyGroup/getAncestors')
 
   -- silence "unused local" style nags for fixtures only referenced via search results
-  check(robertJones ~= nil and janeTaubman ~= nil, 'fixtures created')
+  check(robertJones ~= nil and janeTaubman ~= nil and rob ~= nil, 'fixtures created')
 end
 
 ------------------------------------------------------------------
--- searchByName: errors when neither forename nor surname is given
+-- findByNames: exactMatch requires a whole-word match, not just substring containment
 ------------------------------------------------------------------
 
 do
-  local okNeither, errNeither = pcall(familyHelper.searchByName, nil, nil)
-  check(not okNeither, 'searchByName(nil, nil) raises an error')
-  check(contains(errNeither, "searchByName"), 'the error names the function')
+  newIndi("Rob TAUBMANTWO", "Male")
+  newIndi("Robert Henry TAUBMANTWO", "Male")
 
-  local okBothEmpty, errBothEmpty = pcall(familyHelper.searchByName, "", "")
-  check(not okBothEmpty, 'searchByName("", "") raises an error (empty string treated the same as omitted)')
-  check(contains(errBothEmpty, "searchByName"), 'the error names the function')
+  local exact = familyHelper.findByNames("Rob Taubmantwo", true)
+  local exactNames = {}
+  for _, entry in ipairs(exact.matches) do exactNames[entry.name] = true end
+  check(exact.totalMatches == 1 and exactNames["Rob TAUBMANTWO"],
+    'findByNames("Rob Taubmantwo", true) matches only the whole-word "Rob", not "Robert" via substring')
+end
+
+------------------------------------------------------------------
+-- findByNames: ranking -- exact-word match outranks substring-only, ties break by
+-- closer NAME:FULL length to the query
+------------------------------------------------------------------
+
+do
+  -- all three contain "taubmanthree" as an exact whole word, so ranking falls straight
+  -- through to the length tie-break: closer overall length to the 12-char query
+  -- "Taubmanthree" wins. "Rob TAUBMANTHREE" (16 chars) < "Jane TAUBMANTHREE" (17 chars)
+  -- < "Robert Henry TAUBMANTHREE" (26 chars) in distance from 12.
+  local shortest = newIndi("Rob TAUBMANTHREE", "Male")
+  local middle = newIndi("Jane TAUBMANTHREE", "Female")
+  local longest = newIndi("Robert Henry TAUBMANTHREE", "Male")
+
+  local ranked = familyHelper.findByNames("Taubmanthree")
+  check(ranked.totalMatches == 3, 'findByNames("Taubmanthree") matches all three fixtures')
+  check(ranked.matches[1].id == shortest.id and ranked.matches[2].id == middle.id and ranked.matches[3].id == longest.id,
+    'ties (all exact-word matches) break by closer NAME:FULL length to the query, shortest distance first')
+end
+
+do
+  -- exactCount must dominate the length tie-break, not the other way round: moreExact has
+  -- both query words as exact whole-word matches but a huge length delta from the padding;
+  -- lessExact matches both words only as substrings within one run-on word, with a length
+  -- delta far closer to the query. If the sort ever compared length first, lessExact would
+  -- wrongly rank above moreExact.
+  local moreExact = newIndi("Rob ZedQQFOUR Padding Words Here To Make This Name Much Longer Than The Query", "Male")
+  local lessExact = newIndi("Xxrobxxzedqqfourxx", "Male")
+
+  local ranked = familyHelper.findByNames("Rob ZedQQFOUR")
+  check(ranked.totalMatches == 2, 'findByNames("Rob ZedQQFOUR") matches both fixtures')
+  check(ranked.matches[1].id == moreExact.id and ranked.matches[2].id == lessExact.id,
+    'a higher exactCount outranks a closer length delta, not the reverse')
+end
+
+------------------------------------------------------------------
+-- findByNames: batch queries -- one array in, one array out, position-preserving,
+-- no-match entries kept in place
+------------------------------------------------------------------
+
+do
+  newIndi("Batch JONESFOUR", "Male")
+
+  local batch = familyHelper.findByNames({ "Taubmanone", "Zzznomatch", "Jonesfour" })
+  check(type(batch) == 'table' and #batch == 3, 'a list query returns one result per input entry, in order')
+  check(batch[1].totalMatches > 0, 'batch[1] ("Taubmanone") has matches')
+  check(batch[2].totalMatches == 0 and #batch[2].matches == 0,
+    'batch[2] ("Zzznomatch") stays in place as {matches = {}, totalMatches = 0} rather than being dropped')
+  check(batch[3].totalMatches > 0, 'batch[3] ("Jonesfour") has matches')
+
+  local single = familyHelper.findByNames("Taubmanone")
+  check(type(single.matches) == 'table' and type(single.totalMatches) == 'number',
+    'a single string query returns one {matches, totalMatches} object, not an array -- output shape mirrors input shape')
+end
+
+------------------------------------------------------------------
+-- findByNames: results capped at the top 30, totalMatches reports the true count
+------------------------------------------------------------------
+
+do
+  for i = 1, 35 do
+    newIndi("Capzzz Person" .. i, "Male")
+  end
+
+  local capped = familyHelper.findByNames("Capzzz")
+  check(capped.totalMatches == 35, 'findByNames reports the true pre-cap totalMatches (35), never a silent slice')
+  check(#capped.matches == 30, 'findByNames caps matches at the top 30 ranked entries')
+end
+
+------------------------------------------------------------------
+-- findByNames: validation -- blank query entries error the whole call
+------------------------------------------------------------------
+
+do
+  local okNil, errNil = pcall(familyHelper.findByNames, nil)
+  check(not okNil, 'findByNames(nil) raises an error')
+  check(contains(errNil, "findByNames"), 'the error names the function')
+
+  local okEmpty, errEmpty = pcall(familyHelper.findByNames, "")
+  check(not okEmpty, 'findByNames("") raises an error')
+  check(contains(errEmpty, "findByNames"), 'the error names the function')
+
+  local okWhitespace, errWhitespace = pcall(familyHelper.findByNames, "   ")
+  check(not okWhitespace, 'findByNames("   ") raises an error (whitespace-only splits to zero words, same as blank)')
+  check(contains(errWhitespace, "findByNames"), 'the error names the function')
+
+  local okEmptyList, errEmptyList = pcall(familyHelper.findByNames, {})
+  check(not okEmptyList, 'findByNames({}) raises an error (an empty batch has nothing to search for)')
+  check(contains(errEmptyList, "findByNames"), 'the error names the function')
+
+  local okBlankEntry, errBlankEntry = pcall(familyHelper.findByNames, { "Taubman", "" })
+  check(not okBlankEntry, 'findByNames({"Taubman", ""}) raises an error -- one blank entry errors the whole batch')
+  check(contains(errBlankEntry, "findByNames"), 'the error names the function')
+
+  local okNonString, errNonString = pcall(familyHelper.findByNames, { "Taubman", 42 })
+  check(not okNonString, 'findByNames({"Taubman", 42}) raises an error -- a non-string entry is invalid')
+  check(contains(errNonString, "findByNames"), 'the error names the function')
+
+  -- Guards against the old searchByName(forename, surname) two-string-argument habit:
+  -- without this, findByNames("Robert", "Taubman") would silently run as exactMatch mode
+  -- on just the query "Robert", never erroring.
+  local okBadExactMatch, errBadExactMatch = pcall(familyHelper.findByNames, "Robert", "Taubman")
+  check(not okBadExactMatch, 'findByNames("Robert", "Taubman") raises an error -- exactMatch must be a boolean, not a second name')
+  check(contains(errBadExactMatch, "findByNames"), 'the error names the function')
 end
 
 ------------------------------------------------------------------
