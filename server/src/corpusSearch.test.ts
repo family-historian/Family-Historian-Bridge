@@ -4,6 +4,7 @@ import {
   buildGrepMatcher,
   grepEntries,
   searchEntries,
+  stem,
   tokenize,
   tokenMatchScore,
   type SearchableEntry,
@@ -89,6 +90,44 @@ describe("tokenMatchScore", () => {
     expect(tokenMatchScore(bothInTitle, tokens)).toBeGreaterThan(
       tokenMatchScore(oneInTitle, tokens),
     );
+  });
+
+  it("scores a plural query token against a singular-only corpus word (issue #139)", () => {
+    const singularOnly = entry({ title: "Manage Flag" });
+    expect(tokenMatchScore(singularOnly, tokenize("flags"))).toBeGreaterThan(0);
+  });
+
+  it("scores a query token against a differently-inflected corpus word (issue #139)", () => {
+    const deletionEntry = entry({ title: "Deletion of Records" });
+    expect(tokenMatchScore(deletionEntry, tokenize("how do i delete a record"))).toBeGreaterThan(0);
+  });
+
+  it("does not false-positive-match an unrelated word that merely contains a short stem as a substring", () => {
+    // stem("date") === "dat", which is a raw substring of "database" -- this only stays at 0
+    // if the stem match compares whole stemmed words, not `haystack.includes(root)`.
+    const unrelated = entry({ title: "Database Backup Settings" });
+    expect(tokenMatchScore(unrelated, tokenize("date"))).toBe(0);
+  });
+});
+
+describe("stem", () => {
+  it("strips a plural s", () => {
+    expect(stem("flags")).toBe("flag");
+  });
+
+  it("collapses common verb-form suffixes to the same root", () => {
+    const root = stem("delete");
+    expect(stem("deletion")).toBe(root);
+    expect(stem("deleted")).toBe(root);
+    expect(stem("deleting")).toBe(root);
+  });
+
+  it("leaves a word with no matching suffix unchanged", () => {
+    expect(stem("flag")).toBe("flag");
+  });
+
+  it("doesn't strip an 's' off a double-s ending", () => {
+    expect(stem("class")).toBe("class");
   });
 });
 
@@ -219,6 +258,21 @@ describe("searchEntries", () => {
   it("attaches a matching excerpt to each result", () => {
     const results = searchEntries(corpus, "map window", 5);
     expect(results[0]?.excerpt).toContain("Map Window");
+  });
+
+  it("builds the excerpt around a matched token when the entry only matched via the token fallback (issue #140)", () => {
+    const fallbackCorpus: SearchableEntry[] = [
+      entry({
+        title: "Deleting Records",
+        breadcrumb: ["How to..."],
+        text: `${"x".repeat(150)} You can delete a record from the Records menu. ${"y".repeat(150)}`,
+      }),
+    ];
+    // No entry contains "how do i delete records" verbatim, so this only matches via the
+    // token-overlap fallback -- without the fix the excerpt would be the raw head-of-text
+    // slice (all "x"s, no matched word in it) instead of windowing around "delete".
+    const results = searchEntries(fallbackCorpus, "how do i delete records", 5);
+    expect(results[0]?.excerpt).toMatch(/delete/i);
   });
 });
 
