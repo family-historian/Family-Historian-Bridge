@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## 0.18.0
 - `fhBridge.findByNames(query, exactMatch)` replaces `searchByName(forename, surname)` outright (issue #137, docs/adr/0037): resolves one or a batch of plain-text names in one call via word-set containment against the NAME field's `FULL` qualifier, so word order never matters and a full-name string passed as one query now actually matches. Results are `{matches, totalMatches}`, capped at the top 30 ranked entries, never a silent slice. Passing a second string, the old `surname` argument, now errors instead of silently searching only the first -- `exactMatch` must be a boolean.
 - `search_gedcom_knowledge` no longer silently overflows to a file dump on a broad query (issue #135): results over 20,000 bytes now truncate to a compact `{id, title}` index naming every match instead, so a caller always learns what matched even when it doesn't all fit. Also split the `run_lua guidance` family's fhBridge helper documentation out into individual `fhbridge-*` reference entries in the corpus, and fixed an accidental phrase collision that was spuriously widening the "fhBridge API reference" search.
 - `RUN_LUA_DESCRIPTION` now steers Claude toward `fhBridge`'s write helpers (`createFact`, `citeSource`, `createSourceFromTemplate`, `getTftfText`/`setTftfText`, `logActivity`), not just its read-only ones, ahead of `fhu`/raw `fh*`, and gates write-mode scripts behind a `search_gedcom_knowledge("run_lua guidance")` call (docs/adr/0036). Added `server/scripts/corpus-entry.mjs` (`add`/`get`/`check`) as the supported way to edit `gedcom-knowledge-corpus.jsonl`.
