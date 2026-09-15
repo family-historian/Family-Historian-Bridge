@@ -164,8 +164,13 @@ local function attemptRollback(message)
   return rollbackResponse(message)
 end
 
-function M.run(scriptText, accessMode)
+-- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
+-- unfiltered "all"/"all", mirroring accessMode's own default-to-read-only above -- so a
+-- caller that never passes one (any pre-#141 test, or a session with no restriction)
+-- behaves exactly as before.
+function M.run(scriptText, accessMode, privacySettings)
   accessMode = accessMode or 'read-only'
+  privacySettings = privacySettings or { privateVisibility = 'all', livingVisibility = 'all' }
 
   -- All three pre-scans below run unconditionally and their messages are joined rather than
   -- short-circuiting after the first hit -- a script tripping more than one should hear
@@ -188,7 +193,7 @@ function M.run(scriptText, accessMode)
     return json.encode({ error = table.concat(violations, '; ') })
   end
 
-  local envOk, env, tracker = pcall(sandbox.build, accessMode)
+  local envOk, env, tracker = pcall(sandbox.build, accessMode, privacySettings)
   if not envOk then
     return json.encode({ error = 'failed to build sandbox: ' .. tostring(env) })
   end

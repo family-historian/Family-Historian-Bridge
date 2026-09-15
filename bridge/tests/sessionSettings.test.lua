@@ -117,6 +117,34 @@ withFakeFhu({
   check(settings.idleTimeoutMinutes == 20, 'a valid stored idleTimeoutMinutes alongside an invalid accessMode still passes through')
 end)
 
+-- 6b. Visibility levels (issue #141): valid stored values pass through, invalid/missing
+-- fall back to "all" (today's unfiltered behavior), each field independently.
+withFakeFhu({
+  loadOptions = function(defaults, scope)
+    check(defaults.privateVisibility == 'all' and defaults.livingVisibility == 'all',
+      'load() passes "all"/"all" as the Visibility defaults argument')
+    return { accessMode = 'read-only', idleTimeoutMinutes = 15, privateVisibility = 'exclude', livingVisibility = 'nameOnly' }
+  end,
+}, function(sessionSettings)
+  local settings = sessionSettings.load()
+  check(settings.privateVisibility == 'exclude', 'a valid stored privateVisibility passes through unchanged')
+  check(settings.livingVisibility == 'nameOnly', 'a valid stored livingVisibility passes through unchanged')
+end)
+withFakeFhu({
+  loadOptions = function() return { accessMode = 'read-only', idleTimeoutMinutes = 15 } end,
+}, function(sessionSettings)
+  local settings = sessionSettings.load()
+  check(settings.privateVisibility == 'all', 'a missing privateVisibility field falls back to all')
+  check(settings.livingVisibility == 'all', 'a missing livingVisibility field falls back to all')
+end)
+withFakeFhu({
+  loadOptions = function() return { accessMode = 'read-only', idleTimeoutMinutes = 15, privateVisibility = 'sudo', livingVisibility = 42 } end,
+}, function(sessionSettings)
+  local settings = sessionSettings.load()
+  check(settings.privateVisibility == 'all', 'an invalid stored privateVisibility falls back to all')
+  check(settings.livingVisibility == 'all', 'a non-string stored livingVisibility falls back to all')
+end)
+
 -- 7. save() forwards the settings and LOCAL_MACHINE scope to fhu.saveOptions.
 withFakeFhu({
   saveOptions = function(settings, scope)

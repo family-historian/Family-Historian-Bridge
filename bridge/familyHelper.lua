@@ -8,6 +8,25 @@
 
 local M = {}
 
+-- Visibility levels for the Private/Living Record Flags (issue #141), set once per
+-- run_lua call by sandbox.lua's M.build before env.fhBridge is handed to the script --
+-- module-level rather than threaded through every function's own parameters, since
+-- FH's single-threaded IUP mainloop means one script always runs to completion before the
+-- next starts (see sandbox.lua's own comment at the call site). Defaults to unfiltered
+-- "all"/"all" so a caller that never calls this (any pre-#141 test) sees today's behavior.
+local currentPrivacySettings = { privateVisibility = "all", livingVisibility = "all" }
+
+function M.setPrivacySettings(settings)
+  currentPrivacySettings = settings or { privateVisibility = "all", livingVisibility = "all" }
+end
+
+-- Exposed for tests and for recordVisibility (added in a later #141 slice); every other
+-- function in this module reads currentPrivacySettings through this accessor, never the
+-- upvalue directly.
+function M.getPrivacySettings()
+  return currentPrivacySettings
+end
+
 -- Record-tag prefixes usable with MoveToRecordById ('H'/'A' have qualified ids but no
 -- MoveToRecordById equivalent, so they're excluded).
 local QUALIFIED_ID_PREFIX_TAG = {

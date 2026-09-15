@@ -27,7 +27,21 @@ M.SCOPE = 'LOCAL_MACHINE'
 -- fresh table each call so a caller mutating the returned defaults can't corrupt a shared
 -- one.
 local function defaults()
-  return { accessMode = "read-only", idleTimeoutMinutes = 15, debugLogging = false }
+  return {
+    accessMode = "read-only", idleTimeoutMinutes = 15, debugLogging = false,
+    -- Visibility levels for Private/Living Record Flags (issue #141): "exclude" (not
+    -- returned at all), "nameOnly" (name+relations, no Facts), "all" (unfiltered, today's
+    -- behavior). Default "all" so an existing/fresh install's behavior is unchanged until
+    -- a user opts into filtering via the Settings dialog.
+    privateVisibility = "all", livingVisibility = "all",
+  }
+end
+
+-- "exclude"/"nameOnly"/"all" are the only levels the dialog offers; anything else (a
+-- hand-edited settings file, a pre-#141 file missing the field) falls back to "all", same
+-- reasoning as accessMode's own fallback below.
+local function validVisibility(value)
+  return value == "exclude" or value == "nameOnly" or value == "all"
 end
 
 -- Loads the last-saved Access mode and idle-timeout minutes. Falls back silently to
@@ -48,12 +62,23 @@ function M.load()
     accessMode = "read-only"
   end
 
+  local privateVisibility = loaded.privateVisibility
+  if not validVisibility(privateVisibility) then
+    privateVisibility = "all"
+  end
+  local livingVisibility = loaded.livingVisibility
+  if not validVisibility(livingVisibility) then
+    livingVisibility = "all"
+  end
+
   return {
     accessMode = accessMode,
     idleTimeoutMinutes = timeoutDisplay.clampMinutes(loaded.idleTimeoutMinutes),
     -- Anything other than a real boolean (missing field from a pre-#122 settings file,
     -- hand-edited junk) falls back to the off-by-default (defaults() above).
     debugLogging = loaded.debugLogging == true,
+    privateVisibility = privateVisibility,
+    livingVisibility = livingVisibility,
   }
 end
 

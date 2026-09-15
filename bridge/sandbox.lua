@@ -202,8 +202,12 @@ end
 -- accessMode ("read-only"/"read-write") comes from the bridge dialog's toggle. Returns the
 -- sandbox env plus a tracker table ({wrote, logged}) the caller can inspect after running a
 -- script -- kept out of env itself so the sandboxed script can't read or tamper with it.
-function M.build(accessMode)
+-- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
+-- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
+-- default for why callers predating #141 need no changes.
+function M.build(accessMode, privacySettings)
   accessMode = accessMode or "read-only"
+  privacySettings = privacySettings or { privateVisibility = "all", livingVisibility = "all" }
   local env = {}
   local tracker = { wrote = false, logged = false }
 
@@ -386,6 +390,12 @@ function M.build(accessMode)
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
   local realRichTextHelper = require('richTextHelper')
+  -- Module-level, not threaded through every fhBridge.* call's own parameters: FH's IUP
+  -- mainloop is single-threaded (one script runs to completion before the next starts, same
+  -- reasoning documented elsewhere for why Start/Stop can't race a running script), so
+  -- setting this once per M.build call is safe and keeps getFamilyGroup(ptrRecord, ...)
+  -- etc.'s public signatures unchanged.
+  realFamilyHelper.setPrivacySettings(privacySettings)
   env.fhBridge = {
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,

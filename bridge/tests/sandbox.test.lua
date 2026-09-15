@@ -262,6 +262,10 @@ package.loaded.richTextHelper = fakeRichTextHelper
 -- behavior (covered by familyHelper.test.lua). Every stub returns an identifiable value
 -- for the same forwarding-proof reason as fakeSourceHelper.citeSource above.
 local fakeFamilyHelper = {
+  -- setPrivacySettings (issue #141): sandbox.build calls this unconditionally before
+  -- building env.fhBridge -- a fake missing it would fail every scenario in this file with
+  -- an unrelated "attempt to call a nil value" error, not a useful assertion failure.
+  setPrivacySettings = function(settings) end,
   getFamilyGroup = function(ptr, type) return 'familygroup:' .. tostring(type) end,
   getAllDetails = function(ptr) return 'alldetails' end,
   getAncestors = function(ptr, maxGenerations) return 'ancestors:' .. tostring(maxGenerations) end,

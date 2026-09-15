@@ -460,6 +460,24 @@ do
     'a script tripping both the leading-dot check and the unrecognized-fh*-call pre-scan reports both violations')
 end
 
+-- privacySettings forwarding (issue #141): M.run passes its third argument through to
+-- sandbox.build, which calls the real familyHelper.setPrivacySettings -- checked via
+-- familyHelper's own getPrivacySettings accessor since privacySettings isn't part of a
+-- run_lua script's own return value. familyHelper.lua is a real project module (not
+-- FH-shipped), so it's resolvable via package.path without any stub.
+do
+  local familyHelper = require('familyHelper')
+  runScript.run('return 1', 'read-only', { privateVisibility = 'exclude', livingVisibility = 'nameOnly' })
+  local settings = familyHelper.getPrivacySettings()
+  check(settings.privateVisibility == 'exclude' and settings.livingVisibility == 'nameOnly',
+    'M.run forwards its privacySettings argument through sandbox.build to familyHelper.setPrivacySettings')
+
+  runScript.run('return 1', 'read-only')
+  local defaulted = familyHelper.getPrivacySettings()
+  check(defaulted.privateVisibility == 'all' and defaulted.livingVisibility == 'all',
+    'M.run with no privacySettings argument defaults to unfiltered "all"/"all"')
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

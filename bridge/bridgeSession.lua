@@ -155,6 +155,14 @@ local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"
 end
 
+-- Visibility levels for the Private/Living Record Flags (issue #141). The Settings dialog
+-- widgets these will read from land in a later slice; hardcoded to "all"/"all" (today's
+-- unfiltered behavior) until then, so this plumbing is a no-op change in what the Bridge
+-- actually does.
+local function currentPrivacySettings()
+    return { privateVisibility = "all", livingVisibility = "all" }
+end
+
 local function currentDebugLogging()
     return togDebugLogging.value == "ON"
 end
@@ -255,7 +263,8 @@ function timPoll:action_cb()
         local severity = versionCompare.compare(BRIDGE_VERSION, request.serverVersion)
         -- also reports the Session's real Access mode, so the server's describe_project
         -- bridgeState can surface it without a second connection.
-        client:send(json.encode({ version = BRIDGE_VERSION, accessMode = currentAccessMode() }) .. "\n")
+        client:send(json.encode({ version = BRIDGE_VERSION, accessMode = currentAccessMode(),
+            privacySettings = currentPrivacySettings() }) .. "\n")
         client:close()
         if severity == "match" then
             currentVersionWarning = nil
@@ -283,7 +292,7 @@ function timPoll:action_cb()
     -- during a read-write call anyway (sandbox.lua only wires fhBridge.logActivity through
     -- then), and a read-only call never reaches it.
     sessionLogHelper.setCommitCount(commitCount + 1)
-    local response, rethrowErr, transactionResult = runScript.run(script, accessMode)
+    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, currentPrivacySettings())
     client:send(response .. "\n")
     client:close()
 
