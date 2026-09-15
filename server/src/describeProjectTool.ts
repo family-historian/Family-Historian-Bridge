@@ -80,7 +80,11 @@ Returns JSON shaped as:
     "bridgeVersion": "<the running Bridge plugin's own version, or null if it couldn't be determined>",
     "serverVersion": "<this server's own version>",
     "versionStatus": "<\\"match\\" | \\"warn\\" | \\"unsupported\\" | \\"unparseable\\">",
-    "accessMode": "<\\"read-only\\" | \\"read-write\\", the current Bridge Session's real Access mode, or null if the Bridge predates this field>"
+    "accessMode": "<\\"read-only\\" | \\"read-write\\", the current Bridge Session's real Access mode, or null if the Bridge predates this field>",
+    "privacySettings": {
+      "private": "<\\"exclude\\" | \\"nameOnly\\" | \\"all\\", the current Visibility level for the Private Record Flag, or null if the Bridge predates this field>",
+      "living": "<\\"exclude\\" | \\"nameOnly\\" | \\"all\\", the current Visibility level for the Living Record Flag, or null if the Bridge predates this field>"
+    } | null
   }
 }
 
@@ -95,7 +99,10 @@ are omitted — see the script's own comment for why.
 
 bridgeState describes the running Bridge plugin itself, not the FH project — accessMode is
 the Session's real read-only/read-write toggle, distinct from the Read-only sandbox this
-tool's own fixed script always executes under regardless of that toggle.`;
+tool's own fixed script always executes under regardless of that toggle. privacySettings
+reports the Session's current Visibility levels for the Private/Living Record Flags (issue
+#141) — a level other than "all" means fhBridge.* helpers filter or redact matching
+Individuals; this section's own flagCensus/dataQuality counts above are never filtered.`;
 
 // Fixed, built-in script (not Claude-authored — see CONTEXT.md "describe_project"). Runs
 // through the same sandbox/transport as run_lua, so it's limited to the same read-only

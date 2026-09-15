@@ -38,10 +38,19 @@ export function compareVersions(bridgeVersion: string, serverVersion: string): V
 
 export type AccessMode = "read-only" | "read-write";
 
+// Visibility levels for the Private/Living Record Flags (issue #141) -- same three-value
+// shape on both sides of the wire as bridge/sessionSettings.lua's own privateVisibility/
+// livingVisibility fields.
+export type VisibilityLevel = "exclude" | "nameOnly" | "all";
+export interface PrivacySettings {
+  private: VisibilityLevel;
+  living: VisibilityLevel;
+}
+
 export type VersionCheckOutcome =
-  | { status: "match"; bridgeVersion: string; accessMode: AccessMode | null }
-  | { status: "warn"; bridgeVersion: string; serverVersion: string; accessMode: AccessMode | null }
-  | { status: "block"; bridgeVersion: string; serverVersion: string; accessMode: AccessMode | null }
+  | { status: "match"; bridgeVersion: string; accessMode: AccessMode | null; privacySettings: PrivacySettings | null }
+  | { status: "warn"; bridgeVersion: string; serverVersion: string; accessMode: AccessMode | null; privacySettings: PrivacySettings | null }
+  | { status: "block"; bridgeVersion: string; serverVersion: string; accessMode: AccessMode | null; privacySettings: PrivacySettings | null }
   // An older Bridge that predates this feature doesn't recognize the VERSION verb and
   // rejects it with the same malformed-framing error every unrecognized header gets
   // (bridge/requestFraming.lua) — this is itself the "stale Bridge" signal issue #45 exists
@@ -76,9 +85,22 @@ export function interpretVersionResponse(raw: string, serverVersion: string): Ve
     // distinct from the "unsupported" case above (which never gets this far at all).
     const accessMode: AccessMode | null =
       obj.accessMode === "read-only" || obj.accessMode === "read-write" ? obj.accessMode : null;
+    // Same reasoning as accessMode above: an older Bridge that predates #141 omits
+    // privacySettings entirely (or a field within it), which reads as null here rather than
+    // erroring -- describe_project's bridgeState shape stays fixed regardless.
+    const rawPrivacy =
+      typeof obj.privacySettings === "object" && obj.privacySettings !== null
+        ? (obj.privacySettings as Record<string, unknown>)
+        : null;
+    const isVisibilityLevel = (v: unknown): v is VisibilityLevel =>
+      v === "exclude" || v === "nameOnly" || v === "all";
+    const privacySettings: PrivacySettings | null =
+      rawPrivacy && isVisibilityLevel(rawPrivacy.privateVisibility) && isVisibilityLevel(rawPrivacy.livingVisibility)
+        ? { private: rawPrivacy.privateVisibility, living: rawPrivacy.livingVisibility }
+        : null;
     const severity = compareVersions(obj.version, serverVersion);
-    if (severity === "match") return { status: "match", bridgeVersion: obj.version, accessMode };
-    return { status: severity, bridgeVersion: obj.version, serverVersion, accessMode };
+    if (severity === "match") return { status: "match", bridgeVersion: obj.version, accessMode, privacySettings };
+    return { status: severity, bridgeVersion: obj.version, serverVersion, accessMode, privacySettings };
   }
 
   return { status: "unparseable" };
@@ -92,6 +114,7 @@ export interface BridgeState {
   // union only needs to model the statuses a real BridgeState value can actually carry.
   versionStatus: Exclude<VersionMismatchSeverity, "block"> | "unsupported" | "unparseable";
   accessMode: AccessMode | null;
+  privacySettings: PrivacySettings | null;
 }
 
 // Builds describe_project's bridgeState section from the same VersionCheckOutcome every
@@ -114,6 +137,7 @@ function bridgeStateFor(
         serverVersion,
         versionStatus: outcome.status,
         accessMode: outcome.accessMode,
+        privacySettings: outcome.privacySettings,
       };
     case "unsupported":
     case "unparseable":
@@ -122,6 +146,7 @@ function bridgeStateFor(
         serverVersion,
         versionStatus: outcome.status,
         accessMode: null,
+        privacySettings: null,
       };
   }
 }

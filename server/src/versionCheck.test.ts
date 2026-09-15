@@ -44,6 +44,7 @@ describe("interpretVersionResponse", () => {
       status: "match",
       bridgeVersion: "0.4.0",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -53,6 +54,7 @@ describe("interpretVersionResponse", () => {
       bridgeVersion: "0.4.0",
       serverVersion: "0.4.1",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -62,6 +64,7 @@ describe("interpretVersionResponse", () => {
       bridgeVersion: "1.0.0",
       serverVersion: "2.0.0",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -84,7 +87,12 @@ describe("interpretVersionResponse", () => {
   it("reports the accessMode a Bridge reply includes, on both match and warn (issue #109)", () => {
     expect(
       interpretVersionResponse('{"version":"0.4.0","accessMode":"read-write"}', "0.4.0"),
-    ).toEqual({ status: "match", bridgeVersion: "0.4.0", accessMode: "read-write" });
+    ).toEqual({
+      status: "match",
+      bridgeVersion: "0.4.0",
+      accessMode: "read-write",
+      privacySettings: null,
+    });
 
     expect(
       interpretVersionResponse('{"version":"0.4.0","accessMode":"read-only"}', "0.4.1"),
@@ -93,13 +101,45 @@ describe("interpretVersionResponse", () => {
       bridgeVersion: "0.4.0",
       serverVersion: "0.4.1",
       accessMode: "read-only",
+      privacySettings: null,
     });
   });
 
   it("treats an unrecognized accessMode value as null rather than passing it through", () => {
     expect(
       interpretVersionResponse('{"version":"0.4.0","accessMode":"sudo"}', "0.4.0"),
-    ).toEqual({ status: "match", bridgeVersion: "0.4.0", accessMode: null });
+    ).toEqual({
+      status: "match",
+      bridgeVersion: "0.4.0",
+      accessMode: null,
+      privacySettings: null,
+    });
+  });
+
+  it("reports the privacySettings a Bridge reply includes, only when both levels are recognized (issue #141)", () => {
+    expect(
+      interpretVersionResponse(
+        '{"version":"0.4.0","privacySettings":{"privateVisibility":"exclude","livingVisibility":"nameOnly"}}',
+        "0.4.0",
+      ),
+    ).toEqual({
+      status: "match",
+      bridgeVersion: "0.4.0",
+      accessMode: null,
+      privacySettings: { private: "exclude", living: "nameOnly" },
+    });
+
+    expect(
+      interpretVersionResponse(
+        '{"version":"0.4.0","privacySettings":{"privateVisibility":"exclude","livingVisibility":"bogus"}}',
+        "0.4.0",
+      ),
+    ).toEqual({
+      status: "match",
+      bridgeVersion: "0.4.0",
+      accessMode: null,
+      privacySettings: null,
+    });
   });
 });
 
@@ -118,6 +158,7 @@ describe("checkBridgeVersion", () => {
         serverVersion: "0.4.0",
         versionStatus: "match",
         accessMode: null,
+        privacySettings: null,
       },
     });
   });
@@ -137,6 +178,7 @@ describe("checkBridgeVersion", () => {
       serverVersion: "0.4.1",
       versionStatus: "warn",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -170,6 +212,7 @@ describe("checkBridgeVersion", () => {
       serverVersion: "0.4.0",
       versionStatus: "unsupported",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -184,6 +227,7 @@ describe("checkBridgeVersion", () => {
       serverVersion: "0.4.0",
       versionStatus: "unparseable",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -210,6 +254,18 @@ describe("checkBridgeVersion", () => {
     expect(result.block).toBeNull();
     if (result.block !== null) throw new Error("unreachable");
     expect(result.bridgeState.accessMode).toBe("read-write");
+  });
+
+  it("reports the privacySettings a Bridge reply includes in bridgeState (issue #141)", async () => {
+    const result = await checkBridgeVersion(
+      async () =>
+        '{"version":"0.4.0","privacySettings":{"privateVisibility":"nameOnly","livingVisibility":"all"}}',
+      "0.4.0",
+    );
+
+    expect(result.block).toBeNull();
+    if (result.block !== null) throw new Error("unreachable");
+    expect(result.bridgeState.privacySettings).toEqual({ private: "nameOnly", living: "all" });
   });
 });
 

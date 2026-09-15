@@ -48,6 +48,7 @@ describe("handleDescribeProject", () => {
       serverVersion: SERVER_VERSION,
       versionStatus: "match",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -321,6 +322,7 @@ describe("handleDescribeProject version check (issue #45)", () => {
       serverVersion: SERVER_VERSION,
       versionStatus: "warn",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -337,6 +339,7 @@ describe("handleDescribeProject version check (issue #45)", () => {
       serverVersion: SERVER_VERSION,
       versionStatus: "unsupported",
       accessMode: null,
+      privacySettings: null,
     });
   });
 
@@ -359,6 +362,30 @@ describe("handleDescribeProject version check (issue #45)", () => {
 
     const parsed = JSON.parse((result.content[0] as { text: string }).text);
     expect(parsed.bridgeState.accessMode).toBeNull();
+  });
+
+  it("reports the Session's real privacySettings in bridgeState when the Bridge reply includes them (issue #141)", async () => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => '{"recordCounts":{}}',
+      queryBridgeVersion: async () =>
+        JSON.stringify({
+          version: SERVER_VERSION,
+          privacySettings: { privateVisibility: "exclude", livingVisibility: "nameOnly" },
+        }),
+    });
+
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.bridgeState.privacySettings).toEqual({ private: "exclude", living: "nameOnly" });
+  });
+
+  it("reports privacySettings null in bridgeState when the Bridge predates privacySettings-in-VERSION-reply (issue #141)", async () => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => '{"recordCounts":{}}',
+      queryBridgeVersion: matchingVersion,
+    });
+
+    const parsed = JSON.parse((result.content[0] as { text: string }).text);
+    expect(parsed.bridgeState.privacySettings).toBeNull();
   });
 
   it("tells Claude to ask the user to click Start when the version check itself can't connect, without ever attempting the script", async () => {
