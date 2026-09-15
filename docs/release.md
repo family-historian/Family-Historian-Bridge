@@ -11,19 +11,19 @@ Desktop Extension bundle, also built by script). The hand-assembled
 no longer ship — see the ADR for why.
 
 **What is scripted.** `installer/build-dxt.mjs` builds the `.mcpb` (see `installer/README.md`
-for the full description); `bridge/scripts/build.lua` builds the Bridge plugin bundle (step 6
+for the full description); `bridge/scripts/build.lua` builds the Bridge plugin bundle (step 5
 below). `installer/release-mac.sh`, `installer/release-windows.ps1`,
 `installer/stage.ps1`, and `installer/config-merge.ps1` still exist in the repo but are no
 longer part of this checklist — they built the retired zip/exe artifacts. Their removal is a
 separate follow-up issue, not done as part of the ADR 0035 change.
 
-**Step 9 (create the Forgejo release + upload the assets) is mandatory for every release,
+**Step 8 (create the Forgejo release + upload the assets) is mandatory for every release,
 not an optional extra.** A version bump/tag with no matching Forgejo release is an
-incomplete release — don't stop at step 7. (0.9.0 shipped this way once, caught and fixed
+incomplete release — don't stop at step 6. (0.9.0 shipped this way once, caught and fixed
 after the fact; see CHANGELOG/git history around 2026-08-07.)
 
 See `docs/agents/issue-tracker.md` for the Forgejo API base URL and `FORGEJO_TOKEN` auth
-used in step 9.
+used in step 8.
 
 ## 1. Finish the CHANGELOG's `Unreleased` section
 
@@ -61,27 +61,7 @@ These are *not* copies to bump — all are generated or read live from `server/p
 
 (Commit message convention so far: `Bump version to X.Y.Z`.)
 
-## 5. Public-release check: strip FH8-specific wording
-
-**Before packaging**, if this release will be public (or you're not sure), check whether
-Family Historian 8 has shipped publicly yet. If it hasn't, `docs/build.md`'s FH8-specific
-install-path wording needs generalizing before pointing anyone public at it — e.g.
-`Family Historian 8\Plugins\` and "note the `8`" language needs to become version-neutral
-("your Family Historian install's own Plugins folder... check you're copying into the one
-that matches the version you're running"). `docs/install.md` has no FH8-specific wording to
-strip (it never names a Plugins-folder path — installing via FH's own prompt/dialog avoids
-needing one), so only `docs/build.md` is in scope here, and only its *packaged* copy — the
-git-committed copy keeps the FH8-specific wording as-is, only for this release's packaging
-does it change.
-
-Find every mention first:
-```bash
-grep -rn "Family Historian 8\|FH8" docs/build.md
-```
-Every release so far has done this generalization by hand; it has never been scripted, and
-the substitution text above is what's actually been used each time.
-
-## 6. Run the tests, then build the server, the Bridge bundle, and the `.mcpb`
+## 5. Run the tests, then build the server, the Bridge bundle, and the `.mcpb`
 
 ```bash
 npm test
@@ -121,7 +101,7 @@ node installer/build-dxt.mjs --verify
 the tools `server/src/toolNames.json` declares. Output:
 `installer/output/fh-mcp-bridge-X.Y.Z.mcpb`.
 
-## 7. Commit, tag, push
+## 6. Commit, tag, push
 
 Commit the CHANGELOG cut and version bumps (as separate commits, per existing
 convention), then:
@@ -131,7 +111,7 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-## 8. Update the GitHub mirror's `release` branch
+## 7. Update the GitHub mirror's `release` branch
 
 The public GitHub mirror (`family-historian/family-historian-bridge`, tracked at issue
 #132) syncs a separate `release` branch, cut only at release time — not `main` tracked
@@ -149,7 +129,7 @@ git push origin release --force
 over to GitHub automatically (verified via the `remote_mirror_*` ref updating right after
 the push). Run this step for every release from here on.
 
-## 9. Create the Forgejo release and upload the assets (required — do not skip)
+## 8. Create the Forgejo release and upload the assets (required — do not skip)
 
 ```bash
 source ~/.zshrc   # FORGEJO_TOKEN
@@ -191,9 +171,6 @@ and the `.mcpb`.
   #89). Each was fixed the same way — generate or read from one source, then test that the
   source matches reality. **No hand-maintained copies are known to be left.** Treat any new
   copied value as a defect waiting to happen.
-- **The FH8-suppression step (5) is not enforced by anything.** It's been done correctly
-  for every release so far, but only because whoever cut the release remembered — nothing
-  would catch a miss.
 - **The Lua interpreter's version matters, not just its presence.** Discovered 2026-08-12:
   a Windows machine had `lua.exe` resolving to Lua 5.1.5, whose `debug.sethook` count-mode
   hook dramatically undercounts VM instructions (reproduced: ~333k hook calls expected for
@@ -213,12 +190,12 @@ and the `.mcpb`.
   pointing at this if one hangs, so a future recurrence fails fast instead of hanging
   silently — but the underlying version mismatch is still worth fixing at the source
   wherever it's found, not just relying on the timeout to catch it after the fact.
-- **Step 9's release-body extraction silently truncated to one subsection.** Discovered
+- **Step 8's release-body extraction silently truncated to one subsection.** Discovered
   cutting 0.13.0: `sed -n '/## X.Y.Z/,/## /p'` matches its own end pattern against every
   `### ` subsection heading, since `### ` contains `## ` as a substring — the range closed
   after the version's first subsection instead of the whole section, and nothing about the
   resulting `curl` call would have flagged a short body as wrong. Replaced with an anchored
-  `awk` (see step 9) that only matches a bare `## ` at line start. Caught by eyeballing the
+  `awk` (see step 8) that only matches a bare `## ` at line start. Caught by eyeballing the
   posted release body against the CHANGELOG before moving on — this step has no automated
   check, so the same class of silent truncation could recur with a differently-shaped
   CHANGELOG entry.
