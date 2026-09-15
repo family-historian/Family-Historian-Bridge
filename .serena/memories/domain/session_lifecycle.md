@@ -12,6 +12,18 @@
   write API (`fhSetLabelledText`, `fhSetValueAs*`, `fhCreateItem`, `fhDeleteItem`,
   `fhMoveItemAfter/Before`, `fhSrcEnableAutoTitle`, unguarded `fhGetFactTag/fhGetFlagTag`).
   Avoid "Permission level" / bare "mode".
+- **Visibility settings** (issue #141): two independent levels, one for the Private Record
+  Flag and one for the Living Record Flag, each `"exclude"`/`"nameOnly"`/`"all"`, set once
+  at Start in the same Settings popup as Debug logging (`bridgeSession.lua`'s
+  `currentPrivacySettings()`, persisted via `sessionSettings.lua`). Filters every
+  `fhBridge.*` helper (most-restrictive flag wins per record) — does **not** filter raw
+  `fh*`/`fhu` calls inside a `run_lua` script, by design, see ADR 0038. A restricted level
+  auto-forces Debug logging on for that Session. `runScript.lua`'s `bulkEnumerationViolation`
+  pre-scan rejects a script outright (before it runs) if it mentions the raw record-
+  enumeration idiom (`MoveToFirstRecord`, `fhu.records`/`allItems`/`indiList`) while either
+  level is restricted — narrows, doesn't close, the raw-access gap ADR 0038 documents.
+  `describe_project`/`install_fh_plugin`'s fixed internal scripts are exempt from all of
+  this (`request.forceReadOnly`) — reviewed source, not user-supplied `run_lua` text.
 - **Sandbox**: `bridge/sandbox.lua`'s allowlisted `_ENV` — see `mem:conventions` for the
   allowlist-not-denylist rule. `fhu` is a proxied `fhUtils`, not the raw module (`require`
   isn't in the allowlist). 8 `fhu` methods are always blocked regardless of Access mode

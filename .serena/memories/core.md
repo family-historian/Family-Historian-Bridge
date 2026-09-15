@@ -17,8 +17,9 @@ Solo project (Jane_t), self-hosted Forgejo issue tracker, pre-1.0 (currently 0.1
 cluster relevant to what you're touching, not all of them)
 - `mem:domain/naming` — the 3 distinct product/component names (Bridge plugin / Family
   Historian Bridge / FH MCP Bridge). Read when writing anything user-facing or renaming.
-- `mem:domain/session_lifecycle` — Session, Exit vs Stop, Access mode, Sandbox, FH
-  auto-undo, Version check. Read when touching Session/dialog/sandbox behavior in `bridge/`.
+- `mem:domain/session_lifecycle` — Session, Exit vs Stop, Access mode, Visibility settings
+  (Private/Living, issue #141, ADR 0038), Sandbox, FH auto-undo, Version check. Read when
+  touching Session/dialog/sandbox behavior in `bridge/`.
 - `mem:domain/mcp_tools` — domain semantics of run_lua/describe_project/author_fh_plugin/
   install_fh_plugin (file layout is in `mem:server` instead). Read when changing what a
   tool returns or its trust boundary.
