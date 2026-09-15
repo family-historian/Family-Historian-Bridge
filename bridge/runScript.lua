@@ -142,14 +142,27 @@ end
 -- never sees this message. Same word-boundary heuristic as preScanViolation: doesn't try to
 -- tell which record tag is being enumerated (a FAM walk can still reach Individual data via
 -- its members, so MoveToFirstRecord("FAM") is flagged the same as MoveToFirstRecord("INDI")).
+-- Also catches fhu.records/fhu.allItems/fhu.indiList -- RUN_LUA_DESCRIPTION and the
+-- gedcom-knowledge corpus both steer Claude to prefer these over a hand-rolled
+-- MoveToFirstRecord/MoveNext loop, but all three just wrap the same unfiltered walk, so
+-- leaving them out would block the discouraged idiom while waving the recommended one
+-- straight through.
+local ENUMERATION_NAMES = { 'MoveToFirstRecord', 'fhu%.records', 'fhu%.allItems', 'fhu%.indiList' }
 local function bulkEnumerationViolation(scriptText, privacySettings)
   if privacySettings.privateVisibility == 'all' and privacySettings.livingVisibility == 'all' then
     return nil
   end
-  if not containsName(scriptText, 'MoveToFirstRecord') then
+  local triggerName
+  for _, name in ipairs(ENUMERATION_NAMES) do
+    if containsName(scriptText, name) then
+      triggerName = name:gsub('%%', '')
+      break
+    end
+  end
+  if not triggerName then
     return nil
   end
-  return 'script calls MoveToFirstRecord, which enumerates the raw GEDCOM tree and bypasses ' ..
+  return 'script calls ' .. triggerName .. ', which enumerates the raw GEDCOM tree and bypasses ' ..
     'this Session\'s Visibility settings (Private: ' .. tostring(privacySettings.privateVisibility) ..
     ', Living: ' .. tostring(privacySettings.livingVisibility) .. ') -- use fhBridge.findByNames/' ..
     'getFamilyGroup/getAncestors/getDescendants/getAllDetails/getFactsByTag instead, which apply ' ..

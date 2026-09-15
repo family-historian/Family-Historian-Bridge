@@ -508,6 +508,19 @@ check(not contains(runScript.run("ptr:MoveToFirstRecord('INDI')", 'read-only', {
 check(not contains(runScript.run("return fhBeginsWithVowel('Anne')", 'read-only', { privateVisibility = 'exclude', livingVisibility = 'all' }), 'MoveToFirstRecord'),
   'a script that never mentions MoveToFirstRecord is unaffected by a restricted Visibility level')
 
+-- fhu.records/allItems/indiList are the RUN_LUA_DESCRIPTION-recommended idioms for iterating
+-- records -- all three just wrap MoveToFirstRecord/MoveNext internally, so each is rejected
+-- the same as a hand-rolled MoveToFirstRecord loop, not waved through as the "safe" choice.
+for _, call in ipairs({ 'fhu.records', 'fhu.allItems', 'fhu.indiList' }) do
+  local restricted = { privateVisibility = 'exclude', livingVisibility = 'all' }
+  local response = runScript.run("for p in " .. call .. "('INDI') do end", 'read-only', restricted)
+  check(contains(response, call) and contains(response, 'bypasses'),
+    call .. ' is rejected while privateVisibility is restricted, same as a raw MoveToFirstRecord loop')
+end
+
+check(not contains(runScript.run("local records = {}; return records", 'read-only', { privateVisibility = 'exclude', livingVisibility = 'all' }), 'bypasses'),
+  'a bare local variable named records is not mistaken for the fhu.records idiom (word-boundary match requires the fhu. prefix)')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

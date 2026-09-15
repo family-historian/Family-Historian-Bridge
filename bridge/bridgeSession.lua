@@ -292,7 +292,14 @@ function timPoll:action_cb()
     -- during a read-write call anyway (sandbox.lua only wires fhBridge.logActivity through
     -- then), and a read-only call never reaches it.
     sessionLogHelper.setCommitCount(commitCount + 1)
-    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, currentPrivacySettings())
+    -- forceReadOnly (describe_project/install_fh_plugin's fixed, internal scripts) always
+    -- gets unfiltered "all"/"all" privacySettings, never the Session's actual restriction:
+    -- these scripts are fixed source reviewed as part of this bridge, not user-supplied
+    -- run_lua text, and describe_project's own census walk relies on raw MoveToFirstRecord
+    -- -- passing a restricted level here would trip runScript.lua's own bulkEnumerationViolation
+    -- pre-scan and break describe_project outright the moment a Visibility level is restricted.
+    local privacySettings = not request.forceReadOnly and currentPrivacySettings() or nil
+    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, privacySettings)
     client:send(response .. "\n")
     client:close()
 
