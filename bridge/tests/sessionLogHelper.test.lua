@@ -70,6 +70,23 @@ function PtrMethods:IsNull()
   return currentNode(self) == nil
 end
 
+function PtrMethods:IsNotNull()
+  return currentNode(self) ~= nil
+end
+
+-- Minimal child-item walk, needed only for familyHelper.recordVisibility's _FLGS walk
+-- (issue #141) -- a node's own .children array (nil/empty for every pre-#141 fixture) is
+-- reused as the pointed-to list, same as factHelper.test.lua/sourceHelper.test.lua's own.
+function PtrMethods:MoveToFirstChildItem(parentPtr)
+  local node = currentNode(parentPtr)
+  self.list = (node and node.children) or {}
+  self.index = 1
+end
+
+function PtrMethods:MoveNext()
+  self.index = self.index + 1
+end
+
 function PtrMethods:MoveTo(otherPtr, dataRef)
   local node = currentNode(otherPtr)
   if dataRef == '~.TEXT' and node and node.textNode then
@@ -213,6 +230,23 @@ local indiA = fhCreateItem("INDI")
 local indiB = fhCreateItem("INDI")
 
 local sessionLogHelper = require('sessionLogHelper')
+local familyHelper = require('familyHelper')
+
+-- Adds a Record Flag child (e.g. "__PRIVATE"/"__LIVING") under indiPtr's _FLGS item,
+-- creating _FLGS on first use -- mirrors familyHelper.test.lua's own addFlag (issue #141).
+local function addFlag(indiPtr, flagTag)
+  local node = currentNode(indiPtr)
+  node.children = node.children or {}
+  local flgs
+  for _, c in ipairs(node.children) do
+    if c.tag == "_FLGS" then flgs = c end
+  end
+  if not flgs then
+    flgs = { tag = "_FLGS", children = {} }
+    table.insert(node.children, flgs)
+  end
+  table.insert(flgs.children, { tag = flagTag, children = {} })
+end
 
 ------------------------------------------------------------------
 -- First call: creates a new, timestamped Research Note with one log entry
@@ -777,5 +811,34 @@ for _, seg in ipairs(segmentsSameCall) do
 end
 check(not deathEntryResurfacedSameCall,
   'the rolled-back note-creating entry never resurfaces in the new note')
+
+------------------------------------------------------------------
+-- validateLogActivity: an Excluded Individual's own record blocks the write, checked on
+-- the guaranteed record-level pointer even when ptrRecord started as a Fact/sub-item and
+-- had to climb (issue #141).
+------------------------------------------------------------------
+
+do
+  local excludedIndi = fhCreateItem("INDI")
+  addFlag(excludedIndi, "__PRIVATE")
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+
+  local okExcluded, errExcluded = pcall(sessionLogHelper.validateLogActivity, excludedIndi, "created")
+  check(not okExcluded, 'validateLogActivity raises for an Excluded Individual')
+  check(contains(errExcluded, 'Excluded'), 'the error names the Excluded reason')
+
+  -- A Fact/sub-item on the Excluded Individual must climb to the owning record first
+  -- (fhHasParentItem/MoveToRecordItem), and only then hit the Excluded check.
+  local factOnExcluded = currentNode(excludedIndi)
+  local birtNode = { tag = "BIRT", id = nil, parent = factOnExcluded }
+  local birtPtr = newPtr()
+  birtPtr.list = { birtNode }
+  birtPtr.index = 1
+  local okFact, errFact = pcall(sessionLogHelper.validateLogActivity, birtPtr, "fact added Birth")
+  check(not okFact, 'a Fact item climbed onto an Excluded Individual is also blocked, not just the record pointer itself')
+  check(contains(errFact, 'Excluded'), 'the climbed-Fact-item error also names the Excluded reason')
+
+  familyHelper.setPrivacySettings(nil)
+end
 
 t.report()

@@ -28,13 +28,51 @@ local function newPtr(name, isNull)
   return setmetatable({ name = name, null = isNull or false }, PtrMethods)
 end
 
+-- A pointer's "current node" when it's mid-child-walk (see MoveToFirstChildItem below) --
+-- nil for every plain field/owner pointer (the ordinary case throughout this file), which
+-- falls back to the .name/.null identity above.
+local function currentChildNode(ptr)
+  return ptr.list and ptr.list[ptr.index]
+end
+
 function PtrMethods:IsNull()
+  if self.list then return currentChildNode(self) == nil end
   return self.null
 end
 
 function PtrMethods:IsNotNull()
-  return not self.null
+  return not self:IsNull()
 end
+
+-- Needed only for familyHelper.recordVisibility's _FLGS walk (issue #141): parentPtr is
+-- either an "owner" record pointer (its own .children, set by MoveToRecordItem below) or a
+-- _FLGS node reached via a previous MoveToFirstChildItem call (its .children field, found
+-- via currentChildNode) -- mirrors factHelper.test.lua/sessionLogHelper.test.lua's own.
+function PtrMethods:MoveToFirstChildItem(parentPtr)
+  local node = currentChildNode(parentPtr)
+  self.list = (node and node.children) or parentPtr.children or {}
+  self.index = 1
+end
+
+function PtrMethods:MoveNext()
+  self.index = self.index + 1
+end
+
+-- Needed only for richTextHelper.lua's own Exclude check (issue #141): ptrRef is a
+-- rich-text field pointer, optionally carrying a .owner fixture ({ name, children }
+-- describing the Individual record it belongs to) set per-test below. No .owner set (every
+-- pre-#141 fixture) climbs to a generic non-INDI owner, so recordVisibility trivially
+-- returns "all" for it, same as today.
+function PtrMethods:MoveToRecordItem(ptrRef)
+  local owner = ptrRef.owner or { name = 'owner-record' }
+  self.list = nil
+  self.index = nil
+  self.name = owner.name
+  self.children = owner.children
+  self.null = false
+end
+
+fhNewItemPtr = function() return newPtr('unset-ptr', false) end
 
 local nullFieldPtr = newPtr('null-field', true)
 
@@ -76,9 +114,13 @@ fhGetQualifiedRecordId = function(ptr)
   return ptr.name
 end
 
--- Used only by setTftfText's own write-result error message (issue #111, docs/adr/0028)
--- to name which field a failed write targeted.
+-- Used by setTftfText's own write-result error message (issue #111, docs/adr/0028) to name
+-- which field a failed write targeted (ptr.name, the ordinary case), and by
+-- familyHelper.recordVisibility's _FLGS walk (issue #141) to read a child/flag node's own
+-- tag once MoveToFirstChildItem has positioned ptr onto one (currentChildNode(ptr) ~= nil).
 fhGetTag = function(ptr)
+  local node = currentChildNode(ptr)
+  if node then return node.tag end
   return ptr.name
 end
 
@@ -352,5 +394,45 @@ local okWriteFail, errWriteFail = pcall(richTextHelper.setTftfText, fieldWriteFa
 check(okWriteFail == false, 'setTftfText raises when fhSetValueAsRichText itself fails')
 check(contains(errWriteFail, 'setTftfText'), 'the failure names the function')
 check(contains(errWriteFail, 'field-write-failure'), 'the failure names the target field (via fhGetTag)')
+
+------------------------------------------------------------------
+-- setTftfText/validateSetTftfText: an Excluded Individual's own record blocks the write --
+-- ptr is always a field, never the record itself, so this climbs to the owning record via
+-- MoveToRecordItem first (issue #141).
+------------------------------------------------------------------
+
+local familyHelper = require('familyHelper')
+
+local fieldOnExcluded = newPtr('field-on-excluded')
+fieldOnExcluded.owner = {
+  name = 'INDI',  -- recordVisibility only walks _FLGS on a tag == "INDI" owner
+  children = {
+    { tag = '_FLGS', children = { { tag = '__PRIVATE', children = {} } } },
+  },
+}
+fixturesByFieldPtr[fieldOnExcluded] = {
+  sText = 'old content',
+  bRich = false,
+  tblRecLinks = nil,
+  tblCitations = nil,
+}
+
+familyHelper.setPrivacySettings({ privateVisibility = 'exclude', livingVisibility = 'all' })
+
+local setTextCallCountBeforeExcluded = #setTextCalls
+local okExcludedWrite, errExcludedWrite = pcall(richTextHelper.setTftfText, fieldOnExcluded, 'replacement text')
+check(okExcludedWrite == false, 'setTftfText raises when the field\'s owning Individual is Excluded')
+check(contains(errExcludedWrite, 'Excluded'), 'the error names the Excluded reason')
+check(#setTextCalls == setTextCallCountBeforeExcluded, 'a rejected setTftfText call never calls SetText')
+
+local okValidateExcluded = pcall(richTextHelper.validateSetTftfText, fieldOnExcluded, 'some text')
+check(okValidateExcluded == false, 'validateSetTftfText rejects the same Excluded field, same as setTftfText')
+
+familyHelper.setPrivacySettings(nil)
+
+-- The same field pointer, unchanged, succeeds again once Visibility is back to "all" --
+-- proves the block is driven by the Session setting, not something baked into the fixture.
+local okAfterReset = pcall(richTextHelper.validateSetTftfText, fieldOnExcluded, 'some text')
+check(okAfterReset == true, 'the same field is no longer blocked once privateVisibility is back to "all"')
 
 t.report()

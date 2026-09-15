@@ -899,6 +899,30 @@ check(contains(errValidateBoolTarget, 'must point to'), 'the rejection is valida
 check(contains(errValidateBoolTarget, 'boolean'), 'the rejection also names the type actually given')
 
 ------------------------------------------------------------------
+-- validateCiteSource: an Excluded Individual's own record blocks the write, but a Fact
+-- item target on that same Individual does not -- recordVisibility only checks ptrTarget's
+-- own tag, so this fires exactly for the whole-record case (issue #141).
+------------------------------------------------------------------
+
+do
+  local familyHelper = require('familyHelper')
+  local excludedIndi = fhCreateItem("INDI")
+  local flgs = fhCreateItem("_FLGS", excludedIndi)
+  fhCreateItem("__PRIVATE", flgs)
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+
+  local okExcluded, errExcluded = pcall(sourceHelper.validateCiteSource, excludedIndi, certSourceId)
+  check(not okExcluded, 'validateCiteSource raises for an Excluded Individual\'s own record')
+  check(contains(errExcluded, 'Excluded'), 'the error names the Excluded reason')
+
+  local factItem = fhCreateItem("BIRT", excludedIndi)
+  local okFact = pcall(sourceHelper.validateCiteSource, factItem, certSourceId)
+  check(okFact, 'a Fact item on the same Excluded Individual is not blocked -- only the whole-record case is (issue #141 scoping)')
+
+  familyHelper.setPrivacySettings(nil)
+end
+
+------------------------------------------------------------------
 -- citeSource fields (issue #99, follow-up to #98's own closing comment): standard
 -- citation fields (Page/Text/EntryDate/Assessment) apply regardless of whether the source
 -- is templated; a template's own citation-specific (CITN) fields only apply when it is.

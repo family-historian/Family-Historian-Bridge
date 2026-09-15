@@ -62,7 +62,25 @@ function PtrMethods:IsNull()
   return currentNode(self) == nil
 end
 
+-- Minimal child-item walk, needed only for familyHelper.recordVisibility's _FLGS walk
+-- (issue #141) -- a node's own .children array (nil/empty for every pre-#141 fixture) is
+-- reused as the pointed-to list, the same way a top-level recordsByTag[tag] list already is.
+function PtrMethods:MoveToFirstChildItem(parentPtr)
+  local parentNode = currentNode(parentPtr)
+  self.list = (parentNode and parentNode.children) or {}
+  self.index = 1
+end
+
+function PtrMethods:MoveNext()
+  self.index = self.index + 1
+end
+
 fhNewItemPtr = newPtr
+
+fhGetTag = function(ptr)
+  local node = currentNode(ptr)
+  return node and node.tag
+end
 
 local QUALIFIED_ID_PREFIX = { INDI = "I", FAM = "F" }
 fhGetQualifiedRecordId = function(ptr)
@@ -89,6 +107,21 @@ end
 local function makeRecord(tag)
   resetTree()
   return addNode(tag)
+end
+
+-- Adds a Record Flag child (e.g. "__PRIVATE"/"__LIVING") under node's _FLGS item, creating
+-- _FLGS on first use -- mirrors familyHelper.test.lua's own addFlag (issue #141).
+local function addFlag(node, flagTag)
+  node.children = node.children or {}
+  local flgs
+  for _, c in ipairs(node.children) do
+    if c.tag == "_FLGS" then flgs = c end
+  end
+  if not flgs then
+    flgs = { tag = "_FLGS", children = {} }
+    table.insert(node.children, flgs)
+  end
+  table.insert(flgs.children, { tag = flagTag, children = {} })
 end
 
 -- fhNewDate fake (issue #113, docs/adr/0030): validateCreateFact now resolves dtDate via
@@ -119,6 +152,7 @@ fhNewDate = function(year, month, day, subtype)
 end
 
 local factHelper = require('factHelper')
+local familyHelper = require('familyHelper')
 
 ------------------------------------------------------------------
 -- validateCreateFact: pure validation, never calls fhu.createFact (no stub needed here at
@@ -181,6 +215,28 @@ do
   local ok, err = pcall(factHelper.validateCreateFact, indi, "")
   check(not ok, 'an empty-string sTag raises an error')
   check(contains(err, 'sTag'), 'the empty-sTag error names sTag specifically')
+end
+
+------------------------------------------------------------------
+-- validateCreateFact: an Excluded Individual's own record blocks the write (issue #141).
+------------------------------------------------------------------
+
+do
+  local indi, node = makeRecord("INDI")
+  addFlag(node, "__PRIVATE")
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+  local ok, err = pcall(factHelper.validateCreateFact, indi, "BIRT")
+  familyHelper.setPrivacySettings(nil)
+  check(not ok, 'validateCreateFact raises for an Excluded Individual')
+  check(contains(err, 'Excluded'), 'the error names the Excluded reason')
+end
+
+do
+  local fam = makeRecord("FAM")
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+  local ok = pcall(factHelper.validateCreateFact, fam, "MARR")
+  familyHelper.setPrivacySettings(nil)
+  check(ok, 'a FAM record is never blocked -- Record Flags are Individual-only')
 end
 
 ------------------------------------------------------------------

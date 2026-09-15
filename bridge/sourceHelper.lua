@@ -403,6 +403,12 @@ function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   if problem then
     error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to" .. problem)
   end
+  -- recordVisibility only checks ptrTarget's own tag, so this fires exactly when
+  -- ptrTarget is the Individual record itself (Fact-item targets pass through --
+  -- they're not the record whose flags this checks, issue #141).
+  if familyHelper.recordVisibility(ptrTarget) == "exclude" then
+    error("citeSource: this Individual is Excluded by the Session's Visibility settings")
+  end
   local source = resolveSource(sourceNameOrId)
   fields = fields or {}
 

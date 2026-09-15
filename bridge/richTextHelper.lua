@@ -102,6 +102,14 @@ function M.validateSetTftfText(ptr, text)
   if problem then
     error("setTftfText: ptr must point to the rich-text field to write" .. problem)
   end
+  -- ptr is always a field (Notes/Source TEXT/citation DATA-TEXT), never the record
+  -- itself, so recordVisibility needs the owning record -- climbed onto a separate
+  -- pointer, since ptr must still point at the field for the write below (issue #141).
+  local owner = fhNewItemPtr()
+  owner:MoveToRecordItem(ptr)
+  if familyHelper.recordVisibility(owner) == "exclude" then
+    error("setTftfText: this Individual is Excluded by the Session's Visibility settings")
+  end
   if type(text) ~= "string" then
     error("setTftfText: text must be a string in tFTF syntax")
   end

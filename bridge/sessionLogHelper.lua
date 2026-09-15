@@ -86,6 +86,11 @@ function M.validateLogActivity(ptrRecord, action, media)
       error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ptrRecord)) .. "' item (climbed from a '" .. originalTag .. "' item)")
     end
   end
+  -- Checked last, on the guaranteed record-level pointer (after any climb above) --
+  -- issue #141.
+  if familyHelper.recordVisibility(ptrRecord) == "exclude" then
+    error("logActivity: this Individual is Excluded by the Session's Visibility settings")
+  end
   return ptrRecord
 end
 

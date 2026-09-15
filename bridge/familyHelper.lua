@@ -134,6 +134,11 @@ M.resolvePointer = resolvePointer
 -- Exported so sourceHelper.lua's resolveByNameOrId can reuse the same prefix rule.
 M.parseQualifiedId = parseQualifiedId
 
+-- Exported so the write-helper validators (factHelper/sourceHelper/sessionLogHelper/
+-- richTextHelper) can block an Excluded Individual's record the same way the read
+-- helpers already do (issue #141).
+M.recordVisibility = recordVisibility
+
 -- The shared "is v a usable live pointer" check every validate*/get* function uses instead
 -- of hand-rolling "not ptr or ptr:IsNull()", which raises a raw, unhelpful Lua error for a
 -- non-pointer value (string/number/table). Returns nil when v is a usable, non-null
