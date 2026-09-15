@@ -543,8 +543,10 @@ dlg:show()
 if (iup.MainLoopLevel() == 0) then
     iup.MainLoop()
 end
+-- dlgSettings.parentdialog = dlg (above) makes IUP cascade-destroy dlgSettings and its
+-- children as part of destroying dlg -- an explicit dlgSettings:destroy() here would hit an
+-- already-destroyed C handle ("destroyed iupHandle in C but not in Lua", confirmed live).
 dlg:destroy()
-dlgSettings:destroy()
 
 -- Show this plugin load's log note on close (FH 8 beta's fhOutputNote): only when
 -- logActivity actually created one, no write-mode error is about to trigger FH's own
