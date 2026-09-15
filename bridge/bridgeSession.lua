@@ -94,8 +94,38 @@ local togReadWrite = iup.toggle{title="Read-write", value=(lastSettings.accessMo
 local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
 -- Debug logging: records every run_lua script/result to a log file under the project's
 -- public folder for the Session's lifetime. Off by default, editable only while
--- stopped -- same rule as Access mode/idle timeout -- and persisted the same way.
+-- stopped -- same rule as Access mode/idle timeout -- and persisted the same way. Lives in
+-- the Settings popup below (dlgSettings), not the main dialog -- built here as a standalone
+-- widget so currentDebugLogging() can keep reading togDebugLogging.value regardless of
+-- whether the popup is currently open.
 local togDebugLogging = iup.toggle{title="Debug logging", value=lastSettings.debugLogging and "ON" or "OFF"}
+
+-- Visibility levels for the Private/Living Record Flags (issue #141): Exclude < Name Only <
+-- All, index-mapped 1/2/3 to match iup.list's 1-based VALUE. Two dropdowns, same shape,
+-- built via newVisibilityList below.
+local VISIBILITY_LABELS = {"Exclude", "Name Only", "All"}
+local VISIBILITY_VALUES = {"exclude", "nameOnly", "all"}
+
+local function visibilityListIndex(value)
+    for i, v in ipairs(VISIBILITY_VALUES) do
+        if v == value then return i end
+    end
+    return 3 -- "all"
+end
+
+local function newVisibilityList(initialValue)
+    local list = iup.list{dropdown="YES", visiblecolumns=10}
+    for i, label in ipairs(VISIBILITY_LABELS) do
+        list[tostring(i)] = label
+    end
+    list.value = tostring(visibilityListIndex(initialValue))
+    return list
+end
+
+local lstPrivateVisibility = newVisibilityList(lastSettings.privateVisibility)
+local lstLivingVisibility = newVisibilityList(lastSettings.livingVisibility)
+local btnSettings = iup.button{title="Settings...", padding="4x4"}
+local btnSettingsOk = iup.button{title="OK", padding="4x4"}
 -- Idle-timeout control: minutes, 5-120, editable only while the Session is stopped.
 -- SPINMIN/SPINMAX are the widget's own guard; timeoutDisplay.clampMinutes is a second,
 -- defensive clamp applied when the value is read, in case a manually typed value slips
@@ -124,7 +154,7 @@ local dlg = iup.dialog{
         -- two, i.e. Mode's), so the row reads as one balanced settings panel rather than
         -- two mismatched boxes.
         iup.hbox{
-            iup.frame{iup.vbox{radAccessMode, togDebugLogging, gap="8"}, title="Mode", padding="8x8"},
+            iup.frame{iup.vbox{radAccessMode, gap="8"}, title="Mode", padding="8x8"},
             iup.frame{
                 iup.hbox{iup.label{title="Minutes:"}, txtIdleTimeout, gap="8"},
                 title="Idle timeout", padding="8x8"
@@ -134,7 +164,7 @@ local dlg = iup.dialog{
         -- lblTimeLeft rides alongside the buttons rather than owning its own row -- it's
         -- blank most of the time this dialog is on screen, and a dedicated row costs a
         -- full row height even while empty.
-        iup.hbox{btnStart, btnStop, btnExit, lblTimeLeft, gap="10"},
+        iup.hbox{btnStart, btnStop, btnSettings, btnExit, lblTimeLeft, gap="10"},
         margin="10x10", gap="10"
     },
     title="Claude MCP Bridge",
@@ -145,22 +175,72 @@ local dlg = iup.dialog{
 -- than a system-wide topmost -- this keeps the dialog above Family Historian specifically,
 -- not above every other application on screen.
 iup.SetAttribute(dlg, "NATIVEPARENT", fhGetContextInfo("CI_PARENT_HWND"))
+-- lblStatus can later grow to 3 lines ("Listening.../Last request.../a version-mismatch
+-- line) but starts as a single short line ("Not listening.") -- if MINSIZE below is
+-- captured from *that* rastersize, the dialog can never grow to fit the 3-line case later
+-- (IUP doesn't auto-grow past a fixed MINSIZE), truncating the status text. Seed a
+-- worst-case 3-line placeholder before mapping, purely so MINSIZE reserves enough height/
+-- width, then reset it to the real initial text once MINSIZE is captured. Widens/heightens
+-- the dialog's floor permanently (even when no mismatch is in play), which is the deliberate
+-- trade-off here.
+lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (read-write)" ..
+    "\nLast request handled at 00:00:00" ..
+    "\nVersion mismatch: Bridge 99.99.99 vs server 99.99.99 (major version differs)"
 -- Map first so RASTERSIZE is populated, then use that as the floor for MINSIZE --
 -- otherwise a user could resize the dialog small enough to push the Start/Stop buttons
 -- off-screen.
 dlg:map()
 dlg.minsize = dlg.rastersize
+lblStatus.title = "Not listening."
+
+-- Settings popup (issue #141): the two Visibility dropdowns + the relocated Debug-logging
+-- toggle. Built once, shown modally via :popup() each time btnSettings is clicked (rather
+-- than build/destroy per click) so currentPrivacySettings/currentDebugLogging can always
+-- read the live widget values even while the popup itself is closed. No Cancel button --
+-- whatever's selected when the popup closes (OK or the window's own X) is already live in
+-- the widgets; there's nothing to revert.
+local dlgSettings = iup.dialog{
+    iup.vbox{
+        iup.frame{
+            iup.vbox{
+                iup.hbox{iup.label{title="Private:"}, lstPrivateVisibility, gap="8"},
+                iup.hbox{iup.label{title="Living:"}, lstLivingVisibility, gap="8"},
+                gap="8"
+            },
+            title="Visibility", padding="8x8"
+        },
+        togDebugLogging,
+        btnSettingsOk,
+        margin="10x10", gap="10"
+    },
+    title="Settings"
+}
+-- Parented to dlg (the main dialog), not FH's own window directly -- dlg is itself
+-- NATIVEPARENT'd above FH, and a child also parented straight to FH could render behind dlg.
+dlgSettings.parentdialog = dlg
+
+function btnSettingsOk:action()
+    return iup.CLOSE
+end
+
+function btnSettings:action()
+    dlgSettings:popup(iup.CENTER, iup.CENTER)
+end
 
 local function currentAccessMode()
     return togReadWrite.value == "ON" and "read-write" or "read-only"
 end
 
--- Visibility levels for the Private/Living Record Flags (issue #141). The Settings dialog
--- widgets these will read from land in a later slice; hardcoded to "all"/"all" (today's
--- unfiltered behavior) until then, so this plumbing is a no-op change in what the Bridge
--- actually does.
+-- Read live from the Settings popup's two dropdowns, same "live widget, not snapshotted"
+-- pattern as currentAccessMode() above. `or "all"` guards iup.list's VALUE=="0" (nothing
+-- selected) case -- without it this would return {privateVisibility=nil, ...}, a non-nil
+-- table that skips runScript.lua's own default-to-"all" fallback while still failing every
+-- =='all' check, so bulkEnumerationViolation would reject *every* script, not none.
 local function currentPrivacySettings()
-    return { privateVisibility = "all", livingVisibility = "all" }
+    return {
+        privateVisibility = VISIBILITY_VALUES[tonumber(lstPrivateVisibility.value)] or "all",
+        livingVisibility = VISIBILITY_VALUES[tonumber(lstLivingVisibility.value)] or "all",
+    }
 end
 
 local function currentDebugLogging()
@@ -363,11 +443,28 @@ function btnStart:action()
     -- clampMinutes(txtIdleTimeout.value) is the minutes figure the settings file stores
     -- (not currentIdleTimeoutSeconds(), which is seconds for the idle-Session clock). A
     -- write failure inside save() is swallowed silently and never blocks Start.
+    local privacySettings = currentPrivacySettings()
+    -- Persist the user's own choice, not the auto-forced value below -- the force is a
+    -- session-scoped safety net for *this* Session's restricted Visibility, not a standing
+    -- preference change; persisting the forced value would leave logging silently stuck on
+    -- next time, after Visibility's back to "all", with no toggle the user ever touched.
+    local userDebugLogging = currentDebugLogging()
     sessionSettings.save({
         accessMode = currentAccessMode(),
         idleTimeoutMinutes = timeoutDisplay.clampMinutes(txtIdleTimeout.value),
-        debugLogging = currentDebugLogging(),
+        debugLogging = userDebugLogging,
+        privateVisibility = privacySettings.privateVisibility,
+        livingVisibility = privacySettings.livingVisibility,
     })
+    -- Auto-force Debug logging ON for this Session whenever a Visibility level is
+    -- restricted (deferred from slice 5 to here, where the toggle now lives): a restricted
+    -- level silently narrows what run_lua sees, so the Session's own log should always
+    -- capture what actually happened while that's true. Applied after the save above (and
+    -- before debugLog.start below, so it actually takes effect for the Session about to
+    -- start) -- enforced live, can't be bypassed by leaving it off in the Settings popup.
+    if privacySettings.privateVisibility ~= "all" or privacySettings.livingVisibility ~= "all" then
+        togDebugLogging.value = "ON"
+    end
     -- CI_PROJECT_PUBLIC_FOLDER queried once here, not re-queried per script.
     -- debugLog.start is itself a no-op (a disabled session) when Debug logging is off.
     debugLogSession = debugLog.start(currentDebugLogging(), fhGetContextInfo("CI_PROJECT_PUBLIC_FOLDER"), currentAccessMode())
@@ -376,7 +473,7 @@ function btnStart:action()
     btnStop.active = "YES"
     togReadOnly.active = "NO"
     togReadWrite.active = "NO"
-    togDebugLogging.active = "NO"
+    btnSettings.active = "NO"
     txtIdleTimeout.active = "NO"
     updateTimeLeftLabel(currentIdleTimeoutSeconds())
     dlg.bgcolor = statusColorForMode(currentAccessMode())
@@ -405,7 +502,7 @@ function btnStop:action()
     btnStop.active = "NO"
     togReadOnly.active = "YES"
     togReadWrite.active = "YES"
-    togDebugLogging.active = "YES"
+    btnSettings.active = "YES"
     txtIdleTimeout.active = "YES"
     lblTimeLeft.title = ""
     dlg.bgcolor = STATUS_COLOR_STOPPED
@@ -447,6 +544,7 @@ if (iup.MainLoopLevel() == 0) then
     iup.MainLoop()
 end
 dlg:destroy()
+dlgSettings:destroy()
 
 -- Show this plugin load's log note on close (FH 8 beta's fhOutputNote): only when
 -- logActivity actually created one, no write-mode error is about to trigger FH's own
