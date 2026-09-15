@@ -333,6 +333,20 @@ local function newFamily(husb, wife, children)
   return fam
 end
 
+-- Adds a Record Flag child (e.g. "__PRIVATE"/"__LIVING") under indi's _FLGS item, creating
+-- _FLGS on first use -- mirrors describe_project's own flag census shape (issue #141).
+local function addFlag(indi, flagTag)
+  local flgs
+  for _, child in ipairs(indi.children) do
+    if child.tag == "_FLGS" then flgs = child end
+  end
+  if not flgs then
+    flgs = { tag = "_FLGS", children = {} }
+    table.insert(indi.children, flgs)
+  end
+  table.insert(flgs.children, { tag = flagTag, children = {} })
+end
+
 ------------------------------------------------------------------
 -- Fixtures: a 3-generation tree.
 --   Grandpa + Grandma -> Dad, Aunt   (FAM1)
@@ -425,6 +439,45 @@ do
   local okNull, errNull = pcall(familyHelper.getFamilyGroup, newPtr(), "parents")
   check(not okNull, 'a null pointer raises an error')
   check(contains(errNull, "getFamilyGroup"), 'the null-pointer error names the function')
+end
+
+------------------------------------------------------------------
+-- getFamilyGroup/getAncestors/getDescendants: an Excluded relative comes back as a
+-- redacted placeholder (relationship/family/generation/line still present -- only the
+-- individual itself is opaque), never a hard error -- these are traversal results, not a
+-- direct lookup of the Excluded person (issue #141).
+------------------------------------------------------------------
+
+do
+  local grandpaPtr = ptrFor(grandpa)
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+  addFlag(dad, "__PRIVATE")
+
+  local parents = familyHelper.getFamilyGroup(ptrFor(self_), "parents")
+  local dadEntry
+  for _, entry in ipairs(parents) do
+    if entry.relationship == "father" then dadEntry = entry end
+  end
+  check(dadEntry ~= nil and dadEntry.individual.redacted == true and dadEntry.individual.id == nil,
+    'getFamilyGroup redacts an Excluded parent\'s individual field, but keeps the relationship entry')
+
+  local descendants = familyHelper.getDescendants(grandpaPtr)
+  local dadViaDescendants
+  for _, entry in ipairs(descendants) do
+    if entry.individual.redacted then dadViaDescendants = entry end
+  end
+  check(dadViaDescendants ~= nil and dadViaDescendants.generation ~= nil,
+    'getDescendants redacts an Excluded descendant\'s individual field, but keeps generation/family')
+
+  local ancestors = familyHelper.getAncestors(ptrFor(self_))
+  local dadViaAncestors
+  for _, entry in ipairs(ancestors) do
+    if entry.individual.redacted then dadViaAncestors = entry end
+  end
+  check(dadViaAncestors ~= nil and #dadViaAncestors.line > 0,
+    'getAncestors redacts an Excluded ancestor\'s individual field, but keeps generation/line')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
 end
 
 ------------------------------------------------------------------
@@ -605,6 +658,77 @@ do
   check(not okBad, 'an invalid dnaLine raises an error')
   check(contains(errBad, "x-chrom"), 'the error names the invalid dnaLine given')
   check(contains(errBad, "blood"), 'the error message lists blood as a valid value')
+end
+
+------------------------------------------------------------------
+-- recordVisibility / Visibility levels (issue #141): flag tags read literally
+-- ("__PRIVATE"/"__LIVING", not via fhGetFlagTag resolution), most-restrictive-wins when
+-- both flags are set, and non-Individual records are always unrestricted (Record Flags
+-- are Individual-only). Exercised through indiDescriptor/getAllDetails/getFactsByTag,
+-- since recordVisibility itself isn't exposed on the M table.
+------------------------------------------------------------------
+
+do
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+  local excluded = newIndi("Excluded Plugin", "Female")
+  addFlag(excluded, "__PRIVATE")
+
+  local okDetails, errDetails = pcall(familyHelper.getAllDetails, ptrFor(excluded))
+  check(not okDetails and contains(errDetails, "Excluded"), 'getAllDetails on an Excluded Individual raises, naming Excluded')
+
+  local okFacts, errFacts = pcall(familyHelper.getFactsByTag, ptrFor(excluded), { "NAME" })
+  check(not okFacts and contains(errFacts, "Excluded"), 'getFactsByTag on an Excluded Individual raises, naming Excluded')
+
+  -- A non-Individual record (e.g. a FAM) has no Record Flags of its own -- always "all".
+  local fam = newRecord("FAM")
+  local famDetails = familyHelper.getAllDetails(ptrFor(fam))
+  check(famDetails.tag == "FAM", 'getAllDetails on a non-Individual record is never blocked by Visibility settings')
+
+  -- linkDescriptor redacts an Excluded target reached through a link too (e.g. a FAM's
+  -- HUSB), not just a direct getAllDetails/getFactsByTag call on the Excluded record
+  -- itself -- otherwise a one-hop getAllDetails(fam) would leak the name straight back.
+  local famWithExcludedHusb = newFamily(excluded, nil, {})
+  local famDetailsWithLink = familyHelper.getAllDetails(ptrFor(famWithExcludedHusb))
+  local husbNode
+  for _, child in ipairs(famDetailsWithLink.children) do
+    if child.tag == "HUSB" then husbNode = child end
+  end
+  check(husbNode ~= nil and husbNode.link ~= nil and husbNode.link.redacted == true and husbNode.link.tag == "INDI",
+    'a FAM link to an Excluded Individual comes back as a redacted, non-nil link descriptor, not the name')
+  check(husbNode.link.id == nil and husbNode.link.text == nil,
+    'the redacted link descriptor carries no id/name -- opaque, not just missing text')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
+end
+
+do
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "nameOnly" })
+  local nameOnly = newIndi("Nameonly Plugin", "Male")
+  addFlag(nameOnly, "__LIVING")
+
+  local details = familyHelper.getAllDetails(ptrFor(nameOnly))
+  check(details.tag == "INDI" and details.id == nameOnly.id and details.qualifiedId == "I" .. nameOnly.id,
+    'getAllDetails under Name Only returns identity fields only')
+  check(details.children == nil and details.value == nil,
+    'getAllDetails under Name Only carries no facts (no children/value)')
+
+  local facts = familyHelper.getFactsByTag(ptrFor(nameOnly), { "NAME", "BIRT" })
+  check(type(facts) == 'table' and #facts == 0, 'getFactsByTag under Name Only returns an empty array, not an error')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
+end
+
+do
+  -- Both flags set, different levels configured -- the more restrictive one wins.
+  familyHelper.setPrivacySettings({ privateVisibility = "nameOnly", livingVisibility = "exclude" })
+  local both = newIndi("Both Plugin", "Female")
+  addFlag(both, "__PRIVATE")
+  addFlag(both, "__LIVING")
+
+  local ok, err = pcall(familyHelper.getAllDetails, ptrFor(both))
+  check(not ok and contains(err, "Excluded"), 'Exclude (from __LIVING here) outranks Name Only (from __PRIVATE) when both flags are set')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
 end
 
 ------------------------------------------------------------------
@@ -799,6 +923,37 @@ do
     'findByNames carries lifeDates on a match FH can compute one for')
   check(byName["Nodates TAUBMANFIVE"].lifeDates == nil,
     'findByNames omits the lifeDates key entirely (not "") when FH has nothing to report')
+end
+
+------------------------------------------------------------------
+-- findByNames: Visibility levels (issue #141) -- Exclude keeps the matches[] slot as a
+-- redacted placeholder (never a silent drop -- totalMatches stays honest either way);
+-- Name Only drops lifeDates but keeps id/qualifiedId/name/sex.
+------------------------------------------------------------------
+
+do
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+  local excludedMatch = newIndi("Findme TAUBMANSIX", "Female")
+  addFlag(excludedMatch, "__PRIVATE")
+
+  local found = familyHelper.findByNames("Findme Taubmansix")
+  check(found.totalMatches == 1 and #found.matches == 1,
+    'an Excluded match still counts toward totalMatches and still occupies a matches[] slot')
+  check(found.matches[1].redacted == true and found.matches[1].id == nil and found.matches[1].name == nil,
+    'the matches[] slot for an Excluded person is a redacted, non-nil placeholder -- not the name')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "nameOnly" })
+  local livingMatch = newIndi("Findme TAUBMANSEVEN", "Male")
+  livingMatch.lifeDates = "1990-"
+  addFlag(livingMatch, "__LIVING")
+
+  local foundLiving = familyHelper.findByNames("Findme Taubmanseven")
+  check(foundLiving.matches[1].name == "Findme TAUBMANSEVEN" and foundLiving.matches[1].id == livingMatch.id,
+    'Name Only still returns the ordinary indiDescriptor fields (id/qualifiedId/name/sex)')
+  check(foundLiving.matches[1].lifeDates == nil,
+    'Name Only drops lifeDates even though fhCallBuiltInFunction has one to report')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
 end
 
 ------------------------------------------------------------------

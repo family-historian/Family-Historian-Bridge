@@ -27,6 +27,49 @@ function M.getPrivacySettings()
   return currentPrivacySettings
 end
 
+-- Most-restrictive-wins ordering for the two Visibility levels (issue #141).
+local VISIBILITY_RANK = { exclude = 1, nameOnly = 2, all = 3 }
+
+-- Visibility level for ptr's own Private/Living Record Flags, per the currently-active
+-- Session settings. Record Flags are Individual-only (FH help: "Record Flags can only be
+-- set on Individual records"), so anything else -- FAM, SOUR, ... -- is always "all". Flag
+-- tags are compared as literal strings ("__PRIVATE"/"__LIVING"), the same approach
+-- describe_project's own flag census already uses and tests, rather than resolving them via
+-- fhGetFlagTag -- see docs/adr/0014 and the FH help corpus's %INDI._FLGS.__PRIVATE% example.
+-- When both flags are set, the more restrictive configured level wins.
+local function recordVisibility(ptr)
+  if fhGetTag(ptr) ~= "INDI" then
+    return "all"
+  end
+
+  local settings = M.getPrivacySettings()
+  local level = "all"
+  local child = fhNewItemPtr()
+  local flag = fhNewItemPtr()
+  child:MoveToFirstChildItem(ptr)
+  while child:IsNotNull() do
+    if fhGetTag(child) == "_FLGS" then
+      flag:MoveToFirstChildItem(child)
+      while flag:IsNotNull() do
+        local flagTag = fhGetTag(flag)
+        local flagLevel
+        if flagTag == "__PRIVATE" then
+          flagLevel = settings.privateVisibility
+        elseif flagTag == "__LIVING" then
+          flagLevel = settings.livingVisibility
+        end
+        local rank = flagLevel and VISIBILITY_RANK[flagLevel]
+        if rank and rank < VISIBILITY_RANK[level] then
+          level = flagLevel
+        end
+        flag:MoveNext()
+      end
+    end
+    child:MoveNext()
+  end
+  return level
+end
+
 -- Record-tag prefixes usable with MoveToRecordById ('H'/'A' have qualified ids but no
 -- MoveToRecordById equivalent, so they're excluded).
 local QUALIFIED_ID_PREFIX_TAG = {
@@ -179,12 +222,16 @@ M.resolveDate = resolveDate
 -- Individual summary every getFamilyGroup/getAncestors/getDescendants/findByNames entry
 -- carries instead of a live pointer.
 local function indiDescriptor(ptr)
+  local level = recordVisibility(ptr)
+  if level == "exclude" then
+    return { redacted = true, tag = "INDI" }, level
+  end
   return {
     id = fhGetRecordId(ptr),
     qualifiedId = fhGetQualifiedRecordId(ptr),
     name = fhIndGetName(ptr),
     sex = fhGetItemText(ptr, "~.SEX"),
-  }
+  }, level
 end
 
 -- Whitespace-separated words, unchanged case. Callers that don't already have a lowercased
@@ -533,6 +580,12 @@ local function linkDescriptor(ptr)
   if not target or target:IsNull() then
     return nil
   end
+  -- A link can point at an Excluded Individual even when ptr's own record has no flags
+  -- of its own (e.g. a FAM's HUSB/WIFE link) -- redact here too, not just at indiDescriptor,
+  -- so getAllDetails/getFactsByTag can't leak a name through a one-hop link (issue #141).
+  if recordVisibility(target) == "exclude" then
+    return { redacted = true, tag = fhGetTag(target) }
+  end
   return {
     tag = fhGetTag(target),
     id = fhGetRecordId(target),
@@ -601,6 +654,13 @@ function M.getAllDetails(ptr)
   if problem then
     error("getAllDetails: pointer must not be null" .. problem)
   end
+
+  local level = recordVisibility(ptr)
+  if level == "exclude" then
+    error("getAllDetails: this Individual is Excluded by the Session's Visibility settings")
+  elseif level == "nameOnly" then
+    return { tag = fhGetTag(ptr), id = fhGetRecordId(ptr), qualifiedId = fhGetQualifiedRecordId(ptr) }
+  end
   return describeItem(ptr)
 end
 
@@ -619,6 +679,14 @@ function M.getFactsByTag(ptr, tags)
   if problem then
     error("getFactsByTag: pointer must not be null" .. problem)
   end
+
+  local level = recordVisibility(ptr)
+  if level == "exclude" then
+    error("getFactsByTag: this Individual is Excluded by the Session's Visibility settings")
+  elseif level == "nameOnly" then
+    return {}
+  end
+
   local wanted = tagSet(tags, "getFactsByTag")
 
   local results = {}
@@ -707,8 +775,10 @@ function M.findByNames(query, exactMatch)
     for _, p in ipairs(prepared) do
       local matched, exactCount = matchQuery(p.words, nameFullLower, nameWords, exactMatch)
       if matched then
-        local descriptor = indiDescriptor(ptr)
-        descriptor.lifeDates = lifeDatesFor(ptr)
+        local descriptor, level = indiDescriptor(ptr)
+        if level == "all" then
+          descriptor.lifeDates = lifeDatesFor(ptr)
+        end
         table.insert(p.results, {
           descriptor = descriptor,
           exactCount = exactCount,
