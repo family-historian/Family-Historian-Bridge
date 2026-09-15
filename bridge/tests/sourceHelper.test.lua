@@ -916,8 +916,9 @@ do
   check(contains(errExcluded, 'Excluded'), 'the error names the Excluded reason')
 
   local factItem = fhCreateItem("BIRT", excludedIndi)
-  local okFact = pcall(sourceHelper.validateCiteSource, factItem, certSourceId)
-  check(okFact, 'a Fact item on the same Excluded Individual is not blocked -- only the whole-record case is (issue #141 scoping)')
+  local okFact, errFact = pcall(sourceHelper.validateCiteSource, factItem, certSourceId)
+  check(not okFact, 'a Fact item on the same Excluded Individual is also blocked -- climbs to the owning record (issue #141)')
+  check(contains(errFact, 'Excluded'), 'the climbed-Fact-item error also names the Excluded reason')
 
   familyHelper.setPrivacySettings(nil)
 end
