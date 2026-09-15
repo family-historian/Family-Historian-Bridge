@@ -134,6 +134,28 @@ local function dataReferenceViolation(scriptText)
   return table.concat(messages, '; ')
 end
 
+-- Bulk-enumeration pre-scan (issue #141): a script that calls MoveToFirstRecord walks the
+-- raw GEDCOM tree directly, bypassing every fhBridge.* helper's Visibility filtering -- the
+-- one gap this issue's own trust boundary leaves open (raw fh* calls stay unfiltered by
+-- design). Only fires while a Visibility level is actually restricting something -- both
+-- "all" means there's nothing to bypass, so a script run with no privacy settings active
+-- never sees this message. Same word-boundary heuristic as preScanViolation: doesn't try to
+-- tell which record tag is being enumerated (a FAM walk can still reach Individual data via
+-- its members, so MoveToFirstRecord("FAM") is flagged the same as MoveToFirstRecord("INDI")).
+local function bulkEnumerationViolation(scriptText, privacySettings)
+  if privacySettings.privateVisibility == 'all' and privacySettings.livingVisibility == 'all' then
+    return nil
+  end
+  if not containsName(scriptText, 'MoveToFirstRecord') then
+    return nil
+  end
+  return 'script calls MoveToFirstRecord, which enumerates the raw GEDCOM tree and bypasses ' ..
+    'this Session\'s Visibility settings (Private: ' .. tostring(privacySettings.privateVisibility) ..
+    ', Living: ' .. tostring(privacySettings.livingVisibility) .. ') -- use fhBridge.findByNames/' ..
+    'getFamilyGroup/getAncestors/getDescendants/getAllDetails/getFactsByTag instead, which apply ' ..
+    'these settings automatically'
+end
+
 -- Shared shape for a write-mode response that ends the whole plugin so FH's own auto-undo
 -- can act on the tree (ADR 0005): a JSON error carrying writeSessionRolledBack: true, plus
 -- the original error/message as a second return value the caller re-raises after sending.
@@ -188,6 +210,10 @@ function M.run(scriptText, accessMode, privacySettings)
   local dataRefViolation = dataReferenceViolation(scriptText)
   if dataRefViolation then
     table.insert(violations, dataRefViolation)
+  end
+  local bulkViolation = bulkEnumerationViolation(scriptText, privacySettings)
+  if bulkViolation then
+    table.insert(violations, bulkViolation)
   end
   if #violations > 0 then
     return json.encode({ error = table.concat(violations, '; ') })

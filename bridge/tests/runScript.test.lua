@@ -478,6 +478,36 @@ do
     'M.run with no privacySettings argument defaults to unfiltered "all"/"all"')
 end
 
+-- Bulk-enumeration pre-scan (issue #141): raw MoveToFirstRecord bypasses every fhBridge.*
+-- helper's Visibility filtering, so it's rejected while any Visibility level is restricted.
+do
+  local restricted = { privateVisibility = 'exclude', livingVisibility = 'all' }
+  local response = runScript.run("ptr:MoveToFirstRecord('INDI')", 'read-only', restricted)
+  check(contains(response, '"error"') and contains(response, 'MoveToFirstRecord') and contains(response, 'bypasses'),
+    'MoveToFirstRecord is rejected while privateVisibility is restricted')
+  check(contains(response, 'exclude') and contains(response, 'all'),
+    'the rejection names both Visibility levels actually in effect')
+end
+
+do
+  local restricted = { privateVisibility = 'all', livingVisibility = 'nameOnly' }
+  local response = runScript.run("ptr:MoveToFirstRecord('FAM')", 'read-only', restricted)
+  check(contains(response, 'MoveToFirstRecord'),
+    'MoveToFirstRecord is rejected while livingVisibility alone is restricted, regardless of which record tag is enumerated')
+end
+
+-- "not rejected" is checked via absence of the violation's own wording, not absence of
+-- '"error"' generally -- ptr is an undefined global in this fixture script, so it still
+-- fails at execution with an unrelated "attempt to index a nil value" error either way.
+check(not contains(runScript.run("ptr:MoveToFirstRecord('INDI')", 'read-only'), 'bypasses'),
+  'MoveToFirstRecord is not rejected by the pre-scan when no privacySettings argument is passed (defaults to unfiltered "all"/"all")')
+
+check(not contains(runScript.run("ptr:MoveToFirstRecord('INDI')", 'read-only', { privateVisibility = 'all', livingVisibility = 'all' }), 'bypasses'),
+  'MoveToFirstRecord is not rejected by the pre-scan when both Visibility levels are explicitly "all"')
+
+check(not contains(runScript.run("return fhBeginsWithVowel('Anne')", 'read-only', { privateVisibility = 'exclude', livingVisibility = 'all' }), 'MoveToFirstRecord'),
+  'a script that never mentions MoveToFirstRecord is unaffected by a restricted Visibility level')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)
