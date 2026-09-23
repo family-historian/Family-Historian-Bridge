@@ -12,7 +12,7 @@
     "start": "node dist/index.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Calico Pie Limited <support@family-historian.co.uk> (https://family-historian.co.uk)",
   "license": "ISC",
   "type": "module",
   "dependencies": {

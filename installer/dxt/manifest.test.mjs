@@ -64,7 +64,17 @@ test("buildManifest sets the required fields the v0.4 schema demands", () => {
   assert.equal(manifest.version, "0.6.0");
   assert.equal(typeof manifest.description, "string");
   assert.ok(manifest.description.length > 0);
-  assert.equal(manifest.author.name, "Jane Taubman");
+  assert.equal(manifest.author.name, "Calico Pie Limited");
+  assert.equal(manifest.author.email, "support@family-historian.co.uk");
+  assert.equal(manifest.author.url, "https://family-historian.co.uk");
+  assert.equal(
+    manifest.repository.url,
+    "https://github.com/family-historian/family-historian-bridge",
+  );
+  assert.equal(
+    manifest.support,
+    "https://www.family-historian.co.uk/support/support-overview",
+  );
   assert.ok(manifest.server);
 });
 

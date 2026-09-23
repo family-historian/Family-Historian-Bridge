@@ -50,7 +50,17 @@ export function buildManifest({ version }) {
     version,
     description:
       "Lets Claude query and edit your open Family Historian project via a companion FH plugin.",
-    author: { name: "Jane Taubman" },
+    author: {
+      name: "Calico Pie Limited",
+      email: "support@family-historian.co.uk",
+      url: "https://family-historian.co.uk",
+    },
+    repository: {
+      type: "git",
+      url: "https://github.com/family-historian/family-historian-bridge",
+    },
+    homepage: "https://family-historian.co.uk",
+    support: "https://www.family-historian.co.uk/support/support-overview",
     server: {
       type: "node",
       // Relative to the bundle root -- build-dxt.mjs stages the built server here.
