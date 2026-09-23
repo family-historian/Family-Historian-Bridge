@@ -1,5 +1,6 @@
 -- The Bridge plugin's dialog UI and Session lifecycle: the IUP dialog (Access-mode
--- selector, idle-timeout spin-box and countdown, Start/Stop), the TCP listener and its
+-- selector, idle-timeout countdown, Start/Stop/Settings; the idle-timeout spin-box itself
+-- lives in the Settings popup), the TCP listener and its
 -- poll-timer callback, and request-framing dispatch. Split out of `Claude MCP Bridge.fh_lua`
 -- itself so Serena's symbol tools can cover it -- `.fh_lua` files aren't recognized by
 -- Serena's Lua language server, `.lua` files are. See CONTEXT.md's "Session" and "Bridge
@@ -98,7 +99,7 @@ local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
 -- the Settings popup below (dlgSettings), not the main dialog -- built here as a standalone
 -- widget so currentDebugLogging() can keep reading togDebugLogging.value regardless of
 -- whether the popup is currently open.
-local togDebugLogging = iup.toggle{title="Debug logging", value=lastSettings.debugLogging and "ON" or "OFF"}
+local togDebugLogging = iup.toggle{title="Logging", value=lastSettings.debugLogging and "ON" or "OFF"}
 
 -- Visibility levels for the Private/Living Record Flags (issue #141): Exclude < Name Only <
 -- All, index-mapped 1/2/3 to match iup.list's 1-based VALUE. Two dropdowns, same shape,
@@ -149,18 +150,18 @@ lblTimeLeft.expand = "HORIZONTAL"
 
 local dlg = iup.dialog{
     iup.vbox{
-        lblStatus,
-        -- normalizesize="HORIZONTAL" makes both frames the same width (the wider of the
-        -- two, i.e. Mode's), so the row reads as one balanced settings panel rather than
-        -- two mismatched boxes.
-        iup.hbox{
-            iup.frame{iup.vbox{radAccessMode, gap="8"}, title="Mode", padding="8x8"},
-            iup.frame{
-                iup.hbox{iup.label{title="Minutes:"}, txtIdleTimeout, gap="8"},
-                title="Idle timeout", padding="8x8"
-            },
-            gap="10", normalizesize="HORIZONTAL"
+        -- Mode frame above the status text. The trailing iup.fill{} gives the frame a
+        -- horizontally-expanding child so it stretches to the full dialog width --
+        -- expand="HORIZONTAL" on the frame alone, and normalizesize, both left it at its
+        -- natural (narrow) width.
+        iup.frame{
+            iup.hbox{radAccessMode, iup.fill{}},
+            title="Mode", padding="8x8", expand="HORIZONTAL"
         },
+        lblStatus,
+        -- Expanding filler: soaks up any extra height so the button row stays pinned to the
+        -- bottom edge when the dialog is resized taller.
+        iup.fill{},
         -- lblTimeLeft rides alongside the buttons rather than owning its own row -- it's
         -- blank most of the time this dialog is on screen, and a dedicated row costs a
         -- full row height even while empty.
@@ -193,23 +194,38 @@ dlg:map()
 dlg.minsize = dlg.rastersize
 lblStatus.title = "Not listening."
 
--- Settings popup (issue #141): the two Visibility dropdowns + the relocated Debug-logging
--- toggle. Built once, shown modally via :popup() each time btnSettings is clicked (rather
+-- Settings popup (issues #141, #142): the Idle-timeout spin-box, the two Visibility
+-- dropdowns and the relocated Debug-logging toggle. Built once, shown modally via :popup() each time btnSettings is clicked (rather
 -- than build/destroy per click) so currentPrivacySettings/currentDebugLogging can always
 -- read the live widget values even while the popup itself is closed. No Cancel button --
 -- whatever's selected when the popup closes (OK or the window's own X) is already live in
 -- the widgets; there's nothing to revert.
 local dlgSettings = iup.dialog{
     iup.vbox{
-        iup.frame{
-            iup.vbox{
-                iup.hbox{iup.label{title="Private:"}, lstPrivateVisibility, gap="8"},
-                iup.hbox{iup.label{title="Living:"}, lstLivingVisibility, gap="8"},
-                gap="8"
+        -- The frames sit in their own vbox with normalizesize so all three take the widest
+        -- one's width (expand="HORIZONTAL" alone didn't stretch them); OK stays outside it
+        -- so it keeps its natural size.
+        iup.vbox{
+            iup.frame{
+                iup.hbox{iup.label{title="Minutes:"}, txtIdleTimeout, gap="8", alignment="ACENTER"},
+                title="Idle timeout", padding="8x8"
             },
-            title="Visibility", padding="8x8"
+            -- gridbox (not two hboxes) so the labels and dropdowns line up as two columns.
+            iup.frame{
+                iup.gridbox{
+                    iup.label{title="Private:"}, lstPrivateVisibility,
+                    iup.label{title="Living:"}, lstLivingVisibility,
+                    numdiv=2, orientation="HORIZONTAL", gapcol=8, gaplin=8, alignmentlin="ACENTER"
+                },
+                title="Visibility", padding="8x8"
+            },
+            -- The inner vbox's margin gives the toggle breathing room -- the frame's own
+            -- padding leaves it tight against the bottom border, and (x) indents it to
+            -- line up with the Private/Living/Minutes labels, which IUP insets from the
+            -- frame edge more than a bare toggle.
+            iup.frame{iup.vbox{togDebugLogging, margin="16x4"}, title="Debug", padding="8x8"},
+            gap="10", normalizesize="HORIZONTAL"
         },
-        togDebugLogging,
         btnSettingsOk,
         margin="10x10", gap="10"
     },

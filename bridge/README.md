@@ -12,8 +12,8 @@ implements.
   Then `fhSetStringEncoding("UTF-8")` (also mandatorily direct here, never inside a required
   module, see `bridgeSession.lua` below), then one `require("bridgeSession")`. Nothing else
   lives here any more.
-- `bridgeSession.lua`: the dialog UI (Access-mode selector, idle-timeout spin-box and
-  countdown, Start/Stop, idle auto-Stop timer), TCP listener, and request framing, moved out
+- `bridgeSession.lua`: the dialog UI (Access-mode selector, idle-timeout countdown,
+  Start/Stop/Settings, idle auto-Stop timer; the idle-timeout spin-box is in the Settings popup), TCP listener, and request framing, moved out
   of the entry file itself (issue #75, docs/adr/0018) so Serena's symbol tools can cover it.
   `.fh_lua` files can't be recognized by Serena's Lua language server; `.lua` files can. Also
   calls `fhUpdateDisplay()` after every accepted request, so any change a write script made
@@ -251,27 +251,30 @@ It's tested manually, inside FH:
    click Cancel, confirming the plugin ends immediately with no Bridge dialog shown at all.
    With no unsaved changes, confirm this prompt is skipped entirely and the Bridge dialog
    appears directly (fhInitialise's documented behavior when there's nothing to save).
-3. A small "Claude MCP Bridge" dialog appears with a Read-only/Read-write selector (Read-only
-   selected by default on a machine with no prior settings file, issue #80, see step 3a
-   below for the persisted case), an "Idle timeout (min)" spin-box (spinnable between 5 and
-   120, issue #34), and Start/Stop buttons. Confirm the selector and the spin-box are
-   both clickable/editable, then click Start. Confirm the selector and the spin-box both
-   grey out (inactive) once the Session is running, the status label shows the chosen mode,
-   e.g. "Listening on 127.0.0.1:8734 (read-only)", and a "Time left: M:SS" label appears
-   below the spin-box and counts down once per second. Confirm the full text is visible,
+3. A small "Claude MCP Bridge" dialog appears on a light grey background (issue #142) with a
+   full-width "Mode" frame holding the Read-only/Read-write selector (Read-only selected by
+   default on a machine with no prior settings file, issue #80, see step 3a below for the
+   persisted case), and a Start/Stop/Settings.../Exit button row pinned to the bottom edge.
+   Click Settings... and confirm the popup opens with an "Idle timeout" frame first (a
+   "Minutes:" spin-box, spinnable between 5 and 120, issue #34) above the Visibility frame.
+   Confirm the selector and the spin-box are both clickable/editable, close the popup (OK),
+   then click Start. Confirm the selector and Settings... button both grey out (inactive)
+   once the Session is running, the status label shows the chosen mode, e.g. "Listening on
+   127.0.0.1:8734 (read-only)", and a "Time left: M:SS" label appears beside the buttons and
+   counts down once per second. Confirm the full text is visible,
    not clipped to a couple of characters (the label is created with an empty title, so it
    needs an explicit `expand="HORIZONTAL"`, same fix as `lblStatus`, or it maps too narrow
    for the text set into it later). Click Stop and confirm the selector
-   and spin-box both become editable again, and the "Time left" label clears. Select
+   and Settings... button both become active again, and the "Time left" label clears. Select
    Read-write, click Start again, and confirm the status label now shows "(read-write)".
    Sandbox behavior is unchanged either way this stage, so only the label/lock differs.
    Click Stop.
 3a. Settings persistence (issue #80): with the dialog still open from step 3 (Read-write/
    a non-default idle-timeout minutes last used), close the plugin (window X, no Session
    running so no confirm prompt) and reload it (Tools -> Plugins -> Run again). Confirm the
-   Access-mode selector and idle-timeout spin-box both reopen with the same values you left
-   them on, not reset to Read-only/15. Change the idle-timeout to a different in-range value
-   without clicking Start, then reload again. Confirm that unsaved change was *not*
+   Access-mode selector and (via Settings...) the idle-timeout spin-box both reopen with the
+   same values you left them on, not reset to Read-only/15. Change the idle-timeout to a
+   different in-range value in the Settings popup without clicking Start, then reload again. Confirm that unsaved change was *not*
    persisted (settings are only saved on a successful Start, per issue #80's ticket), i.e.
    the dialog still shows the value from the last successful Start. Then click Start with
    the new value, Stop, reload, confirming it now sticks.
@@ -328,10 +331,10 @@ It's tested manually, inside FH:
 9. Idle-timeout auto-Stop and countdown (issue #34): the spin-box enforces a 5–120 minute
    range with no override in the UI, so for a fast test, temporarily lower
    `timeoutDisplay.MIN_MINUTES` (e.g. to `1`), copy the modified `timeoutDisplay.lua`
-   alongside the rest of `bridge/`'s files, reload the plugin, set the spin-box to its new
-   minimum, click Start, then leave the Session idle (no request sent). Confirm the
+   alongside the rest of `bridge/`'s files, reload the plugin, set the spin-box (Settings...
+   popup) to its new minimum, click Start, then leave the Session idle (no request sent). Confirm the
    "Time left" label counts down to "0:00" and the dialog then auto-returns to "Not
-   listening." with the selector and spin-box both clickable again, with no request sent
+   listening." with the selector and Settings... button both clickable again, with no request sent
    and without clicking Stop. Restore `timeoutDisplay.MIN_MINUTES` to `5` afterward (and
    re-run `lua bridge/tests/timeoutDisplay.test.lua` to confirm the restored value still
    passes its assertions).

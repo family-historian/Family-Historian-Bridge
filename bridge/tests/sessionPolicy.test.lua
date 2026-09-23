@@ -24,7 +24,7 @@ check(sessionPolicy.statusColorForMode('read-only') == sessionPolicy.STATUS_COLO
 check(sessionPolicy.statusColorForMode(nil) == sessionPolicy.STATUS_COLOR_READONLY,
   'an unrecognized/missing mode falls back to the read-only colour, not read-write')
 
-check(sessionPolicy.STATUS_COLOR_STOPPED == '224 224 224', 'STATUS_COLOR_STOPPED is the documented grey')
+check(sessionPolicy.STATUS_COLOR_STOPPED == '240 240 240', 'STATUS_COLOR_STOPPED is the documented grey')
 check(sessionPolicy.STATUS_COLOR_READONLY == '212 237 218', 'STATUS_COLOR_READONLY is the documented green')
 check(sessionPolicy.STATUS_COLOR_READWRITE == '255 243 205', 'STATUS_COLOR_READWRITE is the documented amber')
 check(sessionPolicy.STATUS_COLOR_ERROR == '248 215 218', 'STATUS_COLOR_ERROR is the documented red')

@@ -17,7 +17,7 @@ local M = {}
 -- the one state where a script can actually mutate the user's data. Muted (not saturated)
 -- tones so the dialog doesn't read as alarming at a glance; grey/green/amber/red differ in
 -- lightness as well as hue so the states stay distinguishable under common colour-blindness.
-M.STATUS_COLOR_STOPPED   = "224 224 224" -- grey: idle, nothing listening
+M.STATUS_COLOR_STOPPED   = "240 240 240" -- light grey: idle, nothing listening
 M.STATUS_COLOR_READONLY  = "212 237 218" -- green: listening, read-only (safe)
 M.STATUS_COLOR_READWRITE = "255 243 205" -- amber: listening, read-write (can mutate data)
 M.STATUS_COLOR_ERROR     = "248 215 218" -- red: failed to bind

@@ -38,7 +38,7 @@ moment you click Stop.
    - Set **Minutes:** to how long the Session should stay open with no activity before it
      auto-Stops (see step 4 below). Defaults to 5; change it before clicking Start, it's
      locked for the rest of the Session.
-   - Optionally tick **Debug logging** (off by default) to have every `run_lua` script and
+   - Optionally tick **Logging** in the **Debug** frame of Settings... (off by default) to have every `run_lua` script and
      its result written to a plain-text log file for this Session, useful if you need to
      see exactly what Claude ran (see [Troubleshooting](#troubleshooting)).
    - Click **Start**. The dialog shows "Listening..." and FH's main window locks. This is
@@ -165,7 +165,7 @@ any other running instance and try again.
 **Claude's answer looks wrong**: Claude runs a fresh Lua script per question, so an
 unusual question can occasionally expose a scripting bug rather than a data problem. Ask
 it to double-check or explain how it got the number; it has full context on the script it
-just ran. For a harder case, Stop the Session, tick **Debug logging**, Start again, and
+just ran. For a harder case, Stop the Session, tick **Logging** (Settings... > Debug), Start again, and
 reproduce the question. Every `run_lua` script and its result gets written to a
 plain-text log file under your project's public folder for the rest of that Session.
 
