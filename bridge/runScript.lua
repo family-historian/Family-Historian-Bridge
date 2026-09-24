@@ -180,20 +180,14 @@ local function rollbackResponse(message)
   return json.encode({ error = tostring(message), writeSessionRolledBack = true }), message
 end
 
--- Attempts a rollback of everything this call has written so far. Commits first, then rolls
--- back: the rollback primitive alone does not undo a record's own creation, only value edits
--- on already-existing items, so a script that created a record before failing would
--- otherwise leave that record permanently orphaned even though the rollback call itself
--- reports success -- committing first makes the pending batch, record creation included,
--- something the rollback primitive can then revert as a unit. On success the Session
--- survives: an ordinary JSON error, no rethrow, no writeSessionRolledBack -- the caller
--- resubmits without FH's own "Plugin Error" pop-up ever firing. On failure (either call
--- throws), tree state can't be trusted any more, so this falls back to rollbackResponse's
+-- Attempts a rollback of everything this call has written so far. Requires FH 8.0.0.12+,
+-- where the rollback primitive alone undoes record creation as well as value edits. On
+-- success the Session survives: an ordinary JSON error, no rethrow, no writeSessionRolledBack
+-- -- the caller resubmits without FH's own "Plugin Error" pop-up ever firing. On failure (the
+-- call throws), tree state can't be trusted any more, so this falls back to rollbackResponse's
 -- plugin-ending path (ADR 0005) as a last resort.
 local function attemptRollback(message)
-  local commitOk = pcall(fhCommit)
-  local rollbackOk = commitOk and pcall(fhRollback)
-  if rollbackOk then
+  if pcall(fhRollback) then
     return json.encode({ error = tostring(message) }), nil, 'rolledback'
   end
   return rollbackResponse(message)

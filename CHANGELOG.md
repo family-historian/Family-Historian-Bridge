@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed write calls now roll back with the rollback function alone, no commit first. Requires FH 8.0.0.12 or later, where rollback undoes record creation as well as value edits.
+
 ## 1.0.0
 - Bridge plugin renamed `Claude MCP Bridge.fh_lua` -> `AI Assistant Connector.fh_lua` (issue #144): file name, `@Title` and dialog title. Plugin header `@Description` rewritten in plain language and `@Keywords` no longer mention Claude. Product name "FH MCP Bridge" unchanged. Anyone with the old file in FH's Plugins folder should delete it.
 

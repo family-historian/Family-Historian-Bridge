@@ -164,7 +164,7 @@ do
   check(rethrow == nil, 'a successful rollback returns no second value -- nothing to re-raise, the plugin stays alive')
   check(transactionResult == 'rolledback', 'a successful rollback reports "rolledback" as the third return value')
   check(fhRollbackCalls == 1, 'the rollback primitive is called exactly once')
-  check(fhCommitCalls == 1, 'the commit primitive is called once before the rollback, to make the pending batch (including any record creation) something the rollback primitive can actually undo')
+  check(fhCommitCalls == 0, 'the rollback path never calls the commit primitive -- rollback alone undoes record creation on FH 8.0.0.12+')
 end
 
 -- Rollback-throws fallback (issue #133): when the rollback attempt itself throws, tree
