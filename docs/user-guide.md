@@ -31,7 +31,7 @@ moment you click Stop.
 
 ## Using it
 
-1. **Open your project in FH**, then in the "Claude MCP Bridge" dialog:
+1. **Open your project in FH**, then in the "AI Assistant Connector" dialog:
    - Pick **Read-only** (Claude can only look things up) or **Read-write** (Claude can
      also create, edit, and delete records). This choice holds for the whole Session;
      Stop and Start again to change it.
@@ -152,7 +152,7 @@ Tell Claude which kind you want, a **Report** plugin (shows in FH's Report Windo
 
 ## Troubleshooting
 
-**"No FH Bridge Session is running"**: click Start in the Claude MCP Bridge dialog. Claude can't
+**"No FH Bridge Session is running"**: click Start in the AI Assistant Connector dialog. Claude can't
 start a Session itself; there's no way around clicking Start yourself.
 
 **Session ended on its own**: either you clicked Stop, or the **Minutes:** idle timeout

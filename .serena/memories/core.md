@@ -56,7 +56,7 @@ directly (topic `domain/*`), not re-grown in CONTEXT.md.
 - Everything runs local-only except one explicit user-triggered `check_fh_help_updates`
   network call to family-historian.co.uk.
 - `server/package.json` is the version source of truth. Only one hand-copied second copy is
-  left, the `@Version:` header in `bridge/Claude MCP Bridge.fh_lua` (issue #89);
+  left, the `@Version:` header in `bridge/AI Assistant Connector.fh_lua` (issue #89);
   `serverVersion.ts`, the `.iss` `AppVersion`, the `.mcpb` manifest version and
   `package-lock.json` are all derived. The repo-root `package.json` is a dependency-free
   task runner and deliberately has no `version` field. See `docs/release.md` step 4.

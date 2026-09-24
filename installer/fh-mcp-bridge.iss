@@ -7,7 +7,7 @@
 ; What this installs (per-user, no admin/UAC required):
 ;   - A portable Node.js runtime (node.exe only) and the production-only server build,
 ;     so the target machine needs no preinstalled Node -- see docs/adr for why.
-;   - The single-file Bridge plugin (Claude MCP Bridge.fh_lua).
+;   - The single-file Bridge plugin (AI Assistant Connector.fh_lua).
 ;   - Merges an "fh-mcp-bridge" entry into Claude Desktop's config (config-merge.ps1),
 ;     replacing any previous entry under that same key rather than duplicating it.
 ;     Run from [Code] (not a declarative [Run] entry) so a failure is never silent --
@@ -51,10 +51,10 @@ Source: "staging\server\package.json"; DestDir: "{app}\server"; Flags: ignorever
 Source: "staging\server\dist\*"; DestDir: "{app}\server\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "staging\server\data\*"; DestDir: "{app}\server\data"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "staging\server\node_modules\*"; DestDir: "{app}\server\node_modules"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "staging\bridge\Claude MCP Bridge.fh_lua"; DestDir: "{app}\bridge"; Flags: ignoreversion
+Source: "staging\bridge\AI Assistant Connector.fh_lua"; DestDir: "{app}\bridge"; Flags: ignoreversion
 
 [Run]
-Filename: "{app}\bridge\Claude MCP Bridge.fh_lua"; \
+Filename: "{app}\bridge\AI Assistant Connector.fh_lua"; \
   Description: "Open the Bridge plugin in Family Historian now"; \
   Flags: postinstall shellexec skipifsilent
 

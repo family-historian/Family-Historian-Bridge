@@ -15,7 +15,7 @@ yourself if you want a completely clean removal:
 - **Claude Desktop config**: open `%APPDATA%\Claude\claude_desktop_config.json` in Notepad
   and delete the `"fh-mcp-bridge"` entry under `"mcpServers"` (leave any other entries
   alone), then restart Claude Desktop.
-- **FH plugin**: in Family Historian, open **Tools → Plugins**, find **"Claude MCP Bridge"**,
+- **FH plugin**: in Family Historian, open **Tools → Plugins**, find **"AI Assistant Connector"**,
   and remove it from there.
 
 Once removed, see [docs/install.md](install.md) if you'd like to reinstall via the current,

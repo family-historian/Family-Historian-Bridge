@@ -51,7 +51,7 @@ moment they click Stop (or after 5 minutes idle).
 
 Download two files from the [latest release](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/releases)
 — the `.mcpb` (install via Claude Desktop's own Settings → Extensions → Advanced Settings →
-Install Extension) and `Claude MCP Bridge.fh_lua` (load via FH's Tools → Plugins → New, or
+Install Extension) and `AI Assistant Connector.fh_lua` (load via FH's Tools → Plugins → New, or
 just double-click it). No building, no command line.
 
 Full walkthrough: **[docs/install.md](docs/install.md)**. Building from source instead
@@ -59,7 +59,7 @@ Full walkthrough: **[docs/install.md](docs/install.md)**. Building from source i
 
 ## Using it
 
-Open the FH project, click **Start** in the "Claude MCP Bridge" dialog, then ask Claude a
+Open the FH project, click **Start** in the "AI Assistant Connector" dialog, then ask Claude a
 genealogy question in plain English. See
 [docs/user-guide.md](docs/user-guide.md#using-it) for the full walkthrough, and
 [docs/user-guide.md#getting-a-standalone-plugin-written-for-you](docs/user-guide.md#getting-a-standalone-plugin-written-for-you)

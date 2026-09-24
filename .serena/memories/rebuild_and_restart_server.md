@@ -10,7 +10,7 @@
   store at process startup, not per-call -- a running process keeps serving the OLD corpus
   content until restarted, even though nothing needs recompiling.
 - Any change under `bridge/*.lua` -> needs `lua bridge/scripts/build.lua` (from repo root)
-  to refresh `bridge/dist/Claude MCP Bridge.fh_lua`. This does NOT need a server
+  to refresh `bridge/dist/AI Assistant Connector.fh_lua`. This does NOT need a server
   restart -- the bridge runs inside Family Historian's own separate Lua process, not
   this server.
 
@@ -59,7 +59,7 @@ ps aux | grep "server/dist/index.js" | grep -v grep   # confirm new pid
 ```
 
 ## What this does NOT do
-- Does not install `bridge/dist/Claude MCP Bridge.fh_lua` into FH's Plugins folder --
+- Does not install `bridge/dist/AI Assistant Connector.fh_lua` into FH's Plugins folder --
   that file is gitignored (build artifact, never committed) and, per project convention
   (`mem:task_completion`, `bridge/README.md`), this project never copies into the user's
   Plugins folder or touches their CrossOver bottle. The user installs/reloads it in FH

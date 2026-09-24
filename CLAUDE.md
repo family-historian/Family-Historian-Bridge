@@ -20,7 +20,7 @@ Before writing or calling any `fh*`/`fhu.*` function whose exact signature you'r
 
 ### Manual testing against a live FH install
 
-After rebuilding `bridge/dist/Claude MCP Bridge.fh_lua`, ask the user to load it and confirm — don't go hunting for FH's Plugins folder or install state yourself. See `docs/agents/manual-testing.md`.
+After rebuilding `bridge/dist/AI Assistant Connector.fh_lua`, ask the user to load it and confirm — don't go hunting for FH's Plugins folder or install state yourself. See `docs/agents/manual-testing.md`.
 
 ### Releases
 

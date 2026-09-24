@@ -4,7 +4,7 @@ The FH-side half of the MCP bridge. See the repo root `CONTEXT.md` and
 `docs/adr/0001-arbitrary-sandboxed-lua-execution.md` for the concepts and decisions this
 implements.
 
-- `Claude MCP Bridge.fh_lua`: the entry file, now just a stub (issue #75, docs/adr/0018).
+- `AI Assistant Connector.fh_lua`: the entry file, now just a stub (issue #75, docs/adr/0018).
   It holds the `@Title`/`@Type`/... header FH's plugin loader reads, then
   `fhInitialise(7, 0, 0, "save_required")` as its very first statement, before any
   `require()`, so FH prompts to save unsaved changes the moment the plugin loads rather than
@@ -224,7 +224,7 @@ lua bridge/tests/sandbox.test.lua
 ```
 
 `scripts/build.lua` (and its `scripts/bundler.lua` logic) bundle those sibling modules into
-`dist/Claude MCP Bridge.fh_lua`, the single file that actually gets installed (step 1
+`dist/AI Assistant Connector.fh_lua`, the single file that actually gets installed (step 1
 below), and also parse this file's own `@Version` header to inject a runtime
 `BRIDGE_VERSION` constant (issue #45), since the header itself isn't readable by the
 plugin's own running code otherwise. Both are build tooling, not part of the plugin itself,
@@ -239,10 +239,10 @@ It's tested manually, inside FH:
 
 1. Build the single-file plugin (`lua bridge/scripts/build.lua` from the repo root, see
    docs/adr/0009-bundle-bridge-plugin-for-install.md) and copy the resulting
-   `bridge/dist/Claude MCP Bridge.fh_lua` into FH's Plugins folder,
+   `bridge/dist/AI Assistant Connector.fh_lua` into FH's Plugins folder,
    `C:\ProgramData\Calico Pie\Family Historian\Plugins\` on native Windows, or the
    equivalent path under CrossOver's virtual C: drive on Mac.
-2. In FH: Tools -> Plugins -> New, open `Claude MCP Bridge.fh_lua` from that folder, click Run.
+2. In FH: Tools -> Plugins -> New, open `AI Assistant Connector.fh_lua` from that folder, click Run.
    Confirm `fhInitialise`'s save-required prompt (issue #33) fires here, before the Bridge's
    own dialog appears: with unsaved changes in the open project, FH shows its own dialog
    saying saving is required, with OK/Cancel. Click OK and confirm the project is saved
@@ -251,7 +251,7 @@ It's tested manually, inside FH:
    click Cancel, confirming the plugin ends immediately with no Bridge dialog shown at all.
    With no unsaved changes, confirm this prompt is skipped entirely and the Bridge dialog
    appears directly (fhInitialise's documented behavior when there's nothing to save).
-3. A small "Claude MCP Bridge" dialog appears on a light grey background (issue #142) with a
+3. A small "AI Assistant Connector" dialog appears on a light grey background (issue #142) with a
    full-width "Mode" frame holding the Read-only/Read-write selector (Read-only selected by
    default on a machine with no prior settings file, issue #80, see step 3a below for the
    persisted case), and a Start/Stop/Settings.../Exit button row pinned to the bottom edge.

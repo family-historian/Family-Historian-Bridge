@@ -11,7 +11,7 @@
 -- VERSION <server-version> -- sent as its own connection ahead of every
 --                             LUA/LUA_RO request, carrying the server's version so each
 --                             side can compare it against its own (see versionCompare.lua
---                             and Claude MCP Bridge.fh_lua's VERSION handling). Carries no
+--                             and AI Assistant Connector.fh_lua's VERSION handling). Carries no
 --                             separate body — the version travels in the header line.
 
 local M = {}

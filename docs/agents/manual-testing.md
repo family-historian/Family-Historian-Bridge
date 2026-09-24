@@ -4,7 +4,7 @@ Only `bridge/*.lua` changes ever need live exercising — the MCP server (`serve
 already reachable through whatever `fh-mcp-bridge` MCP connection this session has, and
 rebuilding it doesn't require anything from the user.
 
-After `lua bridge/scripts/build.lua` produces a fresh `bridge/dist/Claude MCP Bridge.fh_lua`:
+After `lua bridge/scripts/build.lua` produces a fresh `bridge/dist/AI Assistant Connector.fh_lua`:
 
 - **Ask the user to load it, then stop and wait.** Don't go looking for FH's Plugins
   folder, a CrossOver bottle, or a running Bridge socket (127.0.0.1:8734) to figure out

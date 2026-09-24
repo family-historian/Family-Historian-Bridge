@@ -67,7 +67,7 @@ cp -R "$REPO_ROOT/server/data" "$STAGE_DIR/server/data"
 (cd "$STAGE_DIR/server" && npm ci --omit=dev)
 
 echo "== Staging bridge plugin =="
-cp "$REPO_ROOT/bridge/dist/Claude MCP Bridge.fh_lua" "$STAGE_DIR/bridge/Claude MCP Bridge.fh_lua"
+cp "$REPO_ROOT/bridge/dist/AI Assistant Connector.fh_lua" "$STAGE_DIR/bridge/AI Assistant Connector.fh_lua"
 
 echo "== Writing SETUP.md =="
 cat > "$STAGE_DIR/SETUP.md" <<EOF
@@ -77,7 +77,7 @@ This zip contains a pre-built copy of both halves of the Bridge -- no \`npm inst
 lua build step needed. Requires Node.js (any current LTS) already installed.
 
 1. Install the Bridge plugin into Family Historian (via CrossOver):
-   copy \`bridge/Claude MCP Bridge.fh_lua\` into FH's Plugins folder under CrossOver's
+   copy \`bridge/AI Assistant Connector.fh_lua\` into FH's Plugins folder under CrossOver's
    virtual C: drive, then in FH: Tools -> Plugins -> New, open it, click Run.
 2. Add to Claude Desktop's MCP config
    (\`~/Library/Application Support/Claude/claude_desktop_config.json\`):

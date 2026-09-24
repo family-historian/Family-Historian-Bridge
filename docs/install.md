@@ -39,15 +39,15 @@ hand.
 
 ## Step 2 — Load the Bridge plugin into Family Historian
 
-1. Download the `Claude MCP Bridge.fh_lua` file from the same release.
+1. Download the `AI Assistant Connector.fh_lua` file from the same release.
 2. Load it into FH, either way:
    - **Double-click it.** FH itself will offer to install it (a prompt from FH, not from this
      project) — follow that prompt through. It may also warn the plugin comes from an
      unidentified publisher; that's expected for any third-party FH plugin, click through it.
    - **Or, in FH:** go to **Tools → Plugins → New** (or **Import**), browse to wherever you
-     downloaded `Claude MCP Bridge.fh_lua`, open it, then click **Run**.
+     downloaded `AI Assistant Connector.fh_lua`, open it, then click **Run**.
 
-Either way, once it's loaded and running you'll see a small **"Claude MCP Bridge"** dialog
+Either way, once it's loaded and running you'll see a small **"AI Assistant Connector"** dialog
 appear inside FH, with **Start**/**Stop** buttons and a **Read-only**/**Read-write** choice.
 Leave that dialog where it is — you'll use it every time you want to ask Claude about this
 project.
@@ -55,7 +55,7 @@ project.
 ## Step 3 — Use it
 
 1. Open your project in Family Historian.
-2. In the **"Claude MCP Bridge"** dialog, choose **Read-only** (Claude can look things up
+2. In the **"AI Assistant Connector"** dialog, choose **Read-only** (Claude can look things up
    only) or **Read-write** (Claude can also create, edit, and delete records), then click
    **Start**. FH's main window will lock while a session is running — that's expected, not a
    fault.

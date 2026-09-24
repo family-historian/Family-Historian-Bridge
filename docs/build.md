@@ -39,7 +39,7 @@ Build the single-file plugin (from the project's root folder):
 lua bridge/scripts/build.lua
 ```
 
-This produces `bridge/dist/Claude MCP Bridge.fh_lua`, a self-contained bundle of the plugin
+This produces `bridge/dist/AI Assistant Connector.fh_lua`, a self-contained bundle of the plugin
 and its supporting modules (see
 [docs/adr/0009-bundle-bridge-plugin-for-install.md](adr/0009-bundle-bridge-plugin-for-install.md)).
 Copy just that one file into FH's Plugins folder.
@@ -51,8 +51,8 @@ Copy just that one file into FH's Plugins folder.
   copy into by mistake, and FH won't tell you if you do.
 - Mac via CrossOver: the equivalent path under CrossOver's virtual C: drive.
 
-In FH: **Tools → Plugins → New**, open `Claude MCP Bridge.fh_lua` from that folder, click
-**Run**. A small "Claude MCP Bridge" dialog appears. Leave it there; you'll use it every time
+In FH: **Tools → Plugins → New**, open `AI Assistant Connector.fh_lua` from that folder, click
+**Run**. A small "AI Assistant Connector" dialog appears. Leave it there; you'll use it every time
 you want Claude to look at your tree.
 
 ## 4. Connect Claude Desktop to the server

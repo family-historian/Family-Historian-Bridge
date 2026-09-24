@@ -4,7 +4,7 @@
 -- standalone per-module testing (see docs/adr/0009-bundle-bridge-plugin-for-install.md).
 --
 -- Pure string logic, no file I/O of its own — see build.lua for the CLI that reads
--- bridge/*.lua from disk and writes bridge/dist/Claude MCP Bridge.fh_lua.
+-- bridge/*.lua from disk and writes bridge/dist/AI Assistant Connector.fh_lua.
 --
 -- package.preload[name] = function() <module body> end works because Lua's require()
 -- checks package.preload before ever touching the filesystem — so every require(name)
@@ -26,7 +26,7 @@ M.MODULE_NAMES = {
   "sourceHelper", "timeoutDisplay", "versionCompare", "watchdog",
 }
 
--- Must match bridge/Claude MCP Bridge.fh_lua's Install comment byte-for-byte — if that
+-- Must match bridge/AI Assistant Connector.fh_lua's Install comment byte-for-byte — if that
 -- comment changes, update this (buildBundle errors loudly instead of silently shipping a
 -- bundle with the stale, dev-only install text).
 local INSTALL_COMMENT_SOURCE = [[-- Install: this source form is split into sibling modules (require()'d below, including
@@ -36,7 +36,7 @@ local INSTALL_COMMENT_SOURCE = [[-- Install: this source form is split into sibl
 -- file, and install_fh_plugin can only write one file per call (see docs/adr/0009). Build
 -- the single-file artifact with:
 --   lua bridge/scripts/build.lua
--- then copy just bridge/dist/Claude MCP Bridge.fh_lua into FH's Plugins folder and load
+-- then copy just bridge/dist/AI Assistant Connector.fh_lua into FH's Plugins folder and load
 -- it via Tools -> Plugins, same as any other plugin.]]
 
 local INSTALL_COMMENT_BUNDLED = [[-- Install: this is a generated, self-contained build (docs/adr/0009) — every sibling
@@ -105,7 +105,7 @@ local function stampLastUpdated(entrySource, todayDate)
   return stamped
 end
 
--- entrySource: raw text of bridge/Claude MCP Bridge.fh_lua.
+-- entrySource: raw text of bridge/AI Assistant Connector.fh_lua.
 -- readModule(name): function(name) -> raw text of bridge/<name>.lua.
 -- packageVersion: server/package.json's version (see extractPackageVersion) — stamped into
 --   the @Version header and injected as BRIDGE_VERSION below. Required; buildBundle errors

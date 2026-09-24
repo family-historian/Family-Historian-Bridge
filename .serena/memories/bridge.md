@@ -2,7 +2,7 @@
 
 Files directly in `bridge/` (not `bridge/tests/`, not `bridge/scripts/`) are exactly what
 `scripts/build.lua`/`bundler.lua` bundle into the single installable
-`dist/Claude MCP Bridge.fh_lua` — nothing filtered by name, so nothing else belongs at that
+`dist/AI Assistant Connector.fh_lua` — nothing filtered by name, so nothing else belongs at that
 top level. `dist/` is generated + gitignored; rebuild with `lua bridge/scripts/build.lua`.
 
 Key modules: `requestFraming.lua` (parses `STOP`/`LUA <n>`/`LUA_RO <n>`/`VERSION <v>`),
@@ -15,7 +15,7 @@ major-only, inert pre-1.0), `sourceHelper.lua` (`fhBridge.createSourceFromTempla
 getAncestors, getDescendants, getAllDetails, findByNames, getFactsByTag — all accept
 either a live pointer or a qualified-id string like `"I219"`).
 
-`Claude MCP Bridge.fh_lua` itself (IUP dialog + TCP listener + framing) has no automatable
+`AI Assistant Connector.fh_lua` itself (IUP dialog + TCP listener + framing) has no automatable
 seam — FH is proprietary, Windows/CrossOver-only — tested manually inside FH only (see
 bridge/README.md "Manual test" section for the exact script).
 

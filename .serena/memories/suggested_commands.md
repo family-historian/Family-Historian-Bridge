@@ -28,7 +28,7 @@
 
 ## bridge/ (run from repo root)
 - Build single-file plugin: `lua bridge/scripts/build.lua` → writes
-  `bridge/dist/Claude MCP Bridge.fh_lua` (gitignored, generated — copy this into FH's
+  `bridge/dist/AI Assistant Connector.fh_lua` (gitignored, generated — copy this into FH's
   Plugins folder to install, but the user does that step themselves, never you).
 - Run all of them: `npm run test:bridge` from the repo root
   (`scripts/run-bridge-tests.mjs` — discovers `bridge/tests/*.test.lua`, stops at the first
@@ -36,7 +36,7 @@
   `C:\Utils\lua\lua.exe`).
 - Run one module's unit tests while working on it (plain `lua`, no FH dependency):
   `lua bridge/tests/<module>.test.lua` — e.g. `lua bridge/tests/sandbox.test.lua`.
-- No automated test for `Claude MCP Bridge.fh_lua` itself (the IUP dialog/socket plumbing)
+- No automated test for `AI Assistant Connector.fh_lua` itself (the IUP dialog/socket plumbing)
   — manual-only, inside FH (see bridge/README.md "Manual test" section).
 
 ## Darwin-specific gotchas

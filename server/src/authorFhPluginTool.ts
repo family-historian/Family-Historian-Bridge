@@ -104,7 +104,7 @@ function flagExcludedCalls(logic: string): string {
     .join("\n");
 }
 
-// Recommended standard plugin-header fields (see the repo's own Claude MCP Bridge.fh_lua
+// Recommended standard plugin-header fields (see the repo's own AI Assistant Connector.fh_lua
 // for the same template applied by hand). @Title/@Author/@Version/@Keywords/@LastUpdated/
 // @Licence/@Description are always safe to add alongside whatever @Type value (or absence
 // of one) a plugin type actually requires — FH only cares about the specific fields each

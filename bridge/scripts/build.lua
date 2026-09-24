@@ -1,6 +1,6 @@
 -- Builds the Bridge plugin's single-file, installable artifact from source.
 -- Run from the repo root: lua bridge/scripts/build.lua
--- Writes bridge/dist/Claude MCP Bridge.fh_lua — see bundler.lua for the bundling logic
+-- Writes bridge/dist/AI Assistant Connector.fh_lua — see bundler.lua for the bundling logic
 -- and docs/adr/0009-bundle-bridge-plugin-for-install.md for why this exists.
 
 local scriptDir = arg[0]:match("(.*/)")
@@ -25,7 +25,7 @@ local function readFile(path)
   return content
 end
 
-local entrySource = readFile(bridgeDir .. "Claude MCP Bridge.fh_lua")
+local entrySource = readFile(bridgeDir .. "AI Assistant Connector.fh_lua")
 local function readModule(name)
   return readFile(bridgeDir .. name .. ".lua")
 end
@@ -56,7 +56,7 @@ end
 -- on-disk encoding before any of the script's own code has run.
 local UTF8_BOM = string.char(0xEF, 0xBB, 0xBF)
 
-local outPath = distDir .. "/Claude MCP Bridge.fh_lua"
+local outPath = distDir .. "/AI Assistant Connector.fh_lua"
 local outFile, err = io.open(outPath, "wb")
 if not outFile then
   error("could not write " .. outPath .. ": " .. tostring(err))

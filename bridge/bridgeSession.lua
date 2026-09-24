@@ -1,7 +1,7 @@
 -- The Bridge plugin's dialog UI and Session lifecycle: the IUP dialog (Access-mode
 -- selector, idle-timeout countdown, Start/Stop/Settings; the idle-timeout spin-box itself
 -- lives in the Settings popup), the TCP listener and its
--- poll-timer callback, and request-framing dispatch. Split out of `Claude MCP Bridge.fh_lua`
+-- poll-timer callback, and request-framing dispatch. Split out of `AI Assistant Connector.fh_lua`
 -- itself so Serena's symbol tools can cover it -- `.fh_lua` files aren't recognized by
 -- Serena's Lua language server, `.lua` files are. See CONTEXT.md's "Session" and "Bridge
 -- plugin" entries.
@@ -168,7 +168,7 @@ local dlg = iup.dialog{
         iup.hbox{btnStart, btnStop, btnSettings, btnExit, lblTimeLeft, gap="10"},
         margin="10x10", gap="10"
     },
-    title="Claude MCP Bridge",
+    title="AI Assistant Connector",
     resize="YES", maxbox="NO", minbox="NO",
     bgcolor=STATUS_COLOR_STOPPED
 }

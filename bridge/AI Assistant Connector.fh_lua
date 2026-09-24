@@ -1,5 +1,5 @@
 --[[
-@Title: Claude MCP Bridge
+@Title: AI Assistant Connector
 @Type: Standard
 @Author: Family Historian (Calico Pie)
 @Version: 0.19.0
@@ -28,7 +28,7 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 -- file, and install_fh_plugin can only write one file per call (see docs/adr/0009). Build
 -- the single-file artifact with:
 --   lua bridge/scripts/build.lua
--- then copy just bridge/dist/Claude MCP Bridge.fh_lua into FH's Plugins folder and load
+-- then copy just bridge/dist/AI Assistant Connector.fh_lua into FH's Plugins folder and load
 -- it via Tools -> Plugins, same as any other plugin.
 
 -- fhInitialise must be the first function this plugin calls, before even require()

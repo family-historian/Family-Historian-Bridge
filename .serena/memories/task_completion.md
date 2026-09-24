@@ -14,12 +14,12 @@
 1. Run the affected module's standalone test: `lua bridge/tests/<module>.test.lua`, or
    `npm run test:bridge` from the repo root for all of them
 2. Rebuild the bundle: `lua bridge/scripts/build.lua` (produces
-   `bridge/dist/Claude MCP Bridge.fh_lua`)
+   `bridge/dist/AI Assistant Connector.fh_lua`)
 3. Do NOT attempt to install/copy into the user's FH Plugins folder or touch their
    CrossOver bottle yourself — build only; the user installs it. Warn the user up front if
    verifying the change requires a live Bridge Session, before calling `run_lua`/
    `describe_project` and hitting a connection error.
-4. `Claude MCP Bridge.fh_lua` itself has no automated test — manual verification inside FH
+4. `AI Assistant Connector.fh_lua` itself has no automated test — manual verification inside FH
    only (bridge/README.md "Manual test" section has the exact steps).
 
 ## Before a release

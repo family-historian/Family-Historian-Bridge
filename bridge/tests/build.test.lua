@@ -29,7 +29,7 @@ end
 -- Real entry file, so the splice-point and install-comment anchors are exercised against
 -- the actual text they have to match in production — but with fake, easy-to-assert module
 -- bodies standing in for the real (large) module files.
-local realEntryPath = arg[0]:match("(.*[/\\])") .. '../Claude MCP Bridge.fh_lua'
+local realEntryPath = arg[0]:match("(.*[/\\])") .. '../AI Assistant Connector.fh_lua'
 local realEntrySource = readFile(realEntryPath)
 
 local function fakeReadModule(name)

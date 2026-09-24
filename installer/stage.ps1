@@ -91,7 +91,7 @@ Remove-Item -Recurse -Force $nodeExtractDir
 
 Write-Host "== Staging bridge plugin =="
 New-Item -ItemType Directory -Force -Path (Join-Path $stagingDir 'bridge') | Out-Null
-Copy-Item (Join-Path $repoRoot 'bridge\dist\Claude MCP Bridge.fh_lua') (Join-Path $stagingDir 'bridge\Claude MCP Bridge.fh_lua')
+Copy-Item (Join-Path $repoRoot 'bridge\dist\AI Assistant Connector.fh_lua') (Join-Path $stagingDir 'bridge\AI Assistant Connector.fh_lua')
 
 Write-Host "== Staging config-merge script =="
 Copy-Item (Join-Path $installerDir 'config-merge.ps1') (Join-Path $stagingDir 'config-merge.ps1')
