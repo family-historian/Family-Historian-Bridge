@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Bridge plugin renamed `Claude MCP Bridge.fh_lua` -> `AI Assistant Connector.fh_lua` (issue #144): file name, `@Title` and dialog title. Plugin header `@Description` rewritten in plain language and `@Keywords` no longer mention Claude. Product name "FH MCP Bridge" unchanged. Anyone with the old file in FH's Plugins folder should delete it.
 
 ## 0.19.0
 - New Private/Living Visibility settings (issue #141): the Bridge's Settings dialog gained Exclude/Name Only/All dropdowns for each of the Private and Living Record Flags, set once per Session alongside Access mode and Debug logging. `fhBridge.getFamilyGroup`/`getAncestors`/`getDescendants`/`findByNames` return a redacted placeholder for an Excluded Individual (not a silent drop) and drop `lifeDates` for Name Only; `getAllDetails`/`getFactsByTag` error on Excluded, return empty facts on Name Only; `createFact`/`citeSource`/`logActivity`/`setTftfText` all refuse to write to an Excluded record. A restricted level auto-forces Debug logging on for the Session.
