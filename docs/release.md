@@ -151,7 +151,7 @@ curl -sS -X POST "$API/releases" \
   -d "$(python3 -c 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[1], "body": sys.argv[2]}))' "vX.Y.Z" "$BODY")"
 
 # Note the release id from the response, then attach each asset:
-curl -sS -X POST "$API/releases/<release-id>/assets?name=Claude%20MCP%20Bridge.fh_lua" \
+curl -sS -X POST "$API/releases/<release-id>/assets?name=AI%20Assistant%20Connector.fh_lua" \
   -H "Authorization: token $FORGEJO_TOKEN" \
   -F "attachment=@bridge/dist/AI Assistant Connector.fh_lua"
 
