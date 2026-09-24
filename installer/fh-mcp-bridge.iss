@@ -27,7 +27,7 @@
 AppId={{B6C6C6D1-6F0E-4B3F-9C7B-2A6D6C6F5E10}
 AppName=Family Historian Bridge
 AppVersion={#AppVersion}
-AppPublisher=Jane Taubman
+AppPublisher=Calico Pie Limited
 ; DefaultDirName deliberately still says "FH MCP Bridge", not "Family Historian Bridge" --
 ; changing the install path would make a future build treat any existing install as a
 ; separate app (a fresh copy at a new path, not an upgrade), orphaning it rather than
