@@ -27,7 +27,7 @@ That's everything.
 ## Step 1 — Install the MCP server into Claude Desktop
 
 1. Download the `fh-mcp-bridge-X.Y.Z.mcpb` file from the
-   [latest release](https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/releases) (the
+   [latest release](https://github.com/family-historian/Family-Historian-Bridge/releases) (the
    `X.Y.Z` is a version number).
 2. In Claude Desktop, open **Settings → Extensions → Advanced Settings → Install Extension**,
    and select the downloaded `.mcpb` file.

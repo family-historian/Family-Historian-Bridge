@@ -17,9 +17,9 @@ below). `installer/release-mac.sh`, `installer/release-windows.ps1`,
 longer part of this checklist — they built the retired zip/exe artifacts. Their removal is a
 separate follow-up issue, not done as part of the ADR 0035 change.
 
-**Step 8 (create the Forgejo release + upload the assets) is mandatory for every release,
+**Steps 8 and 9 (create the Forgejo and GitHub releases + upload the assets) are mandatory for every release,
 not an optional extra.** A version bump/tag with no matching Forgejo release is an
-incomplete release — don't stop at step 6. (0.9.0 shipped this way once, caught and fixed
+incomplete release — don't stop at step 6. Step 9's GitHub release is where public users download from. (0.9.0 shipped this way once, caught and fixed
 after the fact; see CHANGELOG/git history around 2026-08-07.)
 
 See `docs/agents/issue-tracker.md` for the Forgejo API base URL and `FORGEJO_TOKEN` auth
@@ -118,17 +118,19 @@ git push origin vX.Y.Z
 
 ## 7. Update the GitHub mirror's `release` branch
 
-The public GitHub mirror (`family-historian/family-historian-bridge`, tracked at issue
+The public GitHub mirror (`family-historian/Family-Historian-Bridge`, tracked at issue
 #132) syncs a separate `release` branch, cut only at release time — not `main` tracked
-commit-by-commit, so day-to-day dev churn and internal-only docs (e.g. LAN addresses in
-`docs/agents/issue-tracker.md`) stay off GitHub. Force the branch to the tag just pushed;
-Forgejo's push mirror (Branch Filter: `release`) carries it over automatically on its next
-sync:
+commit-by-commit, so day-to-day dev churn stays off GitHub. The branch is the tag's tree
+minus internal-only files (LAN addresses in `docs/agents/issue-tracker.md`, this file,
+`.serena/memories/issue_tracker.md`); the list lives in `scripts/build-release-branch.sh`.
+Forgejo's push mirror (Branch Filter: `release`) carries it over on its next sync:
 
 ```bash
-git branch -f release vX.Y.Z
+scripts/build-release-branch.sh X.Y.Z        # add `main` as 2nd arg to include post-tag doc commits
 git push origin release --force
 ```
+
+Tags themselves carry the full tree (the mirror pushes them unfiltered).
 
 **Live as of 0.17.0** — the push mirror is configured and confirmed carrying `release`
 over to GitHub automatically (verified via the `remote_mirror_*` ref updating right after
@@ -162,6 +164,20 @@ curl -sS -X POST "$API/releases/<release-id>/assets?name=fh-mcp-bridge-X.Y.Z.mcp
 
 Check the result against what this release should ship — exactly two assets, the `.fh_lua`
 and the `.mcpb`.
+
+## 9. Create the GitHub release (required — the mirror carries branches and tags, not releases)
+
+The public install docs point at the GitHub releases page, so every release needs one there
+too. Uses `gh` (logged in as a user with push access to the repo); the tag arrives via the
+step 7 mirror, so wait for `gh api repos/family-historian/Family-Historian-Bridge/git/ref/tags/vX.Y.Z`
+to succeed first.
+
+```bash
+gh release create vX.Y.Z -R family-historian/Family-Historian-Bridge \
+  --title vX.Y.Z --notes "$BODY" --latest \
+  "bridge/dist/AI Assistant Connector.fh_lua" "installer/output/fh-mcp-bridge-X.Y.Z.mcpb"
+```
+`$BODY` is the same CHANGELOG extract from step 8. Check the result lists exactly the two assets.
 
 ## Risks in this process worth knowing about
 
