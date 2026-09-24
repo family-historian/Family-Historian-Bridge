@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## 1.0.0
 - Bridge plugin renamed `Claude MCP Bridge.fh_lua` -> `AI Assistant Connector.fh_lua` (issue #144): file name, `@Title` and dialog title. Plugin header `@Description` rewritten in plain language and `@Keywords` no longer mention Claude. Product name "FH MCP Bridge" unchanged. Anyone with the old file in FH's Plugins folder should delete it.
 
 ## 0.19.0
