@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.2
+
+- The plugin now declares Family Historian 8.0.0 as its minimum version, so FH 7 no longer loads it.
+
 ## 1.0.1
 
 - Failed write calls now roll back with the rollback function alone, no commit first. Requires FH 8.0.0.12 or later, where rollback undoes record creation as well as value edits.
