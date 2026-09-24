@@ -35,10 +35,9 @@ which is hereby incorporated by reference (see https://pluginstore.family-histor
 -- (per FH's own docs) — "save_required" pops FH's own save-changes dialog (OK/Cancel)
 -- the moment the plugin loads, ensuring the project is saved before any work happens
 -- through it (issue #33). Cancel there ends the plugin immediately, before the dialog
--- below is ever built. Declares a minimum FH version of 7.0.0, matching the earliest
--- version this project already supports side-by-side (see README.md) — not a new
--- restriction, just what fhInitialise itself requires as its other two arguments.
-fhInitialise(7, 0, 0, "save_required")
+-- below is ever built. Declares a minimum FH version of 8.0.0; the other two arguments
+-- are what fhInitialise itself requires.
+fhInitialise(8, 0, 0, "save_required")
 
 -- Force UTF-8 regardless of this file's own saved file encoding (confirmed live via
 -- describe_project's contextInfo: CI_STRING_ENCODING reported "ANSI" on an unmodified

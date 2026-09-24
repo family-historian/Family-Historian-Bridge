@@ -47,7 +47,7 @@ local INSTALL_COMMENT_BUNDLED = [[-- Install: this is a generated, self-containe
 -- Anchors where the bundle gets spliced in: right after fhInitialise(...), which per FH's
 -- own docs (and this file's own comment above it) must be the first function this plugin
 -- calls, before even require() — so the splice point has to come after it, never before.
-local FH_INITIALISE_LINE = 'fhInitialise(7, 0, 0, "save_required")\n'
+local FH_INITIALISE_LINE = 'fhInitialise(8, 0, 0, "save_required")\n'
 
 local function replaceOnce(haystack, needle, replacement, label)
   local startIdx, endIdx = haystack:find(needle, 1, true)

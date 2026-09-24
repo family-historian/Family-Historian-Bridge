@@ -6,7 +6,7 @@ implements.
 
 - `AI Assistant Connector.fh_lua`: the entry file, now just a stub (issue #75, docs/adr/0018).
   It holds the `@Title`/`@Type`/... header FH's plugin loader reads, then
-  `fhInitialise(7, 0, 0, "save_required")` as its very first statement, before any
+  `fhInitialise(8, 0, 0, "save_required")` as its very first statement, before any
   `require()`, so FH prompts to save unsaved changes the moment the plugin loads rather than
   partway through (issue #33). Cancel there ends the plugin before the dialog is ever built.
   Then `fhSetStringEncoding("UTF-8")` (also mandatorily direct here, never inside a required

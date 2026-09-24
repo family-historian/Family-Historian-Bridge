@@ -64,7 +64,7 @@ end
 
 -- The bundle must be spliced in after fhInitialise(...), never before it (FH requires
 -- fhInitialise to be the first function this plugin calls, before even require()).
-local fhInitIdx = bundled:find('fhInitialise(7, 0, 0, "save_required")', 1, true)
+local fhInitIdx = bundled:find('fhInitialise(8, 0, 0, "save_required")', 1, true)
 local firstPreloadIdx = bundled:find('package.preload[', 1, true)
 assertTrue(fhInitIdx ~= nil and firstPreloadIdx ~= nil and fhInitIdx < firstPreloadIdx,
   'bundle is spliced in after the fhInitialise(...) call')
