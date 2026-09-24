@@ -39,13 +39,13 @@ hand.
 
 ## Step 2 — Load the Bridge plugin into Family Historian
 
-1. Download the `AI Assistant Connector.fh_lua` file from the same release.
+1. Download the `AI_Assistant_Connector.fh_lua` file from the same release.
 2. Load it into FH, either way:
    - **Double-click it.** FH itself will offer to install it (a prompt from FH, not from this
      project) — follow that prompt through. It may also warn the plugin comes from an
      unidentified publisher; that's expected for any third-party FH plugin, click through it.
    - **Or, in FH:** go to **Tools → Plugins → New** (or **Import**), browse to wherever you
-     downloaded `AI Assistant Connector.fh_lua`, open it, then click **Run**.
+     downloaded `AI_Assistant_Connector.fh_lua`, open it, then click **Run**.
 
 Either way, once it's loaded and running you'll see a small **"AI Assistant Connector"** dialog
 appear inside FH, with **Start**/**Stop** buttons and a **Read-only**/**Read-write** choice.

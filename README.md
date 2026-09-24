@@ -51,7 +51,7 @@ moment they click Stop (or after 5 minutes idle).
 
 Download two files from the [latest release](https://github.com/family-historian/Family-Historian-Bridge/releases)
 — the `.mcpb` (install via Claude Desktop's own Settings → Extensions → Advanced Settings →
-Install Extension) and `AI Assistant Connector.fh_lua` (load via FH's Tools → Plugins → New, or
+Install Extension) and `AI_Assistant_Connector.fh_lua` (load via FH's Tools → Plugins → New, or
 just double-click it). No building, no command line.
 
 Full walkthrough: **[docs/install.md](docs/install.md)**. Building from source instead

@@ -4,7 +4,7 @@ The checklist below is partly scripted and partly by hand — know which is whic
 start.
 
 **What ships.** As of `docs/adr/0035-manual-mcpb-install-as-interim-distribution-path.md`, a
-release uploads exactly two assets to Forgejo: `AI Assistant Connector.fh_lua` (the bundled Bridge
+release uploads exactly two assets to Forgejo: `AI_Assistant_Connector.fh_lua` (the bundled Bridge
 plugin, built by script, unversioned filename) and `fh-mcp-bridge-X.Y.Z.mcpb` (the Claude
 Desktop Extension bundle, also built by script). The hand-assembled
 `fh-mcp-bridge-X.Y.Z.zip` and the Windows `.exe` installer that releases 0.8.0–0.16.0 shipped
@@ -153,7 +153,7 @@ curl -sS -X POST "$API/releases" \
   -d "$(python3 -c 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[1], "body": sys.argv[2]}))' "vX.Y.Z" "$BODY")"
 
 # Note the release id from the response, then attach each asset:
-curl -sS -X POST "$API/releases/<release-id>/assets?name=AI%20Assistant%20Connector.fh_lua" \
+curl -sS -X POST "$API/releases/<release-id>/assets?name=AI_Assistant_Connector.fh_lua" \
   -H "Authorization: token $FORGEJO_TOKEN" \
   -F "attachment=@bridge/dist/AI Assistant Connector.fh_lua"
 
@@ -173,9 +173,11 @@ step 7 mirror, so wait for `gh api repos/family-historian/Family-Historian-Bridg
 to succeed first.
 
 ```bash
+# GitHub rewrites spaces in asset filenames to dots, so upload an underscore-named copy.
+cp "bridge/dist/AI Assistant Connector.fh_lua" "$TMPDIR/AI_Assistant_Connector.fh_lua"
 gh release create vX.Y.Z -R family-historian/Family-Historian-Bridge \
   --title vX.Y.Z --notes "$BODY" --latest \
-  "bridge/dist/AI Assistant Connector.fh_lua" "installer/output/fh-mcp-bridge-X.Y.Z.mcpb"
+  "$TMPDIR/AI_Assistant_Connector.fh_lua" "installer/output/fh-mcp-bridge-X.Y.Z.mcpb"
 ```
 `$BODY` is the same CHANGELOG extract from step 8. Check the result lists exactly the two assets.
 
