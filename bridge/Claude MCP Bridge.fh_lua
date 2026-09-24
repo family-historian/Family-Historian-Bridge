@@ -1,10 +1,10 @@
 --[[
 @Title: Claude MCP Bridge
 @Type: Standard
-@Author: Jane_t
-@Version: 0.11.0
+@Author: Family Historian (Calico Pie)
+@Version: 0.19.0
 @Keywords: MCP, Claude, AI, bridge, automation
-@LastUpdated: 2026-08-07
+@LastUpdated: 2026-09-24
 @Licence: This plugin is copyright (c) 2026 Jane_t and contributors, and is licensed under the MIT License
 which is hereby incorporated by reference (see https://pluginstore.family-historian.co.uk/fh-plugin-licence)
 @Description: Local TCP bridge plugin - starts a Session that lets Claude (via the FH MCP server) query and edit your Family Historian project through a Read-only/Read-write sandboxed script API.
