@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bridge plugin renamed `AI Assistant Connector.fh_lua` -> `AI Connector.fh_lua` (issue #145): file name, `@Title` and dialog title. Anyone with the old file in FH's Plugins folder should delete it.
+
 ## 1.0.2
 
 - The plugin now declares Family Historian 8.0.0 as its minimum version, so FH 7 no longer loads it.
