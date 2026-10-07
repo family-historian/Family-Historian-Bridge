@@ -11,7 +11,7 @@ Source layout (`server/src/`, one concern per file, `*.test.ts` siblings):
 - `describeProjectTool.ts` — fixed built-in census script, always Read-only regardless of
   Session mode, recomputed every call (no cache — ADR 0002).
 - `authorFhPluginTool.ts`, `installFhPluginTool.ts` — plugin-scaffolding / install-to-disk
-  tools, distinct trust model from `run_lua` (see CONTEXT.md **author_fh_plugin**).
+  tools, distinct trust model from `run_lua` (see GLOSSARY.md **author_fh_plugin**).
 - `fhHelp.ts` / `fhHelpUpdate.ts` — bundled FH8 help corpus + explicit-trigger network
   update check.
 - `corpusSearch.ts`, `gedcomKnowledge.ts` — GEDCOM domain-knowledge corpus search (see

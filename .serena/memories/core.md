@@ -13,7 +13,7 @@ Solo project (Jane_t), self-hosted Forgejo issue tracker, pre-1.0 (currently 0.1
   Directory, FH Plugin Store, GitHub mirror), and the FH8-GA blocker on all of it. Read
   before touching installer/release/submission work.
 
-## Domain glossary (moved from CONTEXT.md into memories, split by topic — read only the
+## Domain glossary (moved from GLOSSARY.md into memories, split by topic — read only the
 cluster relevant to what you're touching, not all of them)
 - `mem:domain/naming` — the 3 distinct product/component names (Bridge plugin / Family
   Historian Bridge / FH MCP Bridge). Read when writing anything user-facing or renaming.
@@ -36,8 +36,8 @@ cluster relevant to what you're touching, not all of them)
   run_lua-guidance corpus entries. Read when touching `richTextHelper.lua`/
   `sessionLogHelper.lua`.
 
-`CONTEXT.md` at the repo root is now a stub pointing here — new terms get memoried
-directly (topic `domain/*`), not re-grown in CONTEXT.md.
+`GLOSSARY.md` at the repo root is now a stub pointing here — new terms get memoried
+directly (topic `domain/*`), not re-grown in GLOSSARY.md.
 
 ## Other canonical docs (read before non-trivial work)
 - `docs/adr/00NN-*.md` — one ADR per non-obvious design decision (30+ so far). Check for a
@@ -49,8 +49,8 @@ directly (topic `domain/*`), not re-grown in CONTEXT.md.
   user-level CLAUDE.md at `~/CLAUDE.md`).
 - `docs/agents/issue-tracker.md` — Forgejo (self-hosted, Gitea-compatible) issue tracker,
   no `gh`/`glab`/`tea` CLI; raw `curl` + `FORGEJO_TOKEN`. See `mem:issue_tracker`.
-- `docs/agents/domain.md` — how to consume CONTEXT.md/ADRs when exploring (single-context
-  repo layout here, no `CONTEXT-MAP.md`) — updated to point at `domain/*` memories.
+- `docs/agents/domain.md` — how to consume GLOSSARY.md/ADRs when exploring (single-context
+  repo layout here, no `GLOSSARY-MAP.md`) — updated to point at `domain/*` memories.
 
 ## Project-wide invariants
 - Everything runs local-only except one explicit user-triggered `check_fh_help_updates`

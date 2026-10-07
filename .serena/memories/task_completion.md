@@ -27,7 +27,7 @@
 so a release cannot be built over a failing suite — don't bypass it.
 
 ## Docs to keep in sync when behavior changes
-- `CONTEXT.md` glossary entry for any affected term/tool.
+- `GLOSSARY.md` glossary entry for any affected term/tool.
 - Relevant `docs/adr/NNNN-*.md` if the change reverses or refines a past decision (or add a
   new ADR).
 - `CHANGELOG.md`'s `## Unreleased` section for any user-facing change.
