@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.3
+
 - Redacted Individuals/links now carry a `note`, Excluded errors say so, and the `run_lua` description tells the agent not to route around a Visibility setting (#146).
 
 - Bridge plugin renamed `AI Assistant Connector.fh_lua` -> `AI Connector.fh_lua` (issue #145): file name, `@Title` and dialog title. Anyone with the old file in FH's Plugins folder should delete it.
