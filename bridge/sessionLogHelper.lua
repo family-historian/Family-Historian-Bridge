@@ -89,7 +89,7 @@ function M.validateLogActivity(ptrRecord, action, media)
   -- Checked last, on the guaranteed record-level pointer (after any climb above) --
   -- issue #141.
   if familyHelper.recordVisibility(ptrRecord) == "exclude" then
-    error("logActivity: this Individual is Excluded by the Session's Visibility settings")
+    error("logActivity: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   end
   return ptrRecord
 end

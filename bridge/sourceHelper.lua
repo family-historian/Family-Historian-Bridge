@@ -408,7 +408,7 @@ function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
   local owner = fhNewItemPtr()
   owner:MoveToRecordItem(ptrTarget)
   if familyHelper.recordVisibility(owner) == "exclude" then
-    error("citeSource: this Individual is Excluded by the Session's Visibility settings")
+    error("citeSource: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   end
   local source = resolveSource(sourceNameOrId)
   fields = fields or {}

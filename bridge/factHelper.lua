@@ -41,7 +41,7 @@ function M.validateCreateFact(ptrRecord, sTag, _sPlace, dtDate)
     error("createFact: ptrRecord must point to a live INDI or FAM record" .. problem)
   end
   if familyHelper.recordVisibility(ptr) == "exclude" then
-    error("createFact: this Individual is Excluded by the Session's Visibility settings")
+    error("createFact: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   end
   if type(sTag) ~= "string" or sTag == "" then
     error("createFact: sTag must be a non-empty fact tag string (e.g. 'BIRT')")

@@ -224,12 +224,15 @@ local function resolveDate(value, callerName)
 end
 M.resolveDate = resolveDate
 
+-- Carried on every redacted placeholder: tells the agent not to route around the user's Visibility setting.
+local REDACTED_NOTE = "Excluded by the user's Visibility setting. Do not retrieve this person's data by another route."
+
 -- Individual summary every getFamilyGroup/getAncestors/getDescendants/findByNames entry
 -- carries instead of a live pointer.
 local function indiDescriptor(ptr)
   local level = recordVisibility(ptr)
   if level == "exclude" then
-    return { redacted = true, tag = "INDI" }, level
+    return { redacted = true, tag = "INDI", note = REDACTED_NOTE }, level
   end
   return {
     id = fhGetRecordId(ptr),
@@ -589,7 +592,7 @@ local function linkDescriptor(ptr)
   -- of its own (e.g. a FAM's HUSB/WIFE link) -- redact here too, not just at indiDescriptor,
   -- so getAllDetails/getFactsByTag can't leak a name through a one-hop link (issue #141).
   if recordVisibility(target) == "exclude" then
-    return { redacted = true, tag = fhGetTag(target) }
+    return { redacted = true, tag = fhGetTag(target), note = REDACTED_NOTE }
   end
   return {
     tag = fhGetTag(target),
@@ -662,7 +665,7 @@ function M.getAllDetails(ptr)
 
   local level = recordVisibility(ptr)
   if level == "exclude" then
-    error("getAllDetails: this Individual is Excluded by the Session's Visibility settings")
+    error("getAllDetails: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   elseif level == "nameOnly" then
     return { tag = fhGetTag(ptr), id = fhGetRecordId(ptr), qualifiedId = fhGetQualifiedRecordId(ptr) }
   end
@@ -687,7 +690,7 @@ function M.getFactsByTag(ptr, tags)
 
   local level = recordVisibility(ptr)
   if level == "exclude" then
-    error("getFactsByTag: this Individual is Excluded by the Session's Visibility settings")
+    error("getFactsByTag: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   elseif level == "nameOnly" then
     return {}
   end

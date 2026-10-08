@@ -23,13 +23,15 @@ Requires an active Bridge Session (user clicks Start in the Bridge dialog). If n
 
 Never guess function or method names — search first, always, reads and writes alike. Reach for fhBridge's purpose-built helper before fhu, and fhu before hand-rolling MoveToFirstRecord/MoveNext or a raw fh* write — fhBridge.getFamilyGroup/getAncestors/getDescendants/getFactsByTag/findByNames/getAllDetails for family/detail queries, fhBridge.createFact/citeSource for writes (fhu is already a global here, never require('fhUtils')). fhBridge helpers apply the Session's Private/Living Visibility settings; fhu.records/allItems and raw MoveToFirstRecord don't, and are rejected while either is restricted. Before ANY write-mode script, fetch the write-helper reference (createSourceFromTemplate, getTftfText/setTftfText, logActivity too) via search_gedcom_knowledge("run_lua guidance") if you haven't this task — an unlogged write gets rolled back, not just warned about.
 
-Resolve ambiguity (generation depth, place-name spelling, date boundary) with the user before calling — never guess.
+Resolve ambiguity (generation depth, place spelling, date boundary) with the user before calling — never guess.
 
 The write-helper/gotcha detail below may not reach you — some MCP clients truncate long tool descriptions. Call search_gedcom_knowledge("run_lua guidance") once, on your first run_lua call this conversation, regardless.
 
 Call fhBridge.logActivity(ptrRecord, action) after every record-touching action, not just once at the end, in a read-write Session — an unlogged write gets rolled back.
 
-Write a fresh script per question — never a guessed-at reuse of a remembered API shape; no predefined query set exists.`;
+Write a fresh script per question; no predefined query set exists.
+
+If a person is redacted/Excluded, stop. Never get their data another way.`;
 
 export async function handleRunLua(
   input: { script: string },

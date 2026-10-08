@@ -108,7 +108,7 @@ function M.validateSetTftfText(ptr, text)
   local owner = fhNewItemPtr()
   owner:MoveToRecordItem(ptr)
   if familyHelper.recordVisibility(owner) == "exclude" then
-    error("setTftfText: this Individual is Excluded by the Session's Visibility settings")
+    error("setTftfText: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   end
   if type(text) ~= "string" then
     error("setTftfText: text must be a string in tFTF syntax")
