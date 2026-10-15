@@ -21,6 +21,14 @@ local buffer = nil
 -- succeeded.
 local noteConfirmed = false
 
+-- AI assistant naming (issue #148). sessionAssistant is the first non-empty name the
+-- server passed this Session; noteAssistant is the value the current note's Title:/
+-- Assistant: header was written with (nil if unknown then); callAssistant is the current
+-- request's own name, used to tag entries that differ from the note's.
+local sessionAssistant = nil
+local noteAssistant = nil
+local callAssistant = nil
+
 local function timestamp(now)
   return os.date("%Y-%m-%d %H:%M", now)
 end
@@ -118,6 +126,18 @@ function M.setCommitCount(n)
   commitCount = n
 end
 
+-- sessionLogHelper.setAssistant(name)
+-- Bridge-side only (never wired through sandbox.lua). Called by bridgeSession.lua before
+-- each request with the already-sanitised assistant name from the request header, or nil.
+-- The first non-empty name is latched for the Session's note title/header; every call's
+-- own name is kept for tagging entries that name a different assistant.
+function M.setAssistant(name)
+  callAssistant = name
+  if name and not sessionAssistant then
+    sessionAssistant = name
+  end
+end
+
 -- sessionLogHelper.markNoteCommitted()
 -- Bridge-side only. Called by bridgeSession.lua exactly when a run_lua call's commit
 -- actually succeeds, so this module knows the current note (if any) has now survived at
@@ -176,9 +196,13 @@ function M.logActivity(ptrRecord, action, media)
     -- Markup goes through its own bRich=true call; the label/timestamp stay bRich=false
     -- so they're auto-escaped.
     buffer:AddText("<b><fs=\"+2\">", true)
-    buffer:AddText("Title: Claude session log - " .. timestamp(now), false)
+    noteAssistant = sessionAssistant
+    local title = "Title: AI session log - " .. (noteAssistant and (noteAssistant .. " - ") or "") .. timestamp(now)
+    buffer:AddText(title, false)
     buffer:AddText("</fs></b>\n", true)
-    buffer:AddText("Type: mcp-log\nStatus: closed\nDate: " .. dateOnly(now) .. "\n\n", false)
+    buffer:AddText("Type: mcp-log\nStatus: closed\n"
+      .. (noteAssistant and ("Assistant: " .. noteAssistant .. "\n") or "")
+      .. "Date: " .. dateOnly(now) .. "\n\n", false)
   else
     buffer:AddText("\n", false)
   end
@@ -186,7 +210,11 @@ function M.logActivity(ptrRecord, action, media)
   -- Each entry is its own bulleted paragraph -- "* " must be the first thing in the
   -- paragraph, so it needs its own bRich=true call before the auto-escaped text/link.
   buffer:AddText("* ", true)
-  buffer:AddText(timeOnly() .. " - " .. action .. ": ", false)
+  local entryTag = ""
+  if callAssistant and callAssistant ~= noteAssistant then
+    entryTag = "[" .. callAssistant .. "] "
+  end
+  buffer:AddText(timeOnly() .. " - " .. entryTag .. action .. ": ", false)
   buffer:AddRecordLink(ptr)  -- live FTF record link: label stays current if the record is renamed
 
   -- Running commit-count total (issue #133) -- only when bridgeSession.lua has set one via

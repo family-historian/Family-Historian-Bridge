@@ -5,6 +5,7 @@ import {
   queryBridgeVersion as defaultQueryBridgeVersion,
   runLuaOnBridge as defaultRunLuaOnBridge,
 } from "./bridgeClient.js";
+import { resolveAssistantName } from "./assistantName.js";
 import { SERVER_VERSION } from "./serverVersion.js";
 import { runVersionCheckedScript, type BridgeScriptDeps } from "./versionCheck.js";
 
@@ -34,10 +35,12 @@ Write a fresh script per question; no predefined query set exists.
 If a person is redacted/Excluded, stop. Never get their data another way.`;
 
 export async function handleRunLua(
-  input: { script: string },
+  input: { script: string; assistant?: string },
   deps: RunLuaDeps = defaultDeps,
+  clientName?: string | null,
 ): Promise<CallToolResult> {
-  return runVersionCheckedScript(deps, SERVER_VERSION, input.script);
+  const assistant = resolveAssistantName(input.assistant, clientName);
+  return runVersionCheckedScript(deps, SERVER_VERSION, input.script, assistant);
 }
 
 export function registerRunLuaTool(
@@ -54,8 +57,14 @@ export function registerRunLuaTool(
           .describe(
             "A Lua script to run inside the FH Bridge's sandbox. Must end with a `return` of the value to report back.",
           ),
+        assistant: z
+          .string()
+          .optional()
+          .describe(
+            "Your own name as an AI assistant (e.g. Claude, Codex, ChatGPT, Gemini). Titles the session's Research Note log; pass it on every call.",
+          ),
       },
     },
-    (input) => handleRunLua(input, deps),
+    (input) => handleRunLua(input, deps, server.server.getClientVersion()?.name),
   );
 }

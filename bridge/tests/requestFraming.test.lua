@@ -24,6 +24,16 @@ check(lua.kind == "lua", 'LUA <n> has kind "lua"')
 check(lua.byteCount == 42, 'LUA <n> carries the byte count as a number')
 check(lua.forceReadOnly == false, 'LUA <n> does not force read-only — uses the Session\'s own Access mode')
 
+check(lua.assistant == nil, 'LUA <n> without an assistant suffix carries no assistant')
+
+local luaA = requestFraming.parse("LUA 42 assistant=Codex")
+check(luaA ~= nil and luaA.byteCount == 42 and luaA.assistant == "Codex", 'LUA <n> assistant=<name> carries the assistant name')
+check(requestFraming.parse("LUA 5 assistant=Claude%20Code").assistant == "Claude Code", 'assistant name is percent-decoded')
+check(requestFraming.parse("LUA 5 assistant=a%0Ab%09%20c").assistant == "a b c", 'control characters and runs of whitespace collapse to one space')
+check(requestFraming.parse("LUA 5 assistant=").assistant == nil, 'empty assistant value is treated as absent')
+check(#requestFraming.parse("LUA 5 assistant=" .. string.rep("x", 100)).assistant == 40, 'assistant name is capped at 40 chars')
+check(requestFraming.parse("LUA_RO 7").assistant == nil, 'LUA_RO never carries an assistant')
+
 local luaRo = requestFraming.parse("LUA_RO 7")
 check(luaRo ~= nil, 'LUA_RO <n> parses')
 check(luaRo.kind == "lua", 'LUA_RO <n> has kind "lua"')

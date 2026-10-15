@@ -24,6 +24,12 @@ export interface RunLuaOnBridgeOptions {
    * always leave this unset, so they use the Session's actual Access mode.
    */
   forceReadOnly?: boolean;
+  /**
+   * Name of the AI assistant making this run_lua call (already sanitised, see
+   * assistantName.ts). Sent as an `assistant=<percent-encoded>` header suffix on the plain
+   * LUA form only; the Bridge uses it for the session log's title.
+   */
+  assistant?: string | null;
 }
 
 /**
@@ -94,7 +100,11 @@ export function runLuaOnBridge(
 ): Promise<string> {
   const scriptBytes = Buffer.from(script, "utf8");
   const verb = options.forceReadOnly ? "LUA_RO" : "LUA";
-  const header = Buffer.from(`${verb} ${scriptBytes.byteLength}\n`, "utf8");
+  const assistantSuffix =
+    !options.forceReadOnly && options.assistant
+      ? ` assistant=${encodeURIComponent(options.assistant)}`
+      : "";
+  const header = Buffer.from(`${verb} ${scriptBytes.byteLength}${assistantSuffix}\n`, "utf8");
   return sendRawToBridge(Buffer.concat([header, scriptBytes]), options);
 }
 

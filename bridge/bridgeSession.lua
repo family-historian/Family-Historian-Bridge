@@ -388,6 +388,7 @@ function timPoll:action_cb()
     -- during a read-write call anyway (sandbox.lua only wires fhBridge.logActivity through
     -- then), and a read-only call never reaches it.
     sessionLogHelper.setCommitCount(commitCount + 1)
+    sessionLogHelper.setAssistant(request.assistant)
     -- forceReadOnly (describe_project/install_fh_plugin's fixed, internal scripts) always
     -- gets unfiltered "all"/"all" privacySettings, never the Session's actual restriction:
     -- these scripts are fixed source reviewed as part of this bridge, not user-supplied

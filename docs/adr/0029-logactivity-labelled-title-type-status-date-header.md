@@ -46,3 +46,10 @@ header.
 - A user can now build a Smart Folder/query against `_RNOT` records filtering on `Type` and/or
   `Status` via FH's `GetLabelledText` expression, not implemented by this project, just made
   possible by writing these as genuine labelled paragraphs.
+
+## Amendment (issue #148)
+
+The title wording is no longer fixed "Claude session log": it is
+`Title: AI session log - <assistant> - <timestamp>` (just `AI session log - <timestamp>` when
+the assistant is unknown), and an `Assistant: <name>` line sits between `Status:` and `Date:`
+when known. `Type`/`Status` remain constants.

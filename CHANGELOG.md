@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Session log note is no longer titled "Claude session log": `run_lua` takes an optional `assistant` argument (falls back to the MCP client's name) and the note is titled `AI session log - <assistant> - <timestamp>`, with a new `Assistant:` header line. Entries from a different assistant mid-Session are tagged `[<assistant>]` (#148).
+
 ## 1.0.3
 
 - Redacted Individuals/links now carry a `note`, Excluded errors say so, and the `run_lua` description tells the agent not to route around a Visibility setting (#146).

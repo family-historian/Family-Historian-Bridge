@@ -31,6 +31,19 @@ const matchingVersion: RunLuaDeps["queryBridgeVersion"] = async () =>
   JSON.stringify({ version: SERVER_VERSION });
 
 describe("handleRunLua", () => {
+  it("passes the supplied assistant, else the client name, to the bridge call", async () => {
+    const run = vi.fn(async () => '{"ok":true}');
+    const deps = { runLuaOnBridge: run, queryBridgeVersion: matchingVersion };
+
+    await handleRunLua({ script: "return 1", assistant: "Codex" }, deps, "client-x");
+    await handleRunLua({ script: "return 1" }, deps, "client-x");
+    await handleRunLua({ script: "return 1" }, deps);
+
+    expect(run.mock.calls[0]).toEqual(["return 1", { assistant: "Codex" }]);
+    expect(run.mock.calls[1]).toEqual(["return 1", { assistant: "client-x" }]);
+    expect(run.mock.calls[2]).toEqual(["return 1"]);
+  });
+
   it("returns the script's result as text on success", async () => {
     const result = await handleRunLua(
       { script: "return {ok=true}" },

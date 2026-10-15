@@ -31,7 +31,7 @@ function startFakeBridge(
           const header = buffered.subarray(0, newlineIndex).toString("utf8");
           buffered = buffered.subarray(newlineIndex + 1);
 
-          const match = header.match(/^LUA(_RO)? (\d+)$/);
+          const match = header.match(/^LUA(_RO)? (\d+)( assistant=\S*)?$/);
           if (!match) {
             socket.end(JSON.stringify({ error: "expected STOP or LUA <n>" }));
             return;
@@ -166,6 +166,33 @@ describe("runLuaOnBridge", () => {
     await runLuaOnBridge(script, { port });
 
     expect(receivedScript).toBe(script);
+  });
+
+  it("adds a percent-encoded assistant= suffix to the LUA header when an assistant is given", async () => {
+    let header = "";
+    const { port, close } = await startFakeBridge((_s, h) => {
+      header = h;
+      return '"ok"';
+    });
+    cleanup = close;
+
+    await runLuaOnBridge("return 1", { port, assistant: "Claude Code" });
+
+    expect(header).toBe("LUA 8 assistant=Claude%20Code");
+  });
+
+  it("omits the assistant suffix when none is given, and on LUA_RO", async () => {
+    const headers: string[] = [];
+    const { port, close } = await startFakeBridge((_s, h) => {
+      headers.push(h);
+      return '"ok"';
+    });
+    cleanup = close;
+
+    await runLuaOnBridge("return 1", { port });
+    await runLuaOnBridge("return 1", { port, forceReadOnly: true, assistant: "Codex" });
+
+    expect(headers).toEqual(["LUA 8", "LUA_RO 8"]);
   });
 
   it("surfaces a Lua-side error response body unchanged (the tool layer interprets it)", async () => {

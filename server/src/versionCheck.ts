@@ -233,7 +233,7 @@ export function appendVersionNote(result: CallToolResult, note: string | null): 
 }
 
 export interface BridgeScriptDeps {
-  runLuaOnBridge: (script: string) => Promise<string>;
+  runLuaOnBridge: (script: string, options?: { assistant?: string | null }) => Promise<string>;
   queryBridgeVersion: () => Promise<string>;
 }
 
@@ -257,13 +257,16 @@ export async function checkVersionThenRunScript(
   deps: BridgeScriptDeps,
   serverVersion: string,
   script: string,
+  assistant?: string | null,
 ): Promise<VersionCheckedScriptRun> {
   const versionCheck = await checkBridgeVersion(deps.queryBridgeVersion, serverVersion);
   if (versionCheck.block) return { block: versionCheck.block };
 
   let raw: string;
   try {
-    raw = await deps.runLuaOnBridge(script);
+    raw = assistant
+      ? await deps.runLuaOnBridge(script, { assistant })
+      : await deps.runLuaOnBridge(script);
   } catch (err) {
     return { block: describeBridgeConnectionError(err) };
   }
@@ -275,8 +278,9 @@ export async function runVersionCheckedScript(
   deps: BridgeScriptDeps,
   serverVersion: string,
   script: string,
+  assistant?: string | null,
 ): Promise<CallToolResult> {
-  const run = await checkVersionThenRunScript(deps, serverVersion, script);
+  const run = await checkVersionThenRunScript(deps, serverVersion, script, assistant);
   if (run.block) return run.block;
 
   return appendVersionNote(interpretBridgeResponse(run.raw), run.versionCheck.note);

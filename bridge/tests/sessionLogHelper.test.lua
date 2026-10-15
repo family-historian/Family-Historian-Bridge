@@ -268,7 +268,7 @@ check(segments[1].kind == 'text' and segments[1].text == '<b><fs="+2">' and segm
   'Title: opens with bold + a +2pt size bump, as real FTF markup (issue #79, kept through issue #112)')
 
 local titleSegment = segments[2]
-check(titleSegment.kind == 'text' and contains(titleSegment.text, 'Title: Claude session log'),
+check(titleSegment.kind == 'text' and contains(titleSegment.text, 'Title: AI session log - 2'),
   'second segment is the Title: line, labelled and timestamped (issue #112)')
 check(titleSegment.rich == false, 'the Title: line itself is added as plain (auto-escaped) text, separate from the markup segments')
 
@@ -839,6 +839,61 @@ do
   check(contains(errFact, 'Excluded'), 'the climbed-Fact-item error also names the Excluded reason')
 
   familyHelper.setPrivacySettings(nil)
+end
+
+------------------------------------------------------------------
+-- Assistant naming (issue #148)
+------------------------------------------------------------------
+
+do
+  package.loaded['sessionLogHelper'] = nil
+  local slh = require('sessionLogHelper')
+
+  -- Unknown assistant: neutral title, no Assistant: line
+  local noteCountA = #(recordsByTag["_RNOT"] or {})
+  slh.setAssistant(nil)
+  slh.logActivity(fhCreateItem("INDI"), "created")
+  local segsA = setValueCalls[#setValueCalls].richText.segments
+  check(segsA[2].text:match('^Title: AI session log %- %d%d%d%d%-%d%d%-%d%d %d%d:%d%d$') ~= nil,
+    'no assistant: title is "AI session log - <timestamp>" and never says Claude')
+  check(segsA[4].text:find('Assistant:', 1, true) == nil, 'no assistant: no Assistant: header line')
+
+  -- Known assistant: named in title, Assistant: line before Date:
+  package.loaded['sessionLogHelper'] = nil
+  slh = require('sessionLogHelper')
+  slh.setAssistant("Codex")
+  slh.logActivity(fhCreateItem("INDI"), "created")
+  local segsB = setValueCalls[#setValueCalls].richText.segments
+  check(segsB[2].text:match('^Title: AI session log %- Codex %- %d%d%d%d') ~= nil, 'title names the assistant')
+  check(segsB[4].text:match('^Type: mcp%-log\nStatus: closed\nAssistant: Codex\nDate: ') ~= nil,
+    'header has an Assistant: line between Status: and Date:')
+  check(segsB[5].text == '* ' and segsB[6].text:match('^%d%d:%d%d %- created: $') ~= nil,
+    'same-assistant entry is not tagged')
+
+  -- Different assistant later in the same note: entry tagged, title unchanged
+  slh.setAssistant("Gemini")
+  slh.logActivity(fhCreateItem("INDI"), "fact added Birth")
+  local segsC = setValueCalls[#setValueCalls].richText.segments
+  local sawTag = false
+  for _, seg in ipairs(segsC) do
+    if seg.kind == 'text' and seg.text:find('[Gemini] fact added Birth', 1, true) then sawTag = true end
+  end
+  check(sawTag, 'an entry from a different assistant is prefixed [<Assistant>]')
+  check(segsC[2].text:find('Codex', 1, true) ~= nil, 'the note title keeps the first assistant')
+
+  -- First call unnamed, later named: note created unnamed; named calls tag entries
+  package.loaded['sessionLogHelper'] = nil
+  slh = require('sessionLogHelper')
+  slh.setAssistant(nil)
+  slh.logActivity(fhCreateItem("INDI"), "created")
+  slh.setAssistant("Codex")
+  slh.logActivity(fhCreateItem("INDI"), "fact added Death")
+  local segsD = setValueCalls[#setValueCalls].richText.segments
+  local sawTagD = false
+  for _, seg in ipairs(segsD) do
+    if seg.kind == 'text' and seg.text:find('[Codex] fact added Death', 1, true) then sawTagD = true end
+  end
+  check(sawTagD, 'a named call after an unnamed note creation is tagged')
 end
 
 t.report()

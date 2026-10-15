@@ -29,9 +29,20 @@ function M.parse(header)
     return { kind = "lua", byteCount = tonumber(roCount), forceReadOnly = true }
   end
 
-  local count = header:match("^LUA (%d+)$")
+  -- "LUA <n>" optionally followed by " assistant=<percent-encoded name>" -- the server's
+  -- name for the calling AI assistant, used for the session log's title. Absent from older
+  -- servers and run_lua calls with no known assistant.
+  local count, assistant = header:match("^LUA (%d+) assistant=(%S*)$")
+  if not count then
+    count = header:match("^LUA (%d+)$")
+  end
   if count then
-    return { kind = "lua", byteCount = tonumber(count), forceReadOnly = false }
+    return {
+      kind = "lua",
+      byteCount = tonumber(count),
+      forceReadOnly = false,
+      assistant = M.decodeAssistant(assistant),
+    }
   end
 
   local serverVersion = header:match("^VERSION (%S+)$")
@@ -50,6 +61,27 @@ function M.resolveAccessMode(request, currentAccessMode)
     return "read-only"
   end
   return currentAccessMode
+end
+
+-- requestFraming.decodeAssistant(encoded)
+-- Percent-decodes the header's assistant name, then re-sanitises it (control characters to
+-- spaces, whitespace collapsed, trimmed, capped at 40 chars) so a non-conforming server
+-- can't inject anything into the note. Returns nil for nil/empty input.
+function M.decodeAssistant(encoded)
+  if not encoded or encoded == "" then
+    return nil
+  end
+  local decoded = encoded:gsub("%%(%x%x)", function(hex)
+    return string.char(tonumber(hex, 16))
+  end)
+  decoded = decoded:gsub("[%c]", " "):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+  if #decoded > 40 then
+    decoded = decoded:sub(1, 40):gsub(" $", "")
+  end
+  if decoded == "" then
+    return nil
+  end
+  return decoded
 end
 
 return M

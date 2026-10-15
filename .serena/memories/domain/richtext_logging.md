@@ -22,7 +22,7 @@
   the owning record via `MoveToRecordItem` rather than erroring (ADR 0031; known gap: a
   Shared Fact witness item climbs to the fact's principal, not the witness). Note uses a
   labelled-field header (`Title:`/`Type:`/`Status:`/`Date:`, FH's labelled-paragraph
-  convention) — `Title:` drives the record's actual display name/Records-Window name, so
+  convention; plus an `Assistant:` line when known, issue #148) — `Title:` drives the record's actual display name/Records-Window name, so
   it must stay the first labelled paragraph; only `Title:` keeps bold+heading styling.
   `Type="mcp-log"`/`Status="closed"` are fixed constants (enables Smart-Folder cleanup
   queries). Enforced by the write-then-log invariant — see `mem:conventions`. Distinct
@@ -34,6 +34,12 @@
   version numbers as separate integers, not a dotted string, so its first return value is
   compared to 8 directly, no `versionCompare` parse involved; skipped when
   `pendingRethrow` is set since FH's own rollback is about to undo the note anyway).
+- **Assistant** (issue #148): the AI assistant calling `run_lua`. Server resolves it from the
+  optional `assistant` arg, else MCP `clientInfo.name`, sanitises it (≤40 chars), and sends
+  it as a `LUA <n> assistant=<pct-encoded>` header suffix (`requestFraming.parse`).
+  `sessionLogHelper.setAssistant` latches the first non-empty name for the note's
+  Title/Assistant header; a later call naming a different assistant tags its entries
+  `[<name>]`. Unknown → neutral title, never "Claude".
 - **run_lua guidance (corpus entries)**: see `mem:server`'s RUN_LUA_DESCRIPTION-truncation
   note and `mem:corpora` — the "run_lua guidance"-titled GEDCOM-corpus entries carry the
   overflow that a deferred/lazy MCP tool-schema loader would silently truncate past ~2KB
