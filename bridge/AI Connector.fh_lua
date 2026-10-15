@@ -2,9 +2,9 @@
 @Title: AI Connector
 @Type: Standard
 @Author: Family Historian (Calico Pie)
-@Version: 1.0.3
+@Version: 1.0.4
 @Keywords: AI, assistant, connector, automation
-@LastUpdated: 2026-10-08
+@LastUpdated: 2026-10-15
 @Licence: This plugin is copyright (c) 2026 Calico Pie Limited and contributors, and is licensed under the MIT License
 which is hereby incorporated by reference (see https://pluginstore.family-historian.co.uk/fh-plugin-licence)
 @Description: Lets an AI assistant work with your open Family Historian project. Click Start to allow it to look up people, families, sources and facts, and choose Read-only or Read-write. Nothing leaves your computer.
