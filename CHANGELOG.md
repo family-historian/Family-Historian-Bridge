@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.0.4
+
+- Bundled FH help corpus refreshed from the current help site build (adds the AI Connector page).
 - Session log note is no longer titled "Claude session log": `run_lua` takes an optional `assistant` argument (falls back to the MCP client's name) and the note is titled `AI session log - <assistant> - <timestamp>`, with a new `Assistant:` header line. Entries from a different assistant mid-Session are tagged `[<assistant>]` (#148).
 
 ## 1.0.3
