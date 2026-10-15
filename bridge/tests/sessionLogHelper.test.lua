@@ -850,7 +850,6 @@ do
   local slh = require('sessionLogHelper')
 
   -- Unknown assistant: neutral title, no Assistant: line
-  local noteCountA = #(recordsByTag["_RNOT"] or {})
   slh.setAssistant(nil)
   slh.logActivity(fhCreateItem("INDI"), "created")
   local segsA = setValueCalls[#setValueCalls].richText.segments
