@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+
+## 1.0.5
+
+### Fixed
+
+- Non-ASCII text no longer corrupted on Windows with non-UTF-8 regional settings (e.g. Polish cp1250): capital Ę, Ł and Ń came back as U+FFFD because the JSON encoder treated their UTF-8 bytes as control characters (#149).
+- `findByNames` and the source lookups (`findSources` template/name and field-value filters) now match non-ASCII letters case-insensitively, so "Marcin Gębal" finds "Marcin GĘBAL" (#149).
+
 ## 1.0.4
 
 - Bundled FH help corpus refreshed from the current help site build (adds the AI Connector page).
