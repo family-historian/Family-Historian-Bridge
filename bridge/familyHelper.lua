@@ -244,11 +244,12 @@ local function indiDescriptor(ptr)
   }, level
 end
 
--- Whitespace-separated words, unchanged case. Callers that don't already have a lowercased
+-- ASCII-whitespace-separated words, unchanged case (%s/%S are locale-dependent: under cp1250
+-- byte 0xA0 counts as a space and would split UTF-8 sequences such as Р or à). Callers that don't already have a lowercased
 -- string in hand should use splitWordsLower below instead.
 local function splitWords(s)
   local words = {}
-  for w in tostring(s):gmatch("%S+") do
+  for w in tostring(s):gmatch("[^ \t\r\n\f\v]+") do
     table.insert(words, w)
   end
   return words
@@ -257,7 +258,7 @@ end
 -- Lowercased whitespace-separated words, for findByNames' word-set containment.
 local function splitWordsLower(s)
   local words = {}
-  for w in tostring(s):gmatch("%S+") do
+  for w in tostring(s):gmatch("[^ \t\r\n\f\v]+") do
     table.insert(words, utf8Fold.lower(w))
   end
   return words
@@ -266,7 +267,7 @@ end
 -- true iff q is not a usable findByNames query entry: not a string, or blank/whitespace-only
 -- (which would split to zero words and vacuously match everyone).
 local function isBlankQuery(q)
-  return type(q) ~= "string" or q:match("^%s*$") ~= nil
+  return type(q) ~= "string" or q:match("^[ \t\r\n\f\v]*$") ~= nil
 end
 
 -- Word-set containment test for one query against one candidate's NAME:FULL: every word in

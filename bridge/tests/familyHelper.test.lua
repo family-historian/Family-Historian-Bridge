@@ -878,6 +878,9 @@ do
   local polish = familyHelper.findByNames("Marcin Gębal")
   check(polish.totalMatches == 1 and polish.matches[1].name == "Marcin GĘBAL",
     'findByNames("Marcin Gębal") matches "Marcin GĘBAL" -- non-ASCII letters fold case-insensitively')
+  newIndi("Иван ПЕТРОВ", "Male") -- Р is bytes D0 A0; 0xA0 is a space under cp1250 %s
+  check(familyHelper.findByNames("ПЕТРОВ").totalMatches == 1,
+    'findByNames("ПЕТРОВ") is not split at byte 0xA0')
   check(familyHelper.findByNames("Marcin Gembal").totalMatches == 0,
     'findByNames("Marcin Gembal") does not match "GĘBAL"')
 

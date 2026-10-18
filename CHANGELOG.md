@@ -9,6 +9,7 @@
 
 - Non-ASCII text no longer corrupted on Windows with non-UTF-8 regional settings (e.g. Polish cp1250): capital Ę, Ł and Ń came back as U+FFFD because the JSON encoder treated their UTF-8 bytes as control characters (#149).
 - `findByNames` and the source lookups (`findSources` template/name and field-value filters) now match non-ASCII letters case-insensitively, so "Marcin Gębal" finds "Marcin GĘBAL" (#149).
+- `findByNames` no longer splits words at UTF-8 bytes that a non-UTF-8 locale treats as whitespace (e.g. byte 0xA0 in Cyrillic Р or French à), and Greek final sigma and Turkish İ/ı now match their uppercase forms (#149).
 
 ## 1.0.4
 

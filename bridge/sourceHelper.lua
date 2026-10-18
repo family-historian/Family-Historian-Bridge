@@ -40,7 +40,7 @@ local function parseOptions(prom)
   end
   local options = {}
   for opt in string.gmatch(prom, "([^|]+)") do
-    table.insert(options, opt:match("^%s*(.-)%s*$"))
+    table.insert(options, opt:match("^[ \t\r\n\f\v]*(.-)[ \t\r\n\f\v]*$"))
   end
   return options
 end

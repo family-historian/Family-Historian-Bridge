@@ -1,8 +1,9 @@
--- Locale-independent UTF-8 lowercasing. string.lower/upper and the %c/%a/%u/%l pattern
+-- Locale-independent UTF-8 lowercasing for case-insensitive matching. string.lower/upper and the %c/%a/%u/%l pattern
 -- classes follow the C library locale, so under e.g. cp1250 they miss non-ASCII capitals
 -- (Ę) and can misclassify UTF-8 continuation bytes. Covers ASCII, Latin-1, Latin
 -- Extended-A/Additional, Greek and Cyrillic; other code points and invalid bytes pass
--- through untouched.
+-- through untouched. Deliberately folds beyond strict lowercase so FH's uppercased names still
+-- match: final sigma ς -> σ, Turkish İ and ı -> i (FH uppercases ς and ı unchanged).
 
 local M = {}
 
@@ -16,7 +17,8 @@ local function foldCodepoint(cp)
     return cp + 32
   end
   if cp >= 0x100 and cp <= 0x17F then
-    if cp == 0x130 or cp == 0x138 or cp == 0x149 or cp == 0x17F then return cp end
+    if cp == 0x130 or cp == 0x131 then return 0x69 end
+    if cp == 0x138 or cp == 0x149 or cp == 0x17F then return cp end
     if cp == 0x178 then return 0xFF end
     if (cp >= 0x139 and cp <= 0x148) or (cp >= 0x179 and cp <= 0x17E) then
       if cp % 2 == 1 then return cp + 1 end
@@ -31,6 +33,7 @@ local function foldCodepoint(cp)
     if cp % 2 == 0 then return cp + 1 end
     return cp
   end
+  if cp == 0x3C2 then return 0x3C3 end
   if cp >= 0x386 and cp <= 0x3AB then
     if cp == 0x386 then return 0x3AC end
     if cp >= 0x388 and cp <= 0x38A then return cp + 37 end
