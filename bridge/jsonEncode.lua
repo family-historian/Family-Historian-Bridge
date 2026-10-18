@@ -10,7 +10,7 @@ local escapes = {
 }
 
 local function encodeString(s)
-  local out = s:gsub('[%c\\"]', function(c)
+  local out = s:gsub('[\0-\31\\"]', function(c)
     return escapes[c] or string.format('\\u%04x', c:byte())
   end)
   return '"' .. out .. '"'

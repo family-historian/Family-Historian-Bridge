@@ -13,6 +13,7 @@ local M = {}
 -- findSources reuses familyHelper.getAllDetails to describe a source's own tree and to
 -- recursively find every citation of it, rather than re-walking a record's fields itself.
 local familyHelper = require('familyHelper')
+local utf8Fold = require('utf8Fold')
 
 -- "~" is the self-reference Data Reference token: "the value at the pointer itself".
 local function currentText(ptr)
@@ -107,13 +108,13 @@ local function resolveByNameOrId(tag, nameFieldTag, label, nameOrId)
     return resolveById(tag, label, qualifiedId)
   end
 
-  local wanted = nameOrId:lower()
+  local wanted = utf8Fold.lower(nameOrId)
   local matches = {}
   local ptr = fhNewItemPtr()
   ptr:MoveToFirstRecord(tag)
   while ptr:IsNotNull() do
     local name = readChildText(ptr, nameFieldTag)
-    if name and name:lower() == wanted then
+    if name and utf8Fold.lower(name) == wanted then
       table.insert(matches, ptr:Clone())
     end
     ptr:MoveNext()
@@ -476,7 +477,7 @@ local function valueMatches(value, wantedValue, fieldType)
   if EXACT_MATCH_TYPES[fieldType] then
     return value == wantedValue
   end
-  return tostring(value):lower():find(tostring(wantedValue):lower(), 1, true) ~= nil
+  return utf8Fold.lower(value):find(utf8Fold.lower(wantedValue), 1, true) ~= nil
 end
 
 -- Resolves one field's value directly off ptr via its own ~PREFIX-CODE shortcut Data

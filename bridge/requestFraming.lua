@@ -74,7 +74,7 @@ function M.decodeAssistant(encoded)
   local decoded = encoded:gsub("%%(%x%x)", function(hex)
     return string.char(tonumber(hex, 16))
   end)
-  decoded = decoded:gsub("[%c]", " "):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+  decoded = decoded:gsub("[\0-\31\127]", " "):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
   if #decoded > 40 then
     decoded = decoded:sub(1, 40):gsub(" $", "")
   end

@@ -874,6 +874,13 @@ do
   local janeTaubman = newIndi("Jane TAUBMANONE", "Female")
   local rob = newIndi("Rob TAUBMANONE", "Male")
 
+  newIndi("Marcin GĘBAL", "Male")
+  local polish = familyHelper.findByNames("Marcin Gębal")
+  check(polish.totalMatches == 1 and polish.matches[1].name == "Marcin GĘBAL",
+    'findByNames("Marcin Gębal") matches "Marcin GĘBAL" -- non-ASCII letters fold case-insensitively')
+  check(familyHelper.findByNames("Marcin Gembal").totalMatches == 0,
+    'findByNames("Marcin Gembal") does not match "GĘBAL"')
+
   local byBoth = familyHelper.findByNames("Rob Taubmanone")
   local byBothNames = {}
   for _, entry in ipairs(byBoth.matches) do byBothNames[entry.name] = true end

@@ -6,6 +6,8 @@
 -- can't encode one), and accepts a qualified id string (e.g. "I219") anywhere it takes a
 -- pointer -- see resolvePointer below.
 
+local utf8Fold = require('utf8Fold')
+
 local M = {}
 
 -- Visibility levels for the Private/Living Record Flags (issue #141), set once per
@@ -256,7 +258,7 @@ end
 local function splitWordsLower(s)
   local words = {}
   for w in tostring(s):gmatch("%S+") do
-    table.insert(words, w:lower())
+    table.insert(words, utf8Fold.lower(w))
   end
   return words
 end
@@ -778,7 +780,7 @@ function M.findByNames(query, exactMatch)
   while ptr:IsNotNull() do
     walkIndex = walkIndex + 1
     local nameFull = fhGetItemText(ptr, "~.NAME:FULL")
-    local nameFullLower = nameFull:lower()
+    local nameFullLower = utf8Fold.lower(nameFull)
     local nameWords = splitWords(nameFullLower) -- already lowercase; avoids re-lowering per word
     for _, p in ipairs(prepared) do
       local matched, exactCount = matchQuery(p.words, nameFullLower, nameWords, exactMatch)

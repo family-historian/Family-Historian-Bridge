@@ -23,7 +23,7 @@ local M = {}
 M.MODULE_NAMES = {
   "bridgeSession", "debugLog", "factHelper", "familyHelper", "jsonEncode", "requestFraming", "richTextHelper",
   "runScript", "sandbox", "sessionLogHelper", "sessionPolicy", "sessionSettings",
-  "sourceHelper", "timeoutDisplay", "versionCompare", "watchdog",
+  "sourceHelper", "timeoutDisplay", "utf8Fold", "versionCompare", "watchdog",
 }
 
 -- Must match bridge/AI Connector.fh_lua's Install comment byte-for-byte — if that
