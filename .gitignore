@@ -22,3 +22,6 @@
 INTERNAL*
 
 test-data/
+
+# Video plan: local-only, own git repo (see video/)
+/video/
