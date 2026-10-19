@@ -45,7 +45,7 @@ Two pieces, both running on the user's own machine:
 
 A user starts a **Session** in FH (clicking Start in the Bridge's dialog) before asking
 Claude anything; FH's main window is locked for the session's duration, and released the
-moment they click Stop (or after 5 minutes idle).
+moment they click Stop (or after 15 minutes idle by default).
 
 ## Install
 

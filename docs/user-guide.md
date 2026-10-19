@@ -61,7 +61,7 @@ moment you click Stop.
 3. If your question is genuinely ambiguous (an unclear place-name spelling, an unspecified
    number of generations), Claude will ask you to clarify rather than guess.
 4. **Click Stop** when you're done to get FH back. If you forget, the Session
-   auto-Stops after the **Minutes:** timeout (5 by default) of no activity, and the dialog
+   auto-Stops after the **Minutes:** timeout (15 by default, 5-120) of no activity, and the dialog
    returns to "Not listening." automatically.
 
 ## What it can do right now
@@ -156,7 +156,7 @@ Tell Claude which kind you want, a **Report** plugin (shows in FH's Report Windo
 start a Session itself; there's no way around clicking Start yourself.
 
 **Session ended on its own**: either you clicked Stop, or the **Minutes:** idle timeout
-(5 by default) passed with no question sent. Just click Start again.
+(15 by default) passed with no question sent. Just click Start again.
 
 **Bridge won't Start / "Failed to bind port 8734"**: something else already has port 8734
 open, most likely an earlier copy of the plugin still running in FH's Plugin Editor. Close
