@@ -605,6 +605,27 @@ do
     'without a modules argument, require says user modules are unavailable')
 end
 
+-- Project folder first, then the machine-wide folder, through the real FH-backed reader
+-- (fhLoadTextFile stubbed as a plain global, the way it exists inside FH).
+do
+  local disk = {
+    ['P\\house.lua'] = 'return "project house"',
+    ['M\\house.lua'] = 'return "machine house"',
+    ['M\\common.lua'] = 'return "machine common"',
+  }
+  fhLoadTextFile = function(path) return disk[path] end
+  local both = { folder = 'P', machineFolder = 'M' }
+  check(runScript.run("return require('house')", 'read-only', nil, both) == '"project house"',
+    'a project module overrides a machine-wide one of the same name')
+  check(runScript.run("return require('common')", 'read-only', nil, both) == '"machine common"',
+    'a module only in the machine-wide folder is found there')
+  check(runScript.run("return require('common')", 'read-only', nil, { machineFolder = 'M' }) == '"machine common"',
+    'machine-wide modules load with no project folder at all')
+  check(contains(runScript.run("return require('absent')", 'read-only', nil, both), 'no module absent in P or M'),
+    'a missing module names both folders searched')
+  fhLoadTextFile = nil
+end
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

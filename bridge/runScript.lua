@@ -213,12 +213,13 @@ local function moduleViolation(text, privacySettings)
   return table.concat(messages, '; ')
 end
 
--- Gives env its require(). modules = {folder=, source=, listFolder=}: folder is the modules
--- folder (nil when no project data folder is known); source overrides userModules' FH-backed
--- reader (tests). fhBridge.listModules comes from sandbox.build, which gets the same table.
+-- Gives env its require(). modules = {folder=, machineFolder=, source=, listFolder=}: folder
+-- is the project's modules folder, machineFolder the machine-wide one (either nil when not
+-- known), searched in that order; source overrides userModules' FH-backed reader (tests). fhBridge.listModules comes from sandbox.build, which gets the same table.
 local function attachUserModules(env, modules, privacySettings)
   modules = modules or {}
-  local source = modules.source or (modules.folder and userModules.folderSource(modules.folder))
+  local order = userModules.searchOrder(modules)
+  local source = modules.source or (#order > 0 and userModules.folderSource(order)) or nil
   env.require = userModules.makeRequire(env, source, function(text)
     return moduleViolation(text, privacySettings)
   end)

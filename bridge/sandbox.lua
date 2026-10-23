@@ -205,8 +205,8 @@ end
 -- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
 -- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
 -- default for why callers predating #141 need no changes.
--- modules ({folder=, listFolder=}, issue #150) backs fhBridge.listModules; nil reports no
--- folder. require() itself is attached by runScript.lua, which owns the pre-scans.
+-- modules ({folder=, machineFolder=, listFolder=}, issue #150) backs fhBridge.listModules;
+-- nil reports no folder. require() itself is attached by runScript.lua, which owns the pre-scans.
 function M.build(accessMode, privacySettings, modules)
   accessMode = accessMode or "read-only"
   privacySettings = privacySettings or { privateVisibility = "all", livingVisibility = "all" }
@@ -399,10 +399,8 @@ function M.build(accessMode, privacySettings, modules)
   -- etc.'s public signatures unchanged.
   realFamilyHelper.setPrivacySettings(privacySettings)
   local userModules = require('userModules')
-  local moduleFolder = modules and modules.folder
-  local listFolder = modules and modules.listFolder
   env.fhBridge = {
-    listModules = function() return userModules.list(moduleFolder, listFolder) end,
+    listModules = function() return userModules.list(modules) end,
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
     getAncestors = realFamilyHelper.getAncestors,

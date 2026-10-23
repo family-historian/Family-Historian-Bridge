@@ -398,7 +398,11 @@ function timPoll:action_cb()
     -- pre-scan and break describe_project outright the moment a Visibility level is restricted.
     local privacySettings = not request.forceReadOnly and currentPrivacySettings() or nil
     -- Re-read per call, so a module edited mid-Session is picked up without a restart.
-    local modules = { folder = userModules.folderFor(fhGetContextInfo("CI_PROJECT_DATA_FOLDER")) }
+    local okMachine, machineDataFile = pcall(fhGetPluginDataFileName, "LOCAL_MACHINE")
+    local modules = {
+        folder = userModules.folderFor(fhGetContextInfo("CI_PROJECT_DATA_FOLDER")),
+        machineFolder = okMachine and userModules.machineFolderFor(machineDataFile) or nil,
+    }
     local response, rethrowErr, transactionResult = runScript.run(script, accessMode, privacySettings, modules)
     client:send(response .. "\n")
     client:close()

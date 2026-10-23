@@ -437,3 +437,12 @@ describe("describe_project userModules (issue #150)", () => {
     expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('search_gedcom_knowledge("user');
   });
 });
+
+describe("describe_project userModules: machine-wide folder (issue #150)", () => {
+  it("documents the machine-wide folder, the search order and the scope/shadowed fields", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"machineFolder"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"scope"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"shadowed"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/project folder is searched\s+first/);
+  });
+});

@@ -1,5 +1,6 @@
 -- User project modules (issue #150): a sandboxed require() for run_lua scripts, loading
--- helper modules the user installs by hand in one folder of the open project's data folder.
+-- helper modules the user installs by hand: first from the open project's own modules
+-- folder, then from a machine-wide one shared by every project.
 --
 -- Each module compiles against the calling script's own sandbox env -- same allowlist, same
 -- write tracker, same Visibility-filtered fhBridge helpers -- so a module can do exactly what
@@ -15,6 +16,11 @@ local M = {}
 -- Relative to CI_PROJECT_DATA_FOLDER: FH's own per-project Plugin Data folder, then this
 -- plugin's name.
 M.SUBFOLDER = 'Plugin Data\\AI Connector\\modules'
+
+-- Relative to FH's machine-wide Plugin Data folder (FH 8: C:\ProgramData\Calico Pie\Family
+-- Historian 8\Plugin Data). Fixed, not the running plugin's own name, so a renamed plugin file
+-- still finds the same modules.
+M.MACHINE_SUBFOLDER = 'AI Connector\\modules'
 
 -- Letters, digits and underscores only, so a name can never reach outside the folder.
 M.NAME_PATTERN = '^[%w_]+$'
@@ -33,47 +39,101 @@ function M.folderFor(projectDataFolder)
   return projectDataFolder .. '\\' .. M.SUBFOLDER
 end
 
--- A source over folder: source(name) -> text, path  |  nil, folder.
--- loadText(path) -> string|nil defaults to FH's fhLoadTextFile; injectable for tests.
-function M.folderSource(folder, loadText)
+-- The machine-wide modules folder, from fhGetPluginDataFileName("LOCAL_MACHINE")'s result
+-- ("<machine Plugin Data>\<plugin name>"): its parent folder, then MACHINE_SUBFOLDER. nil
+-- when FH returned nothing usable. (FH's help gives a Plugins\Data path for that scope; FH 8
+-- in fact returns Plugin Data beside the Plugins folder, so take FH's answer, not the help's.)
+function M.machineFolderFor(localMachineDataFile)
+  if type(localMachineDataFile) ~= 'string' then
+    return nil
+  end
+  local root = localMachineDataFile:match('^(.+)[\\/][^\\/]+$')
+  if not root then
+    return nil
+  end
+  return root .. '\\' .. M.MACHINE_SUBFOLDER
+end
+
+-- The folders require() searches, in order: project, then machine-wide; either may be nil.
+function M.searchOrder(modules)
+  local order = {}
+  if modules and modules.folder then table.insert(order, modules.folder) end
+  if modules and modules.machineFolder then table.insert(order, modules.machineFolder) end
+  return order
+end
+
+-- A source over folders (an array, searched in order). source(name) -> text, path  |
+-- nil, "<folder> or <folder>". loadText(path) -> string|nil defaults to FH's
+-- fhLoadTextFile; injectable for tests.
+function M.folderSource(folders, loadText)
+  if type(folders) == 'string' then
+    folders = { folders }
+  end
+  local searched = folders
   loadText = loadText or function(path) return fhLoadTextFile(path, 'UTF-8') end
   return function(name)
-    local path = folder .. '\\' .. name .. '.lua'
-    local ok, text = pcall(loadText, path)
-    if ok and type(text) == 'string' then
-      return text, path
+    for _, folder in ipairs(searched) do
+      local path = folder .. '\\' .. name .. '.lua'
+      local ok, text = pcall(loadText, path)
+      if ok and type(text) == 'string' then
+        return text, path
+      end
     end
-    return nil, folder
+    return nil, table.concat(searched, ' or ')
   end
 end
 
--- What is installed, for describe_project/fhBridge.listModules:
--- { folder = <path or nil>, modules = { {name=, size=, modified=}, ... }, error = <string|nil> }.
--- listFolder(folder) -> array of {path=, size=, modified=} | false, defaults to
--- fhFileUtils.getFolderContents; injectable for tests. Never errors.
-function M.list(folder, listFolder)
-  local result = { folder = folder, modules = {} }
-  if not folder then
-    result.error = 'no project is open, so there is no modules folder'
+local function defaultListFolder(f)
+  local fhfu = require('fhFileUtils')
+  if not fhfu.folderExists(f) then return {} end
+  return fhfu.getFolderContents(f, false, true)
+end
+
+-- What is installed, for describe_project/fhBridge.listModules. modules = {folder=,
+-- machineFolder=, listFolder=}, any of them nil; listFolder(folder) -> array of
+-- {path=, size=, modified=} | false defaults to fhFileUtils.getFolderContents (tests inject).
+-- Returns { folder=, machineFolder=, modules = { {name=, scope="project"|"machine", size=,
+-- modified=, shadowed=true when a project module of the same name wins}, ... }, error=? }.
+-- Never errors.
+function M.list(modules)
+  modules = modules or {}
+  local result = { folder = modules.folder, machineFolder = modules.machineFolder, modules = {} }
+  if not modules.folder and not modules.machineFolder then
+    result.error = 'no project is open and no machine-wide folder is known, so there is nothing to list'
     return result
   end
-  listFolder = listFolder or function(f)
-    local fhfu = require('fhFileUtils')
-    if not fhfu.folderExists(f) then return {} end
-    return fhfu.getFolderContents(f, false, true)
-  end
-  local ok, items = pcall(listFolder, folder)
-  if not ok or not items then
-    result.error = 'could not list ' .. folder .. ': ' .. tostring(items)
-    return result
-  end
-  for _, item in ipairs(items) do
-    local name = tostring(item.path or ''):match('([^\\/]+)%.lua$')
-    if name and name:match(M.NAME_PATTERN) then
-      table.insert(result.modules, { name = name, size = item.size, modified = item.modified })
+  local listFolder = modules.listFolder or defaultListFolder
+  local problems = {}
+  local inProject = {}
+  for _, place in ipairs({ { scope = 'project', folder = modules.folder },
+                           { scope = 'machine', folder = modules.machineFolder } }) do
+    if place.folder then
+      local ok, items = pcall(listFolder, place.folder)
+      if not ok or not items then
+        table.insert(problems, 'could not list ' .. place.folder .. ': ' .. tostring(items))
+      else
+        for _, item in ipairs(items) do
+          local name = tostring(item.path or ''):match('([^\\/]+)%.lua$')
+          if name and name:match(M.NAME_PATTERN) then
+            local entry = { name = name, scope = place.scope, size = item.size, modified = item.modified }
+            if place.scope == 'project' then
+              inProject[name] = true
+            elseif inProject[name] then
+              entry.shadowed = true
+            end
+            table.insert(result.modules, entry)
+          end
+        end
+      end
     end
   end
-  table.sort(result.modules, function(a, b) return a.name < b.name end)
+  if #problems > 0 then
+    result.error = table.concat(problems, '; ')
+  end
+  table.sort(result.modules, function(a, b)
+    if a.name ~= b.name then return a.name < b.name end
+    return a.scope == 'project' and b.scope ~= 'project'
+  end)
   return result
 end
 
@@ -99,7 +159,7 @@ function M.makeRequire(env, source, preScan)
       error('require: ' .. name .. ' -- ' .. FH_LIBRARY_HINTS[name], 2)
     end
     if not source then
-      error('require: user modules are not available here (no project data folder)', 2)
+      error('require: user modules are not available here (no modules folder is known)', 2)
     end
     if loading[name] then
       error('require: module ' .. name .. ' requires itself, directly or through another module', 2)
