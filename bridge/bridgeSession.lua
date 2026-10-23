@@ -53,6 +53,7 @@ local versionCompare = require("versionCompare")
 local sessionSettings = require("sessionSettings")
 local debugLog = require("debugLog")
 local sessionLogHelper = require("sessionLogHelper")
+local userModules = require("userModules")
 
 local PORT = 8734
 -- Last-used Access mode and idle-timeout minutes, loaded once here so the widgets below
@@ -396,7 +397,9 @@ function timPoll:action_cb()
     -- -- passing a restricted level here would trip runScript.lua's own bulkEnumerationViolation
     -- pre-scan and break describe_project outright the moment a Visibility level is restricted.
     local privacySettings = not request.forceReadOnly and currentPrivacySettings() or nil
-    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, privacySettings)
+    -- Re-read per call, so a module edited mid-Session is picked up without a restart.
+    local modules = { folder = userModules.folderFor(fhGetContextInfo("CI_PROJECT_DATA_FOLDER")) }
+    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, privacySettings, modules)
     client:send(response .. "\n")
     client:close()
 

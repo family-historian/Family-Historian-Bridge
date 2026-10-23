@@ -198,10 +198,17 @@ implements.
   array, not an error, when nothing matches; it errors only on a null pointer or a
   missing/malformed `tags` argument (nil, `""`, an empty array, or a non-string entry in the
   array).
+- `userModules.lua`: user project modules (issue #150). Gives every run_lua script a
+  `require(name)` that loads `<name>.lua` from `<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI
+  Connector\modules\`, compiled against the calling script's own sandbox env, plus
+  `fhBridge.listModules()`. Wired in by `runScript.lua`, never by `sandbox.lua`; the folder
+  comes from `bridgeSession.lua` on each call. Module text gets runScript's unrecognised-`fh*`,
+  leading-dot and bulk-enumeration pre-scans, not the write-name one. See
+  `docs/adr/0039-user-project-modules-compile-against-the-calling-sandbox.md`.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,
 `timeoutDisplay.lua`, `sourceHelper.lua`, `sessionLogHelper.lua`, `sessionSettings.lua`,
-`familyHelper.lua`, `richTextHelper.lua`, and `versionCompare.lua` have standalone unit
+`familyHelper.lua`, `richTextHelper.lua`, `userModules.lua`, and `versionCompare.lua` have standalone unit
 tests, in `tests/`
 (`*.test.lua`, run with a plain `lua` interpreter, no FH dependency). Keeping tests out
 of this folder means every file directly in `bridge/`

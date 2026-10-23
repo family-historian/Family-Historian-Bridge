@@ -17,6 +17,7 @@
 local sandbox = require('sandbox')
 local json = require('jsonEncode')
 local watchdog = require('watchdog')
+local userModules = require('userModules')
 
 local M = {}
 
@@ -193,11 +194,48 @@ local function attemptRollback(message)
   return rollbackResponse(message)
 end
 
+-- The pre-scans a user module's text gets before it compiles. Not the write-name scan: a
+-- module of write helpers is legitimate in a Read-only Session for its read helpers, and
+-- its write calls find no write function in a Read-only env, so they fail having written
+-- nothing. In Read-write, the runtime write-then-log backstop covers module code exactly as
+-- it covers the script's own.
+local function moduleViolation(text, privacySettings)
+  local messages = {}
+  local fhCall = unrecognizedFhCallViolation(text)
+  if fhCall then table.insert(messages, fhCall) end
+  local dataRef = dataReferenceViolation(text)
+  if dataRef then table.insert(messages, dataRef) end
+  local bulk = bulkEnumerationViolation(text, privacySettings)
+  if bulk then table.insert(messages, bulk) end
+  if #messages == 0 then
+    return nil
+  end
+  return table.concat(messages, '; ')
+end
+
+-- Gives env its require() and fhBridge.listModules(). modules = {folder=, source=,
+-- listFolder=}: folder is the modules folder (nil when no project data folder is known);
+-- source and listFolder override userModules' FH-backed defaults (tests).
+local function attachUserModules(env, modules, privacySettings)
+  modules = modules or {}
+  local source = modules.source or (modules.folder and userModules.folderSource(modules.folder))
+  env.require = userModules.makeRequire(env, source, function(text)
+    return moduleViolation(text, privacySettings)
+  end)
+  if type(env.fhBridge) == 'table' then
+    env.fhBridge.listModules = function()
+      return userModules.list(modules.folder, modules.listFolder)
+    end
+  end
+end
+
 -- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
 -- unfiltered "all"/"all", mirroring accessMode's own default-to-read-only above -- so a
 -- caller that never passes one (any pre-#141 test, or a session with no restriction)
 -- behaves exactly as before.
-function M.run(scriptText, accessMode, privacySettings)
+-- modules (issue #150): see attachUserModules. Omitted, require() still exists but reports
+-- that user modules are unavailable.
+function M.run(scriptText, accessMode, privacySettings, modules)
   accessMode = accessMode or 'read-only'
   privacySettings = privacySettings or { privateVisibility = 'all', livingVisibility = 'all' }
 
@@ -230,6 +268,7 @@ function M.run(scriptText, accessMode, privacySettings)
   if not envOk then
     return json.encode({ error = 'failed to build sandbox: ' .. tostring(env) })
   end
+  attachUserModules(env, modules, privacySettings)
 
   local chunk, loadErr = load(scriptText, 'run_lua', 't', env)
   if not chunk then
