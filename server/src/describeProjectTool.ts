@@ -76,6 +76,11 @@ Returns JSON shaped as:
     "CI_STRING_ENCODING": "<\\"ANSI\\" | \\"UTF-8\\">"
   },
   "fhAppVersion": "<Family Historian's own application version, e.g. \\"8.0.0\\", from fhGetAppVersion()>",
+  "userModules": {
+    "folder": "<where run_lua's require() looks: CI_PROJECT_DATA_FOLDER\\\\Plugin Data\\\\AI Connector\\\\modules, or null with no project>",
+    "modules": [ { "name": "<the name to require()>", "size": <bytes>, "modified": "<as FH reports it>" }, ... ],
+    "error": "<present only if the folder couldn't be listed>"
+  },
   "bridgeState": {
     "bridgeVersion": "<the running Bridge plugin's own version, or null if it couldn't be determined>",
     "serverVersion": "<this server's own version>",
@@ -96,6 +101,12 @@ contextInfo carries every fhGetContextInfo() value that's actually usable here: 
 window-handle values (CI_APP_HWND/CI_PARENT_HWND) and the two report/book-only values
 (CI_BOOK_CONTEXT/CI_BOOK_ITEM_HEADING, meaningless outside a report plugin's book context)
 are omitted — see the script's own comment for why.
+
+userModules lists the helper modules the user has installed for this project (issue #150).
+A run_lua script loads one with require("<name>"); it runs inside the script's own sandbox.
+Use an installed helper rather than re-writing what it does; search_gedcom_knowledge("user
+project modules") explains how require behaves. Absent when the Bridge plugin predates user
+modules.
 
 bridgeState describes the running Bridge plugin itself, not the FH project — accessMode is
 the Session's real read-only/read-write toggle, distinct from the Read-only sandbox this
@@ -329,6 +340,12 @@ do
   end
 end
 
+-- nil (so absent from the JSON) when the Bridge plugin predates fhBridge.listModules.
+local userModules = nil
+if fhBridge and fhBridge.listModules then
+  userModules = fhBridge.listModules()
+end
+
 return {
   recordCounts = recordCounts,
   tagCensus = {
@@ -342,6 +359,7 @@ return {
   },
   contextInfo = contextInfo,
   fhAppVersion = fhAppVersion,
+  userModules = userModules,
 }
 `;
 

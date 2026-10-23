@@ -213,20 +213,15 @@ local function moduleViolation(text, privacySettings)
   return table.concat(messages, '; ')
 end
 
--- Gives env its require() and fhBridge.listModules(). modules = {folder=, source=,
--- listFolder=}: folder is the modules folder (nil when no project data folder is known);
--- source and listFolder override userModules' FH-backed defaults (tests).
+-- Gives env its require(). modules = {folder=, source=, listFolder=}: folder is the modules
+-- folder (nil when no project data folder is known); source overrides userModules' FH-backed
+-- reader (tests). fhBridge.listModules comes from sandbox.build, which gets the same table.
 local function attachUserModules(env, modules, privacySettings)
   modules = modules or {}
   local source = modules.source or (modules.folder and userModules.folderSource(modules.folder))
   env.require = userModules.makeRequire(env, source, function(text)
     return moduleViolation(text, privacySettings)
   end)
-  if type(env.fhBridge) == 'table' then
-    env.fhBridge.listModules = function()
-      return userModules.list(modules.folder, modules.listFolder)
-    end
-  end
 end
 
 -- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
@@ -264,7 +259,7 @@ function M.run(scriptText, accessMode, privacySettings, modules)
     return json.encode({ error = table.concat(violations, '; ') })
   end
 
-  local envOk, env, tracker = pcall(sandbox.build, accessMode, privacySettings)
+  local envOk, env, tracker = pcall(sandbox.build, accessMode, privacySettings, modules)
   if not envOk then
     return json.encode({ error = 'failed to build sandbox: ' .. tostring(env) })
   end

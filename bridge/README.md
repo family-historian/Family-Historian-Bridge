@@ -201,8 +201,9 @@ implements.
 - `userModules.lua`: user project modules (issue #150). Gives every run_lua script a
   `require(name)` that loads `<name>.lua` from `<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI
   Connector\modules\`, compiled against the calling script's own sandbox env, plus
-  `fhBridge.listModules()`. Wired in by `runScript.lua`, never by `sandbox.lua`; the folder
-  comes from `bridgeSession.lua` on each call. Module text gets runScript's unrecognised-`fh*`,
+  `fhBridge.listModules()`. `require` is attached by `runScript.lua`, which owns the pre-scans;
+  `listModules` sits in `sandbox.lua`'s read-only `fhBridge` table with the other members; the
+  folder comes from `bridgeSession.lua` on each call. Module text gets runScript's unrecognised-`fh*`,
   leading-dot and bulk-enumeration pre-scans, not the write-name one. See
   `docs/adr/0039-user-project-modules-compile-against-the-calling-sandbox.md`.
 

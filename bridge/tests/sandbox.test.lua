@@ -427,6 +427,19 @@ check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-o
 check(env.fhBridge.setTftfText == nil, 'fhBridge.setTftfText absent under read-only (calls the real fhSetValueAsRichText write global directly — must not be reachable without the write gate)')
 check(env.fhBridge.createFact == nil, 'fhBridge.createFact absent under read-only (calls the real fhUtils.createFact write path directly — must not be reachable without the write gate)')
 
+-- fhBridge.listModules (issue #150): read-only, so present in both modes; with no modules
+-- table it reports that there is no folder rather than erroring.
+check(type(env.fhBridge.listModules) == 'function', 'fhBridge.listModules present under read-only')
+check(env.fhBridge.listModules().folder == nil and env.fhBridge.listModules().error ~= nil,
+  'fhBridge.listModules without a modules folder reports an error instead of raising one')
+do
+  local envMods = sandbox.build('read-only', nil, {
+    folder = 'F', listFolder = function() return { { path = 'F\\house.lua', size = 3 } } end,
+  })
+  local listing = envMods.fhBridge.listModules()
+  check(listing.folder == 'F' and listing.modules[1].name == 'house', 'fhBridge.listModules lists the folder sandbox.build was given')
+end
+
 -- Write tracker (issue #15): present on every build(), starts false, independent of
 -- accessMode (a read-only script can never flip it, since it has no write functions).
 check(type(tracker) == 'table' and tracker.wrote == false, 'read-only build returns a tracker with wrote = false')

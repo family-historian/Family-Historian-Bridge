@@ -851,3 +851,27 @@ describe("registerGedcomKnowledgeTools", () => {
     });
   });
 });
+
+describe("user project modules corpus entries (issue #150)", () => {
+  const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
+  const corpus = loadGedcomKnowledgeFromFile(CORPUS_PATH);
+
+  it('finds the user-modules guidance entry by the query describe_project points at ("user project modules")', () => {
+    const result = searchGedcomKnowledge(corpus, "user project modules");
+    expect(result.matches[0]?.id).toBe("run-lua-guidance-user-project-modules");
+  });
+
+  it("says where modules live, how to load one, and that the write-then-log rule covers module writes", () => {
+    const entry = corpus.find((e) => e.id === "run-lua-guidance-user-project-modules");
+    expect(entry?.text).toContain(String.raw`Plugin Data\AI Connector\modules`);
+    expect(entry?.text).toContain('require("<name>")');
+    expect(entry?.text).toMatch(/logActivity/);
+    expect(entry?.text).toMatch(/fhBridge\.listModules/);
+  });
+
+  it("no longer claims the sandbox has no require at all", () => {
+    const fhuEntry = corpus.find((e) => e.id === "run-lua-guidance-fhu-is-a-global");
+    expect(fhuEntry?.text).not.toMatch(/never exposes require/);
+    expect(fhuEntry?.text).toMatch(/run-lua-guidance-user-project-modules/);
+  });
+});

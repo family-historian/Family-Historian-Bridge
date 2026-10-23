@@ -422,3 +422,18 @@ describe("DESCRIBE_PROJECT_DESCRIPTION bridgeState shape (issue #109)", () => {
     expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/read-only sandbox/);
   });
 });
+
+describe("describe_project userModules (issue #150)", () => {
+  it("lists installed modules through fhBridge.listModules, guarded for a Bridge that predates it", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/if fhBridge and fhBridge\.listModules then/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/userModules = userModules,/);
+  });
+
+  it("documents the userModules shape and how a script loads a module", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"userModules"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"folder"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"modules"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('require("<name>")');
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('search_gedcom_knowledge("user');
+  });
+});

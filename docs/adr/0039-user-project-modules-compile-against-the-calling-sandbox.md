@@ -34,6 +34,9 @@ tracker and Read-only). A server-side prelude prepended to every script (shifts 
 numbers, compiles every helper every call, and the write-name pre-scan would reject every
 Read-only script once one write helper is in it).
 
-**Open.** `describe_project` listing modules (server side); a run_lua guidance corpus
-entry; a machine-wide fallback folder (not `CI_APP_DATA_FOLDER`, which FH asks plugins not
+- **Discoverable without spending run_lua's description budget** (ADR 0011: it is at 1,942 of
+  1,950 bytes). `describe_project` returns `userModules`, and the gedcom-knowledge corpus has
+  `run-lua-guidance-user-project-modules` and an `fhBridge.listModules` reference entry.
+
+**Open.** A machine-wide fallback folder (not `CI_APP_DATA_FOLDER`, which FH asks plugins not
 to use).
