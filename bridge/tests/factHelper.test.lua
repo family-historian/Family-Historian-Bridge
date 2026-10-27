@@ -71,6 +71,13 @@ function PtrMethods:MoveToFirstChildItem(parentPtr)
   self.index = 1
 end
 
+-- Every fixture here is a top-level record already, so climbing to the owning record
+-- (familyHelper.recordVisibility) is a copy of the same position.
+function PtrMethods:MoveToRecordItem(ptrRef)
+  self.list = ptrRef.list
+  self.index = ptrRef.index
+end
+
 function PtrMethods:MoveNext()
   self.index = self.index + 1
 end

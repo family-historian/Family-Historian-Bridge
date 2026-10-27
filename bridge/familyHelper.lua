@@ -32,17 +32,23 @@ end
 -- Most-restrictive-wins ordering for the two Visibility levels (issue #141).
 local VISIBILITY_RANK = { exclude = 1, nameOnly = 2, all = 3 }
 
--- Visibility level for ptr's own Private/Living Record Flags, per the currently-active
--- Session settings. Record Flags are Individual-only (FH help: "Record Flags can only be
+-- Visibility level for ptr's owning record's Private/Living Record Flags, per the currently-
+-- active Session settings. ptr may be any item: a Fact/field climbs to its owning record
+-- first (on a separate pointer, so ptr itself isn't moved), so a child of an Excluded
+-- Individual is gated the same as the Individual. Record Flags are Individual-only (FH
+-- help: "Record Flags can only be
 -- set on Individual records"), so anything else -- FAM, SOUR, ... -- is always "all". Flag
 -- tags are compared as literal strings ("__PRIVATE"/"__LIVING"), the same approach
 -- describe_project's own flag census already uses and tests, rather than resolving them via
 -- fhGetFlagTag -- see docs/adr/0014 and the FH help corpus's %INDI._FLGS.__PRIVATE% example.
 -- When both flags are set, the more restrictive configured level wins.
 local function recordVisibility(ptr)
-  if fhGetTag(ptr) ~= "INDI" then
+  local owner = fhNewItemPtr()
+  owner:MoveToRecordItem(ptr)
+  if owner:IsNull() or fhGetTag(owner) ~= "INDI" then
     return "all"
   end
+  ptr = owner
 
   local settings = M.getPrivacySettings()
   local level = "all"

@@ -64,7 +64,9 @@ end
 -- pre-#141 fixture) climbs to a generic non-INDI owner, so recordVisibility trivially
 -- returns "all" for it, same as today.
 function PtrMethods:MoveToRecordItem(ptrRef)
-  local owner = ptrRef.owner or { name = 'owner-record' }
+  -- Idempotent on a pointer that is already an owner record (carries .children), as the
+  -- real call is on a record -- recordVisibility climbs again from the owner it is handed.
+  local owner = ptrRef.owner or (ptrRef.children and ptrRef) or { name = 'owner-record' }
   self.list = nil
   self.index = nil
   self.name = owner.name

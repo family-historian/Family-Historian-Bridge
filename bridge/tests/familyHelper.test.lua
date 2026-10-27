@@ -100,6 +100,17 @@ function PtrMethods:MoveToRecordById(tag, id)
   self.node = nil
 end
 
+-- Climbs ptrRef's node to its owning record via the fixtures' .parent links.
+function PtrMethods:MoveToRecordItem(ptrRef)
+  local node = ptrRef.node
+  while node and node.parent do
+    node = node.parent
+  end
+  self.node = node
+  self.list = nil
+  self.index = nil
+end
+
 function PtrMethods:MoveToFirstChildItem(parentPtr)
   local children = (parentPtr.node and parentPtr.node.children) or {}
   self.list = children
@@ -292,13 +303,13 @@ local function newRecord(tag)
 end
 
 local function addTextChild(parent, tag, value)
-  local child = { tag = tag, children = {}, valueType = "text", value = value }
+  local child = { tag = tag, children = {}, valueType = "text", value = value, parent = parent }
   table.insert(parent.children, child)
   return child
 end
 
 local function addLinkChild(parent, tag, targetNode)
-  local child = { tag = tag, children = {}, valueType = "link", value = targetNode }
+  local child = { tag = tag, children = {}, valueType = "link", value = targetNode, parent = parent }
   table.insert(parent.children, child)
   return child
 end
@@ -341,10 +352,10 @@ local function addFlag(indi, flagTag)
     if child.tag == "_FLGS" then flgs = child end
   end
   if not flgs then
-    flgs = { tag = "_FLGS", children = {} }
+    flgs = { tag = "_FLGS", children = {}, parent = indi }
     table.insert(indi.children, flgs)
   end
-  table.insert(flgs.children, { tag = flagTag, children = {} })
+  table.insert(flgs.children, { tag = flagTag, children = {}, parent = flgs })
 end
 
 ------------------------------------------------------------------
@@ -697,6 +708,31 @@ do
     'a FAM link to an Excluded Individual comes back as a redacted, non-nil link descriptor, not the name')
   check(husbNode.link.id == nil and husbNode.link.text == nil,
     'the redacted link descriptor carries no id/name -- opaque, not just missing text')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
+end
+
+do
+  -- A pointer on a child item of an Excluded Individual is gated like the Individual itself.
+  familyHelper.setPrivacySettings({ privateVisibility = "exclude", livingVisibility = "all" })
+  local excluded = newIndi("Hidden Child Plugin", "Female")
+  addFlag(excluded, "__PRIVATE")
+  local nameChild = excluded.children[1]
+
+  local okDetails, errDetails = pcall(familyHelper.getAllDetails, ptrFor(nameChild))
+  check(not okDetails and contains(errDetails, "Excluded"), 'getAllDetails on a field under an Excluded Individual raises, naming Excluded')
+
+  local okFacts, errFacts = pcall(familyHelper.getFactsByTag, ptrFor(nameChild), { "NAME" })
+  check(not okFacts and contains(errFacts, "Excluded"), 'getFactsByTag on a field under an Excluded Individual raises, naming Excluded')
+
+  local visible = newIndi("Visible Child Plugin", "Male")
+  local visibleDetails = familyHelper.getAllDetails(ptrFor(visible.children[1]))
+  check(visibleDetails.tag == "NAME" and visibleDetails.value == "Visible Child Plugin",
+    'a field under an unflagged Individual is still returned')
+
+  local fam = newRecord("FAM")
+  local famChild = addTextChild(fam, "NOTE", "plain")
+  check(familyHelper.getAllDetails(ptrFor(famChild)).tag == "NOTE", 'a field under a non-Individual record is never blocked')
 
   familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
 end
