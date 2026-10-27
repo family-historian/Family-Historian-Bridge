@@ -5,6 +5,7 @@ import {
   DESCRIBE_PROJECT_SCRIPT,
   handleDescribeProject,
   makeDescribeProjectDeps,
+  withUserModulesShape,
   type DescribeProjectDeps,
 } from "./describeProjectTool.js";
 import { SERVER_VERSION } from "./serverVersion.js";
@@ -420,5 +421,86 @@ describe("DESCRIBE_PROJECT_DESCRIPTION bridgeState shape (issue #109)", () => {
   it("distinguishes bridgeState's Access mode from the Read-only sandbox this tool's own script always runs under", () => {
     expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/session/);
     expect(DESCRIBE_PROJECT_DESCRIPTION.toLowerCase()).toMatch(/read-only sandbox/);
+  });
+});
+
+describe("describe_project userModules (issue #150)", () => {
+  it("lists installed modules through fhBridge.listModules, guarded for a Bridge that predates it", () => {
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/if fhBridge and fhBridge\.listModules then/);
+    expect(DESCRIBE_PROJECT_SCRIPT).toMatch(/userModules = userModules,/);
+  });
+
+  it("documents the userModules shape and how a script loads a module", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"userModules"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"folder"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"modules"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('require("<name>")');
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('search_gedcom_knowledge("user');
+  });
+
+  it("documents whether each module loaded, what it exports and its _DOC lines", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"loaded"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"loadError"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"exports"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"doc"[^\n]*_DOC/);
+  });
+});
+
+describe("describe_project userModules: the user's own folder (issue #150)", () => {
+  it("documents the user folder, the search order and the scope/shadowed fields", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"userFolder"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).not.toMatch(/machineFolder|machine-wide/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"scope"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"shadowed"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/project folder is searched\s+first/);
+  });
+});
+
+describe("describe_project userModules: unknown fields are null, lists are arrays", () => {
+  const describeWith = async (raw: string) => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => raw,
+      queryBridgeVersion: matchingVersion,
+    });
+    return JSON.parse((result.content[0] as { text: string }).text);
+  };
+
+  it("reports userModules as null when the Bridge plugin predates it", async () => {
+    const parsed = await describeWith('{"recordCounts":{"INDI":1}}');
+    expect(parsed).toHaveProperty("userModules", null);
+    expect(parsed.recordCounts).toEqual({ INDI: 1 });
+  });
+
+  it("turns the {} the Bridge sends for no modules into [] and fills the folders with null", async () => {
+    const parsed = await describeWith('{"userModules":{"modules":{},"error":"no project"}}');
+    expect(parsed.userModules).toEqual({ folder: null, userFolder: null, error: "no project", modules: [] });
+  });
+
+  it("fills each module's unknown fields with null and makes exports an array", async () => {
+    const parsed = await describeWith(
+      '{"userModules":{"folder":"P","modules":[' +
+        '{"name":"a","scope":"project","loaded":true,"exports":{}},' +
+        '{"name":"b","scope":"user","shadowed":true},' +
+        '{"name":"c","scope":"project","loaded":true,"exports":["x"],"doc":{"x":"Does x"}}]}}',
+    );
+    const [a, b, c] = parsed.userModules.modules;
+    expect(parsed.userModules.userFolder).toBeNull();
+    expect(parsed.userModules.error).toBeNull();
+    expect(a).toEqual({ name: "a", scope: "project", size: null, modified: null, shadowed: false, loaded: true, loadError: null, doc: null, exports: [] });
+    expect(b).toEqual({ name: "b", scope: "user", size: null, modified: null, shadowed: true, loaded: null, loadError: null, doc: null, exports: null });
+    expect(c.exports).toEqual(["x"]);
+    expect(c.doc).toEqual({ x: "Does x" });
+  });
+
+  it("leaves a script error alone", async () => {
+    const result = await handleDescribeProject({
+      runLuaOnBridge: async () => '{"error":"boom"}',
+      queryBridgeVersion: matchingVersion,
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("does nothing to fields it doesn't own", () => {
+    expect(withUserModulesShape({ fhAppVersion: "8.0.3" })).toEqual({ fhAppVersion: "8.0.3", userModules: null });
   });
 });

@@ -39,4 +39,33 @@ function M.new(opts)
   return { check = check, contains = contains, report = report }
 end
 
+-- Fakes the FH file functions userModules.lua reads with: the fhLoadTextFile global and
+-- fhFileUtils's fileExists, folderExists and getFolderContents. In the returned state,
+-- files maps a full path to its text (false: the file is there but unreadable) and folders
+-- maps a folder to its listing ({path=, size=, modified=} entries), to a function returning
+-- one, or to a message getFolderContents raises. Both tables may be replaced or changed at
+-- any time. restore() puts back whatever was there before.
+function M.fakeFhFiles()
+  local state = { files = {}, folders = {} }
+  local savedLoad, savedFileUtils = fhLoadTextFile, package.loaded['fhFileUtils']
+  fhLoadTextFile = function(path)
+    local text = state.files[path]
+    return type(text) == 'string' and text or nil
+  end
+  package.loaded['fhFileUtils'] = {
+    fileExists = function(path) return state.files[path] ~= nil end,
+    folderExists = function(folder) return state.folders[folder] ~= nil end,
+    getFolderContents = function(folder)
+      local listing = state.folders[folder]
+      if type(listing) == 'string' then error(listing) end
+      if type(listing) == 'function' then return listing() end
+      return listing
+    end,
+  }
+  function state.restore()
+    fhLoadTextFile, package.loaded['fhFileUtils'] = savedLoad, savedFileUtils
+  end
+  return state
+end
+
 return M

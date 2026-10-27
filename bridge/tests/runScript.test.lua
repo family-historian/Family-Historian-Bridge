@@ -4,7 +4,9 @@
 -- spec's Testing Decisions).
 
 package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
+  .. ';' .. arg[0]:match("(.*[/\\])") .. '?.lua'
 local runScript = require('runScript')
+local testHelpers = require('testHelpers')
 
 local failures = 0
 
@@ -520,6 +522,151 @@ end
 
 check(not contains(runScript.run("local records = {}; return records", 'read-only', { privateVisibility = 'exclude', livingVisibility = 'all' }), 'bypasses'),
   'a bare local variable named records is not mistaken for the fhu.records idiom (word-boundary match requires the fhu. prefix)')
+
+-- User project modules: require() end to end through a real sandbox env, with fhLoadTextFile
+-- and fhFileUtils faked (testHelpers.fakeFhFiles) over an in-memory project folder.
+do
+  local folder = 'P\\Plugin Data\\AI Connector\\modules'
+  local fake = testHelpers.fakeFhFiles()
+  local files = {}
+  fake.files = setmetatable({}, { __index = function(_, path)
+    return files[path:sub(#folder + 2):match('^(.+)%.lua$') or '']
+  end })
+  fake.folders[folder] = function()
+    local out = {}
+    for name, text in pairs(files) do table.insert(out, { path = folder .. '\\' .. name .. '.lua', size = #text }) end
+    return out
+  end
+  local modules = { folder = folder }
+  local function run(script, mode, privacy)
+    return runScript.run(script, mode or 'read-only', privacy, modules)
+  end
+
+  files.helpers = 'local M = {}\nfunction M.double(n) return n * 2 end\nreturn M'
+  check(run("return require('helpers').double(21)") == '42', 'a script can require a module and call it')
+  check(run("return require('helpers') == require('helpers')") == 'true',
+    'a module loads once per call; a second require returns the same table')
+
+  files.envcheck = 'return { hasFhu = fhu ~= nil, noOs = os.execute == nil, noIo = io == nil }'
+  local envResult = run("return require('envcheck')")
+  check(contains(envResult, '"hasFhu":true') and contains(envResult, '"noOs":true') and contains(envResult, '"noIo":true'),
+    'a module runs in the script\'s own sandbox env, with no more access than the script')
+
+  files.counter = 'calls = (calls or 0) + 1\nreturn calls'
+  check(run("return require('counter')") == '1' and run("return require('counter')") == '1',
+    'module state does not survive between run_lua calls')
+
+  files.writer = 'local M = {}\nfunction M.read() return "read ok" end\n' ..
+    'function M.write(p) local i = fhCreateItem("NOTE2", p) end\nreturn M'
+  check(run("return require('writer').read()") == '"read ok"',
+    'a module containing write calls still loads in Read-only, so its read helpers work')
+  local roWrite = run("return require('writer').write('ptr')")
+  check(contains(roWrite, '"error"') and contains(roWrite, 'nil value'),
+    'a module\'s write call fails in Read-only, since the Read-only env has no write functions')
+
+  fhCreateItem = function() return 'item' end
+  resetCommitRollbackStubs()
+  local unlogged = run("require('writer').write('ptr'); return 'done'", 'read-write')
+  check(contains(unlogged, 'without logging') and fhRollbackCalls == 1,
+    'a module write without logActivity is rolled back by the runtime backstop')
+
+  files.loggedwriter = 'local M = {}\nfunction M.write(p) fhCreateItem("NOTE2", p); fhBridge.logActivity(p, "wrote") end\nreturn M'
+  resetCommitRollbackStubs()
+  local logged = run("require('loggedwriter').write('ptr'); return 'done'", 'read-write')
+  check(logged == '"done"' and fhCommitCalls == 1, 'a module write that logs is committed like the script\'s own')
+  fhCreateItem = nil
+
+  files.typo = 'return fhGetItemTxt(nil, "~")'
+  local typo = run("return require('typo')")
+  check(contains(typo, 'typo.lua') and contains(typo, 'unrecognized function fhGetItemTxt'),
+    'the unrecognised-fh* pre-scan applies to module text and names the module')
+
+  files.dotref = 'local p = fhNewItemPtr()\np:MoveTo(p, ".DATE")\nreturn 1'
+  check(contains(run("return require('dotref')"), 'dotref.lua'), 'the leading-dot data-reference pre-scan applies to module text')
+
+  files.walker = 'local p = fhNewItemPtr()\np:MoveToFirstRecord("INDI")\nreturn 1'
+  check(contains(run("return require('walker')", 'read-only', { privateVisibility = 'exclude', livingVisibility = 'all' }), 'bypasses'),
+    'the bulk-enumeration pre-scan applies to module text while Visibility is restricted')
+
+  files.thrower = 'local x = 1\nerror("module failed here")'
+  check(contains(run("return require('thrower')"), 'thrower.lua:2: module failed here'),
+    'a runtime error in a module reports the module file and line')
+
+  check(contains(run("return require('nowhere')"), 'no module nowhere in P\\\\Plugin Data'),
+    'a missing module names the folder it looked in')
+  check(contains(run("local a = 1\n\nlocal m = require('nowhere')\nreturn m"), ']:3: require: no module nowhere'),
+    'a require error gives the script line that asked (lost only for `return require(...)`, a tail call)')
+  files.outer = 'local x = 1\nlocal inner = require("nowhere")\nreturn inner'
+  check(contains(run("local m = require('outer')\nreturn m"), 'outer.lua:2: require: no module nowhere'),
+    'a require error inside a module gives that module\'s file and line')
+
+  files.spinner = 'while true do end'
+  check(contains(run("return require('spinner')"), 'instruction limit'), 'the watchdog bounds module code too')
+
+  local listing = run("return fhBridge.listModules()")
+  check(contains(listing, '"name":"helpers"') and contains(listing, '"folder":"P'),
+    'fhBridge.listModules reports the installed modules and the folder')
+  check(contains(listing, '"exports":["double"]'),
+    'fhBridge.listModules loads each module through the script\'s own require and reports its exports')
+  check(contains(listing, '"loaded":false') and contains(listing, 'thrower.lua:2'),
+    'fhBridge.listModules reports a module that fails to load, without failing the listing')
+  check(contains(listing, 'aborted: exceeded the instruction limit') and contains(listing, '"exports":["double"]'),
+    'a module that loops fails its own listing entry on its own budget; the others still load, in any order')
+  resetCommitRollbackStubs()
+  local rwListing = run("return fhBridge.listModules()", 'read-write')
+  check(contains(rwListing, '"name":"helpers"') and not contains(rwListing, '"loaded"') and not contains(rwListing, 'instruction limit'),
+    'in a Read-write Session fhBridge.listModules lists without loading any module')
+  local looped = run("for _ = 1, 5 do fhBridge.listModules() end\nreturn fhBridge.listModules()")
+  check(contains(looped, 'budget is spent'),
+    'a script that lists over and over shares one listing budget per call, so a looping module can\'t outrun it')
+  files.selflister = 'local listing = fhBridge.listModules()\n' ..
+    'return { count = #listing.modules, anyLoaded = listing.modules[1].loaded ~= nil }'
+  local selfListed = run("local r = require('selflister')\nreturn r")
+  check(contains(selfListed, '"anyLoaded":false') and not contains(selfListed, 'requires itself'),
+    'a module that lists while it is loading gets names only, not a false "requires itself" for itself')
+
+  files.uses_helpers = 'local h = require("helpers")\nreturn { quad = function(n) return h.double(h.double(n)) end }'
+  check(run("return require('uses_helpers').quad(5)") == '20', 'a module can require another module end to end')
+
+  local survived = run("local ok, err = pcall(require, 'thrower')\n" ..
+    "local _, again = pcall(require, 'thrower')\n" ..
+    "return { ok = ok, err = tostring(err), again = tostring(again), after = require('helpers').double(4) }")
+  check(contains(survived, '"ok":false') and contains(survived, 'thrower.lua:2') and contains(survived, '"after":8'),
+    'a broken module fails only its require: a script that catches the error carries on')
+  check(contains(survived, '"again":"thrower.lua:2') and not contains(survived, 'requires itself'),
+    'requiring a broken module a second time reports its own error again, not a false "requires itself"')
+
+  check(contains(runScript.run("return require('helpers')", 'read-only'), 'not available'),
+    'without a modules argument, require says user project modules are unavailable')
+
+  local restricted = { privateVisibility = 'exclude', livingVisibility = 'all' }
+  local describeStyle = runScript.run("return fhBridge.listModules()", 'read-only', nil,
+    { folder = folder, sessionVisibility = restricted })
+  check(contains(describeStyle, '"name":"walker"') and contains(describeStyle, 'bypasses'),
+    'modules are pre-scanned against the Session\'s real Visibility even when the script itself runs unfiltered, as describe_project does')
+
+  fake.restore()
+end
+
+-- Project folder first, then the user's folder, through the real FH-backed reader.
+do
+  local fake = testHelpers.fakeFhFiles()
+  fake.files = {
+    ['P\\house.lua'] = 'return "project house"',
+    ['U\\house.lua'] = 'return "user house"',
+    ['U\\common.lua'] = 'return "user common"',
+  }
+  local both = { folder = 'P', userFolder = 'U' }
+  check(runScript.run("return require('house')", 'read-only', nil, both) == '"project house"',
+    'a project module overrides a user one of the same name')
+  check(runScript.run("return require('common')", 'read-only', nil, both) == '"user common"',
+    'a module only in the user folder is found there')
+  check(runScript.run("return require('common')", 'read-only', nil, { userFolder = 'U' }) == '"user common"',
+    'user modules load with no project folder at all')
+  check(contains(runScript.run("return require('absent')", 'read-only', nil, both), 'no module absent in P or U'),
+    'a missing module names both folders searched')
+  fake.restore()
+end
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))

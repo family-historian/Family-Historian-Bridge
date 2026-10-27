@@ -25,11 +25,19 @@
   `describe_project`/`install_fh_plugin`'s fixed internal scripts are exempt from all of
   this (`request.forceReadOnly`) — reviewed source, not user-supplied `run_lua` text.
 - **Sandbox**: `bridge/sandbox.lua`'s allowlisted `_ENV` — see `mem:conventions` for the
-  allowlist-not-denylist rule. `fhu` is a proxied `fhUtils`, not the raw module (`require`
-  isn't in the allowlist). 8 `fhu` methods are always blocked regardless of Access mode
-  (pop real modal dialogs, or touch disk directly): getParam, createUpdateFact,
-  pickIndividualPrompt, yes, stripCommas (UI-arg form), saveOptions, loadOptions,
-  resetOptions.
+  allowlist-not-denylist rule. `fhu` is a proxied `fhUtils`, not the raw module (the
+  sandbox's `require` loads user project modules only, so `require("fhUtils")` errors). 8
+  `fhu` methods are always blocked regardless of Access mode (pop real modal dialogs, or
+  touch disk directly): getParam, createUpdateFact, pickIndividualPrompt, yes, stripCommas
+  (UI-arg form), saveOptions, loadOptions, resetOptions.
+- **User project module**: a `<name>.lua` the user installs by hand, loaded by run_lua's
+  `require(name)` and compiled against the calling script's own sandbox env (ADR 0039).
+  Two folders, searched in order: the **project folder**
+  (`<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI Connector\modules`) and the **user folder**
+  (`AI Connector\modules` in FH's per-user Plugin Data folder, the `CURRENT_USER` scope). A
+  **user-folder module** that a same-named project module overrides is **shadowed** (names
+  compared ignoring case, as Windows does). Avoid "plugin" or "library" for these: a module
+  is neither installed through FH nor shipped with the Bridge.
 - **FH auto-undo**: FH's own native undo (Ctrl-Z, or automatic on an uncaught Lua error).
   This project implements no undo logic of its own — `run_lua` deliberately re-throws a
   write script's runtime error rather than swallowing it, so this safety net fires (ADR

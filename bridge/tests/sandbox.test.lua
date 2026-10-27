@@ -3,6 +3,8 @@
 -- allowlist: the basics are present, and nothing dangerous leaked in by accident.
 
 package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
+  .. ';' .. arg[0]:match("(.*[/\\])") .. '?.lua'
+local testHelpers = require('testHelpers')
 local sandbox = require('sandbox')
 
 local failures = 0
@@ -426,6 +428,74 @@ check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-onl
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
 check(env.fhBridge.setTftfText == nil, 'fhBridge.setTftfText absent under read-only (calls the real fhSetValueAsRichText write global directly — must not be reachable without the write gate)')
 check(env.fhBridge.createFact == nil, 'fhBridge.createFact absent under read-only (calls the real fhUtils.createFact write path directly — must not be reachable without the write gate)')
+
+-- fhBridge.listModules: read-only, so present in both modes; with no modules
+-- table it reports that there is no folder rather than erroring.
+check(type(env.fhBridge.listModules) == 'function', 'fhBridge.listModules present under read-only')
+check(env.fhBridge.listModules().folder == nil and env.fhBridge.listModules().error ~= nil,
+  'fhBridge.listModules without a modules folder reports an error instead of raising one')
+do
+  local fake = testHelpers.fakeFhFiles()
+  fake.folders.F = { { path = 'F\\house.lua', size = 3 } }
+  local envMods = sandbox.build('read-only', nil, { folder = 'F' })
+  local listing = envMods.fhBridge.listModules()
+  check(listing.folder == 'F' and listing.modules[1].name == 'house', 'fhBridge.listModules lists the folder sandbox.build was given')
+
+  -- runScript attaches the real require to the modules table after sandbox.build; these
+  -- tests put a fake there instead.
+  local loads = {}
+  local roMods = { folder = 'F', require = function(name) table.insert(loads, 'ro:' .. name); return {} end }
+  local roEnv = sandbox.build('read-only', nil, roMods)
+  check(roEnv.fhBridge.listModules().modules[1].loaded == true and loads[1] == 'ro:house',
+    'in read-only, listModules loads each module through the require runScript attached')
+  roEnv.require = function() error('the script\'s own require should never be used for a listing') end
+  check(roEnv.fhBridge.listModules().modules[1].loaded == true,
+    'a script that rebinds its own require doesn\'t change what the listing loads through')
+  local rwMods = { folder = 'F', require = function(name) table.insert(loads, 'rw:' .. name); return {} end }
+  local rwListing = sandbox.build('read-write', nil, rwMods).fhBridge.listModules()
+  check(#loads == 2 and rwListing.modules[1].name == 'house' and rwListing.modules[1].loaded == nil,
+    'in Read-write, listModules lists without loading, so a listing never runs module code that writes')
+
+  -- Runs fn with familyHelper's Visibility setter recording what it is given; returns fn's
+  -- results after putting the real setter back. current() reads the last setting.
+  local recorded
+  local function current() return recorded and recorded.privateVisibility end
+  local function recordingVisibility(fn)
+    local realSet = fakeFamilyHelper.setPrivacySettings
+    fakeFamilyHelper.setPrivacySettings = function(settings) recorded = settings end
+    fn()
+    fakeFamilyHelper.setPrivacySettings = realSet
+  end
+  local restricted = { privateVisibility = 'exclude', livingVisibility = 'all' }
+
+  local seenWhileLoading
+  recordingVisibility(function()
+    local describeMods = { folder = 'F', sessionVisibility = restricted }
+    describeMods.require = function() seenWhileLoading = current(); return {} end
+    sandbox.build('read-only', nil, describeMods).fhBridge.listModules()
+  end)
+  check(seenWhileLoading == 'exclude',
+    'modules loaded for the listing see the Session\'s real Visibility, even in an env built unfiltered (describe_project)')
+  check(current() == 'all', 'after the listing, the env\'s own Visibility is put back')
+
+  local nestedLoads, innerListing, afterInner = 0, nil, nil
+  recordingVisibility(function()
+    local nestMods = { folder = 'F', sessionVisibility = restricted }
+    local nestEnv = sandbox.build('read-only', nil, nestMods)
+    nestMods.require = function()
+      nestedLoads = nestedLoads + 1
+      innerListing = nestEnv.fhBridge.listModules()
+      afterInner = current()
+      return {}
+    end
+    nestEnv.fhBridge.listModules()
+  end)
+  check(nestedLoads == 1 and innerListing.modules[1].loaded == nil,
+    'a module that lists while being loaded for a listing gets names only, loading nothing again')
+  check(afterInner == 'exclude',
+    'so the rest of that module still runs under the Session\'s Visibility, not the env\'s unfiltered one')
+  fake.restore()
+end
 
 -- Write tracker (issue #15): present on every build(), starts false, independent of
 -- accessMode (a read-only script can never flip it, since it has no write functions).

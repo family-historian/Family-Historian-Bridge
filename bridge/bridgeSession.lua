@@ -53,6 +53,7 @@ local versionCompare = require("versionCompare")
 local sessionSettings = require("sessionSettings")
 local debugLog = require("debugLog")
 local sessionLogHelper = require("sessionLogHelper")
+local userModules = require("userModules")
 
 local PORT = 8734
 -- Last-used Access mode and idle-timeout minutes, loaded once here so the widgets below
@@ -395,8 +396,14 @@ function timPoll:action_cb()
     -- run_lua text, and describe_project's own census walk relies on raw MoveToFirstRecord
     -- -- passing a restricted level here would trip runScript.lua's own bulkEnumerationViolation
     -- pre-scan and break describe_project outright the moment a Visibility level is restricted.
-    local privacySettings = not request.forceReadOnly and currentPrivacySettings() or nil
-    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, privacySettings)
+    local sessionVisibility = currentPrivacySettings()
+    local privacySettings = not request.forceReadOnly and sessionVisibility or nil
+    -- User project modules are user-supplied, so they always get the Session's real
+    -- Visibility, even when describe_project's listing loads them.
+    local modules = userModules.foldersFromFH()
+    modules.sessionVisibility = sessionVisibility
+    local response, rethrowErr, transactionResult =
+        runScript.run(script, accessMode, privacySettings, modules)
     client:send(response .. "\n")
     client:close()
 

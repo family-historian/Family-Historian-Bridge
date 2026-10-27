@@ -202,10 +202,15 @@ end
 -- accessMode ("read-only"/"read-write") comes from the bridge dialog's toggle. Returns the
 -- sandbox env plus a tracker table ({wrote, logged}) the caller can inspect after running a
 -- script -- kept out of env itself so the sandboxed script can't read or tamper with it.
--- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
--- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
--- default for why callers predating #141 need no changes.
-function M.build(accessMode, privacySettings)
+-- privacySettings ({privateVisibility=, livingVisibility=}) defaults to unfiltered
+-- "all"/"all", mirroring accessMode's own default.
+-- modules ({folder=, userFolder=, sessionVisibility=}) backs fhBridge.listModules; nil
+-- reports no folder. require() itself is attached by runScript.lua, which owns the
+-- pre-scans, and adds it to modules as require= and loadedValue= after this returns, so
+-- listModules reads them at call time. In read-only, listModules loads each module through
+-- that require to report exports; in read-write it only lists, so a listing never runs module
+-- code that could write.
+function M.build(accessMode, privacySettings, modules)
   accessMode = accessMode or "read-only"
   privacySettings = privacySettings or { privateVisibility = "all", livingVisibility = "all" }
   local env = {}
@@ -390,13 +395,35 @@ function M.build(accessMode, privacySettings)
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
   local realRichTextHelper = require('richTextHelper')
+  local userModules = require('userModules')
   -- Module-level, not threaded through every fhBridge.* call's own parameters: FH's IUP
   -- mainloop is single-threaded (one script runs to completion before the next starts, same
   -- reasoning documented elsewhere for why Start/Stop can't race a running script), so
   -- setting this once per M.build call is safe and keeps getFamilyGroup(ptrRecord, ...)
   -- etc.'s public signatures unchanged.
   realFamilyHelper.setPrivacySettings(privacySettings)
+  -- One per call, shared by every listing in it (see userModules.list).
+  local listingBudget = userModules.newListingBudget()
+  local listModules
+  function listModules()
+    -- A listing made while a module is loading gets names only: loading then would report
+    -- that module as requiring itself, and inside another listing would put this env's
+    -- Visibility back mid-load and spend past the call's budget.
+    local require = modules and modules.require
+    if accessMode ~= "read-only" or not require or userModules.isRunning(listModules)
+        or userModules.isRunning(require) then
+      return userModules.list(modules, nil)
+    end
+    -- Loads run under modules.sessionVisibility, then this env's own is put back.
+    local sessionVisibility = modules and modules.sessionVisibility
+    if sessionVisibility then realFamilyHelper.setPrivacySettings(sessionVisibility) end
+    local listing = userModules.list(modules,
+      { require = require, loadedValue = modules.loadedValue, budget = listingBudget })
+    if sessionVisibility then realFamilyHelper.setPrivacySettings(privacySettings) end
+    return listing
+  end
   env.fhBridge = {
+    listModules = listModules,
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
     getAncestors = realFamilyHelper.getAncestors,

@@ -13,7 +13,8 @@ major-only, inert pre-1.0), `sourceHelper.lua` (`fhBridge.createSourceFromTempla
 `citeSource`, `findSources`, `getTemplateFieldCensus`), `sessionLogHelper.lua`
 (`fhBridge.logActivity`), `familyHelper.lua` (6 read-only query helpers: getFamilyGroup,
 getAncestors, getDescendants, getAllDetails, findByNames, getFactsByTag — all accept
-either a live pointer or a qualified-id string like `"I219"`).
+either a live pointer or a qualified-id string like `"I219"`), `userModules.lua` (run_lua's
+`require` for user project modules, and `fhBridge.listModules`; ADR 0039).
 
 `AI Connector.fh_lua` itself (IUP dialog + TCP listener + framing) has no automatable
 seam — FH is proprietary, Windows/CrossOver-only — tested manually inside FH only (see
