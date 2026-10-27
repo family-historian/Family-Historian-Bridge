@@ -205,8 +205,9 @@ end
 -- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
 -- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
 -- default for why callers predating #141 need no changes.
--- modules ({folder=, machineFolder=, listFolder=}, issue #150) backs fhBridge.listModules;
--- nil reports no folder. require() itself is attached by runScript.lua, which owns the pre-scans.
+-- modules ({folder=, machineFolder=, listFolder=}) backs fhBridge.listModules; nil reports no
+-- folder. require() itself is attached by runScript.lua, which owns the pre-scans; listModules
+-- loads each module through it, so it reads env.require at call time, not here.
 function M.build(accessMode, privacySettings, modules)
   accessMode = accessMode or "read-only"
   privacySettings = privacySettings or { privateVisibility = "all", livingVisibility = "all" }
@@ -392,15 +393,15 @@ function M.build(accessMode, privacySettings, modules)
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
   local realRichTextHelper = require('richTextHelper')
+  local userModules = require('userModules')
   -- Module-level, not threaded through every fhBridge.* call's own parameters: FH's IUP
   -- mainloop is single-threaded (one script runs to completion before the next starts, same
   -- reasoning documented elsewhere for why Start/Stop can't race a running script), so
   -- setting this once per M.build call is safe and keeps getFamilyGroup(ptrRecord, ...)
   -- etc.'s public signatures unchanged.
   realFamilyHelper.setPrivacySettings(privacySettings)
-  local userModules = require('userModules')
   env.fhBridge = {
-    listModules = function() return userModules.list(modules) end,
+    listModules = function() return userModules.list(modules, env.require) end,
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
     getAncestors = realFamilyHelper.getAncestors,

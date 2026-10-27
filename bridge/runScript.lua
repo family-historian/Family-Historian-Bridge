@@ -194,34 +194,38 @@ local function attemptRollback(message)
   return rollbackResponse(message)
 end
 
--- The pre-scans a user module's text gets before it compiles. Not the write-name scan: a
--- module of write helpers is legitimate in a Read-only Session for its read helpers, and
--- its write calls find no write function in a Read-only env, so they fail having written
--- nothing. In Read-write, the runtime write-then-log backstop covers module code exactly as
--- it covers the script's own.
-local function moduleViolation(text, privacySettings)
+-- Every text pre-scan's message for text, joined with '; ', or nil when all pass. All of them
+-- run rather than stopping at the first hit, so a script tripping several hears about each
+-- in one round-trip. accessMode nil skips the write-name scan, which is how module text is
+-- scanned: a module of write helpers is legitimate in a Read-only Session for its read
+-- helpers, its write calls find no write function in a Read-only env, and in Read-write the
+-- runtime write-then-log backstop covers module code exactly as it covers the script's own.
+local function textViolations(text, accessMode, privacySettings)
   local messages = {}
-  local fhCall = unrecognizedFhCallViolation(text)
-  if fhCall then table.insert(messages, fhCall) end
-  local dataRef = dataReferenceViolation(text)
-  if dataRef then table.insert(messages, dataRef) end
-  local bulk = bulkEnumerationViolation(text, privacySettings)
-  if bulk then table.insert(messages, bulk) end
+  for _, message in ipairs({
+    accessMode and preScanViolation(text, accessMode) or false,
+    unrecognizedFhCallViolation(text) or false,
+    dataReferenceViolation(text) or false,
+    bulkEnumerationViolation(text, privacySettings) or false,
+  }) do
+    if message then
+      table.insert(messages, message)
+    end
+  end
   if #messages == 0 then
     return nil
   end
   return table.concat(messages, '; ')
 end
 
--- Gives env its require(). modules = {folder=, machineFolder=, source=, listFolder=}: folder
--- is the project's modules folder, machineFolder the machine-wide one (either nil when not
--- known), searched in that order; source overrides userModules' FH-backed reader (tests). fhBridge.listModules comes from sandbox.build, which gets the same table.
+-- Gives env its require(), searching userModules.searchOrder(modules). modules.source, when
+-- present, replaces the FH-backed file reader (tests).
 local function attachUserModules(env, modules, privacySettings)
   modules = modules or {}
   local order = userModules.searchOrder(modules)
   local source = modules.source or (#order > 0 and userModules.folderSource(order)) or nil
   env.require = userModules.makeRequire(env, source, function(text)
-    return moduleViolation(text, privacySettings)
+    return textViolations(text, nil, privacySettings)
   end)
 end
 
@@ -229,35 +233,16 @@ end
 -- unfiltered "all"/"all", mirroring accessMode's own default-to-read-only above -- so a
 -- caller that never passes one (any pre-#141 test, or a session with no restriction)
 -- behaves exactly as before.
--- modules (issue #150): see attachUserModules. Omitted, require() still exists but reports
--- that user modules are unavailable.
+-- modules ({folder=, machineFolder=}, from userModules.foldersFromFH) gives the script its
+-- require() and fhBridge.listModules. Omitted, require() still exists but reports that user
+-- modules are unavailable.
 function M.run(scriptText, accessMode, privacySettings, modules)
   accessMode = accessMode or 'read-only'
   privacySettings = privacySettings or { privateVisibility = 'all', livingVisibility = 'all' }
 
-  -- All three pre-scans below run unconditionally and their messages are joined rather than
-  -- short-circuiting after the first hit -- a script tripping more than one should hear
-  -- about everything wrong with it in one round-trip, not fix one violation only to hit the
-  -- next on resubmission.
-  local violations = {}
-  local writeViolation = preScanViolation(scriptText, accessMode)
-  if writeViolation then
-    table.insert(violations, writeViolation)
-  end
-  local fhCallViolation = unrecognizedFhCallViolation(scriptText)
-  if fhCallViolation then
-    table.insert(violations, fhCallViolation)
-  end
-  local dataRefViolation = dataReferenceViolation(scriptText)
-  if dataRefViolation then
-    table.insert(violations, dataRefViolation)
-  end
-  local bulkViolation = bulkEnumerationViolation(scriptText, privacySettings)
-  if bulkViolation then
-    table.insert(violations, bulkViolation)
-  end
-  if #violations > 0 then
-    return json.encode({ error = table.concat(violations, '; ') })
+  local violation = textViolations(scriptText, accessMode, privacySettings)
+  if violation then
+    return json.encode({ error = violation })
   end
 
   local envOk, env, tracker = pcall(sandbox.build, accessMode, privacySettings, modules)

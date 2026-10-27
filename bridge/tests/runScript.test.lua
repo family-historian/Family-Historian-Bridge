@@ -521,8 +521,8 @@ end
 check(not contains(runScript.run("local records = {}; return records", 'read-only', { privateVisibility = 'exclude', livingVisibility = 'all' }), 'bypasses'),
   'a bare local variable named records is not mistaken for the fhu.records idiom (word-boundary match requires the fhu. prefix)')
 
--- User project modules (issue #150): require() end to end through a real sandbox env, with
--- the module files and folder listing injected.
+-- User project modules: require() end to end through a real sandbox env, with the module
+-- files and folder listing injected.
 do
   local files = {}
   local modules = {
@@ -593,6 +593,11 @@ do
 
   check(contains(run("return require('nowhere')"), 'no module nowhere in P\\\\Plugin Data'),
     'a missing module names the folder it looked in')
+  check(contains(run("local a = 1\n\nlocal m = require('nowhere')\nreturn m"), ']:3: require: no module nowhere'),
+    'a require error gives the script line that asked (lost only for `return require(...)`, a tail call)')
+  files.outer = 'local x = 1\nlocal inner = require("nowhere")\nreturn inner'
+  check(contains(run("local m = require('outer')\nreturn m"), 'outer.lua:2: require: no module nowhere'),
+    'a require error inside a module gives that module\'s file and line')
 
   files.spinner = 'while true do end'
   check(contains(run("return require('spinner')"), 'instruction limit'), 'the watchdog bounds module code too')
@@ -600,6 +605,23 @@ do
   local listing = run("return fhBridge.listModules()")
   check(contains(listing, '"name":"helpers"') and contains(listing, '"folder":"P'),
     'fhBridge.listModules reports the installed modules and the folder')
+  check(contains(listing, '"exports":["double"]'),
+    'fhBridge.listModules loads each module through the script\'s own require and reports its exports')
+  check(contains(listing, '"loaded":false') and contains(listing, 'thrower.lua:2'),
+    'fhBridge.listModules reports a module that fails to load, without failing the listing')
+  check(contains(listing, 'aborted: exceeded the instruction limit') and contains(listing, '"exports":["double"]'),
+    'a module that loops fails its own listing entry on its own budget; the others still load, in any order')
+
+  files.uses_helpers = 'local h = require("helpers")\nreturn { quad = function(n) return h.double(h.double(n)) end }'
+  check(run("return require('uses_helpers').quad(5)") == '20', 'a module can require another module end to end')
+
+  local survived = run("local ok, err = pcall(require, 'thrower')\n" ..
+    "local _, again = pcall(require, 'thrower')\n" ..
+    "return { ok = ok, err = tostring(err), again = tostring(again), after = require('helpers').double(4) }")
+  check(contains(survived, '"ok":false') and contains(survived, 'thrower.lua:2') and contains(survived, '"after":8'),
+    'a broken module fails only its require: a script that catches the error carries on')
+  check(contains(survived, '"again":"thrower.lua:2') and not contains(survived, 'requires itself'),
+    'requiring a broken module a second time reports its own error again, not a false "requires itself"')
 
   check(contains(runScript.run("return require('helpers')", 'read-only'), 'not available'),
     'without a modules argument, require says user modules are unavailable')

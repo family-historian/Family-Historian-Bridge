@@ -55,6 +55,29 @@ local ok3, result3 = pcall(function()
 end)
 check(ok3 and result3 == 500500, 'code after stop() runs unaffected by a prior watchdog run')
 
+-- isolated(): a loop inside it fails only itself, and the outer watchdog carries on with its
+-- own count, neither tripped by the inner loop nor reset by it.
+watchdog.INSTRUCTION_LIMIT = 200000
+watchdog.start()
+local okInner, errInner = watchdog.isolated(10000, function() while true do end end)
+local okAfter, after = pcall(function()
+  local sum = 0
+  for i = 1, 1000 do sum = sum + i end
+  return sum
+end)
+local okValue, a, b = watchdog.isolated(10000, function(x, y) return x + y, 'second' end, 2, 3)
+local okOuter, errOuter = pcall(function() while true do end end)
+watchdog.stop()
+watchdog.INSTRUCTION_LIMIT = savedLimit
+check(okInner == false and tostring(errInner):find('instruction limit', 1, true) ~= nil,
+  'isolated aborts a loop inside it')
+check(tostring(errInner):sub(1, 8) == 'aborted:', 'isolated\'s abort message carries no watchdog.lua position')
+check(okAfter and after == 500500, 'after an isolated overrun, the rest of the script still runs')
+check(okValue and a == 5 and b == 'second', 'isolated passes arguments in and every result out')
+check(okOuter == false and tostring(errOuter):find('instruction limit', 1, true) ~= nil,
+  'the outer watchdog is restored and still bounds the script')
+check(debug.gethook() == nil, 'stop() after isolated leaves no hook behind')
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)

@@ -427,7 +427,7 @@ check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-o
 check(env.fhBridge.setTftfText == nil, 'fhBridge.setTftfText absent under read-only (calls the real fhSetValueAsRichText write global directly — must not be reachable without the write gate)')
 check(env.fhBridge.createFact == nil, 'fhBridge.createFact absent under read-only (calls the real fhUtils.createFact write path directly — must not be reachable without the write gate)')
 
--- fhBridge.listModules (issue #150): read-only, so present in both modes; with no modules
+-- fhBridge.listModules: read-only, so present in both modes; with no modules
 -- table it reports that there is no folder rather than erroring.
 check(type(env.fhBridge.listModules) == 'function', 'fhBridge.listModules present under read-only')
 check(env.fhBridge.listModules().folder == nil and env.fhBridge.listModules().error ~= nil,

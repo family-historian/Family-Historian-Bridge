@@ -33,6 +33,10 @@ There are two folders, and the AI looks in them in this order:
 If both folders have a module with the same name, the project's copy is the one used. So
 you can keep a general version for every project and override it in one.
 
+If other people have their own accounts on your computer, keep your modules in the project
+folder. Every account on the computer can save files into the machine-wide folder, so a
+module there could be one you've never read.
+
 The easiest way to find the exact paths on your machine is to ask the AI: "where do my
 helper modules go?". It reads them from `describe_project`, which reports both folders
 even before you've created them. Create any folder that doesn't exist yet. Windows hides
@@ -76,8 +80,16 @@ function M.uncitedFacts(person)
   return missing
 end
 
+M._DOC = {
+  uncitedFacts = "Tags of this person's facts that have no source citation",
+}
+
 return M
 ```
+
+The `_DOC` table is optional. When the AI lists your modules it sees these one-line
+descriptions next to each function's name, so it knows what a module offers without opening
+the file.
 
 Save it as plain text. A UTF-8 file is fine, including one Notepad saved with a byte-order
 mark. Check that Windows hasn't quietly called it `house_checks.lua.txt`: turn on **View >
@@ -123,6 +135,11 @@ A module can do exactly what the AI's own scripts can, and no more:
 - It can't read or write files, reach the internet, or show dialogs, any more than the AI's
   scripts can.
 - Nothing carries over between questions. A module starts fresh every time it's loaded.
+- When the AI lists your modules, it loads each one to see what it offers, so anything at
+  the top level of a module (outside its functions) runs then. Keep that part to setting
+  up functions and tables.
+- A module that fails to load fails only that request for it. The rest of the AI's script
+  can carry on.
 - Most of the safety checks that look at the AI's scripts before they run look at your
   module's text too. The one left out is the check that refuses a Read-only script for
   mentioning a function that changes the tree, so that a module of mixed read and write
@@ -139,6 +156,9 @@ from `house-checks.lua` to `house_checks.lua`.
 
 **An error naming your module and a line number** (for example `house_checks.lua:12: …`):
 the problem is inside the module at that line. Ask the AI to look at it with you.
+
+**A module listed as not loaded**: `describe_project` gives the reason next to it, usually
+an error naming the file and line. Ask the AI to show it to you.
 
 **"requires itself"**: the module loads itself, either directly or through another module
 that loads it back. Break the loop.

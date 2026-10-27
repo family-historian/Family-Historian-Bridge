@@ -22,18 +22,20 @@ check(userModules.folderFor('') == nil and userModules.folderFor(nil) == nil,
 -- folderSource
 do
   local asked
-  local source = userModules.folderSource('F', function(path) asked = path; return 'return 1' end)
+  local F = { { scope = 'project', folder = 'F' } }
+  local source = userModules.folderSource(F, function(path) asked = path; return 'return 1' end)
   local text, where = source('lich')
   check(text == 'return 1' and where == 'F\\lich.lua' and asked == 'F\\lich.lua',
     'folderSource reads <folder>\\<name>.lua')
-  local missing = userModules.folderSource('F', function() return nil end)
+  local missing = userModules.folderSource(F, function() return nil end)
   local none, folder = missing('gone')
   check(none == nil and folder == 'F', 'folderSource reports the folder when the file is missing')
-  local throwing = userModules.folderSource('F', function() error('disk on fire') end)
+  local throwing = userModules.folderSource(F, function() error('disk on fire') end)
   check(throwing('x') == nil, 'folderSource treats a throwing loader as a missing file')
 
   local disk = { ['P\\both.lua'] = 'project copy', ['M\\both.lua'] = 'machine copy', ['M\\shared.lua'] = 'shared' }
-  local chained = userModules.folderSource({ 'P', 'M' }, function(path) return disk[path] end)
+  local chained = userModules.folderSource(userModules.searchOrder({ folder = 'P', machineFolder = 'M' }),
+    function(path) return disk[path] end)
   check(chained('both') == 'project copy', 'folderSource prefers the first folder (the project) when both have the module')
   local sharedText, sharedPath = chained('shared')
   check(sharedText == 'shared' and sharedPath == 'M\\shared.lua', 'folderSource falls back to the machine-wide folder')
@@ -49,9 +51,24 @@ check(userModules.machineFolderFor('') == nil and userModules.machineFolderFor(n
   'machineFolderFor gives nil when FH returned nothing')
 do
   local order = userModules.searchOrder({ machineFolder = 'M' })
-  check(#order == 1 and order[1] == 'M', 'searchOrder skips a missing project folder without leaving a gap')
+  check(#order == 1 and order[1].folder == 'M' and order[1].scope == 'machine',
+    'searchOrder skips a missing project folder without leaving a gap')
   local both = userModules.searchOrder({ folder = 'P', machineFolder = 'M' })
-  check(both[1] == 'P' and both[2] == 'M', 'searchOrder puts the project before the machine-wide folder')
+  check(both[1].folder == 'P' and both[1].scope == 'project' and both[2].folder == 'M',
+    'searchOrder puts the project before the machine-wide folder')
+  check(#userModules.searchOrder(nil) == 0, 'searchOrder of nothing is empty')
+end
+
+-- foldersFromFH
+do
+  fhGetContextInfo = function(key) return key == 'CI_PROJECT_DATA_FOLDER' and 'C:\\Proj.fh_data' or nil end
+  fhGetPluginDataFileName = function() return 'C:\\PD\\AI Connector' end
+  local folders = userModules.foldersFromFH()
+  check(folders.folder == 'C:\\Proj.fh_data\\Plugin Data\\AI Connector\\modules'
+    and folders.machineFolder == 'C:\\PD\\AI Connector\\modules', 'foldersFromFH asks FH for both folders')
+  fhGetPluginDataFileName = function() error('no such scope') end
+  check(userModules.foldersFromFH().machineFolder == nil, 'foldersFromFH leaves machineFolder nil when FH raises')
+  fhGetContextInfo, fhGetPluginDataFileName = nil, nil
 end
 
 -- list
@@ -86,6 +103,38 @@ do
     'the machine-wide one it overrides is marked shadowed')
   local machineOnly = userModules.list({ machineFolder = 'M', listFolder = function() return { { path = 'M\\x.lua' } } end })
   check(machineOnly.error == nil and #machineOnly.modules == 1, 'with no project open, list still lists the machine-wide folder')
+  check(machineOnly.modules[1].loaded == nil, 'without a require, list does not load anything')
+
+  local required = {}
+  local values = {
+    house = { check = function() end, fix = function() end, _DOC = { check = 'Checks a person', [1] = 'ignored', fix = 42 } },
+    plain = 'not a table',
+  }
+  local loader = function(name)
+    table.insert(required, name)
+    if values[name] == nil then error('broken.lua:3: boom', 0) end
+    return values[name]
+  end
+  local described = userModules.list({ folder = 'P', machineFolder = 'M', listFolder = function(f)
+    if f == 'P' then return { { path = 'P\\house.lua' }, { path = 'P\\broken.lua' }, { path = 'P\\plain.lua' } } end
+    return { { path = 'M\\house.lua' } }
+  end }, loader)
+  local byKey = {}
+  for _, m in ipairs(described.modules) do byKey[m.name .. '/' .. m.scope] = m end
+  local house = byKey['house/project']
+  check(house.loaded == true and table.concat(house.exports, ',') == 'check,fix',
+    'list loads a module and reports its exported names, sorted, without _DOC')
+  check(house.doc.check == 'Checks a person' and house.doc.fix == nil and house.doc[1] == nil,
+    'list reports _DOC, keeping only string-to-string entries')
+  check(byKey['broken/project'].loaded == false and contains(byKey['broken/project'].loadError, 'broken.lua:3: boom'),
+    'a module that fails to load is listed with loaded=false and its error')
+  check(byKey['plain/project'].loaded == true and byKey['plain/project'].exports == nil,
+    'a module returning a non-table loads but exports nothing')
+  check(byKey['house/machine'].shadowed and byKey['house/machine'].loaded == nil,
+    'a shadowed module is not loaded, since require would never reach it')
+  local houseLoads = 0
+  for _, name in ipairs(required) do if name == 'house' then houseLoads = houseLoads + 1 end end
+  check(houseLoads == 1, 'list loads each name once')
 end
 
 -- makeRequire
@@ -118,9 +167,52 @@ do
   check(contains(errorOf(env.require, 'selfish'), 'requires itself'), 'a module requiring itself is caught')
   check(contains(errorOf(env.require, 'broken'), 'broken.lua'), 'a compile error names the module file')
   check(contains(errorOf(env.require, 'fhUtils'), 'fhu is already a global'), 'require of fhUtils points at the fhu global')
-
+  check(contains(errorOf(env.require, 'caf\195\169'), 'letters, digits and underscores'),
+    'a name with a non-ASCII letter is refused, whatever the locale')
   local unavailable = userModules.makeRequire({}, nil, nil)
   check(contains(errorOf(unavailable, 'one'), 'not available'), 'without a source, require says modules are unavailable')
+end
+
+-- makeRequire: modules requiring modules
+do
+  local env = { tostring = tostring, error = error }
+  local files = {
+    base = 'return { n = 2 }',
+    top = 'local base = require("base")\nreturn { twice = base.n * 2 }',
+    ping = 'require("pong")\nreturn "ping"',
+    pong = 'require("ping")\nreturn "pong"',
+    flaky = 'attempts = (attempts or 0) + 1\nif attempts == 1 then error("first try fails") end\nreturn "second try"',
+  }
+  env.require = userModules.makeRequire(env, function(name)
+    if files[name] then return files[name], name end
+    return nil, 'F'
+  end)
+  check(env.require('top').twice == 4, 'a module can require another module')
+  check(contains(errorOf(env.require, 'ping'), 'requires itself'), 'a cycle through two modules is caught')
+  files.pong = 'return "pong"'
+  check(env.require('ping') == 'ping',
+    'once the loop is broken, the same call loads both modules: a caught cycle leaves no stale loading flag')
+  check(contains(errorOf(env.require, 'flaky'), 'flaky.lua:2: first try fails'),
+    'a module that fails reports its own file and line')
+  check(env.require('flaky') == 'second try',
+    'a module that failed once can be required again in the same call, with no false "requires itself"')
+end
+
+-- No code path in userModules.lua writes a file: the folders are the user's, and copying a
+-- module in by hand is the review checkpoint.
+do
+  local here = arg[0]:match("(.*[/\\])")
+  local f = assert(io.open(here .. '../userModules.lua', 'r'))
+  local text = f:read('a')
+  f:close()
+  local writers = { 'fhSaveTextFile', 'io%.', 'os%.', 'writeToTextFile', 'createFolder', 'copyFile', 'deleteFile', 'moveFile' }
+  for _, pattern in ipairs(writers) do
+    check(not text:find(pattern), 'userModules.lua never calls ' .. pattern:gsub('%%', ''))
+  end
+  for method in text:gmatch('fhfu%.([%w_]+)') do
+    check(method == 'folderExists' or method == 'getFolderContents',
+      'userModules.lua uses fhFileUtils only to look: ' .. method)
+  end
 end
 
 t.report()

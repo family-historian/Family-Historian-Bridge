@@ -79,7 +79,7 @@ Returns JSON shaped as:
   "userModules": {
     "folder": "<the project's modules folder, searched first: CI_PROJECT_DATA_FOLDER\\\\Plugin Data\\\\AI Connector\\\\modules, or null with no project>",
     "machineFolder": "<the machine-wide modules folder, searched second: FH's machine Plugin Data\\\\AI Connector\\\\modules>",
-    "modules": [ { "name": "<the name to require()>", "scope": "<\\"project\\" | \\"machine\\">", "shadowed": <true on a machine module a same-named project module overrides>, "size": <bytes>, "modified": "<as FH reports it>" }, ... ],
+    "modules": [ { "name": "<the name to require()>", "scope": "<\\"project\\" | \\"machine\\">", "shadowed": <true on a machine module a same-named project module overrides>, "size": <bytes>, "modified": "<as FH reports it>", "loaded": <true | false; absent on a shadowed module>, "loadError": "<why it didn't load>", "exports": [ "<the module table's names, sorted>" ], "doc": { "<name>": "<the module's own _DOC line for it>" } }, ... ],
     "error": "<present only if a folder couldn't be listed>"
   },
   "bridgeState": {
@@ -103,10 +103,11 @@ window-handle values (CI_APP_HWND/CI_PARENT_HWND) and the two report/book-only v
 (CI_BOOK_CONTEXT/CI_BOOK_ITEM_HEADING, meaningless outside a report plugin's book context)
 are omitted — see the script's own comment for why.
 
-userModules lists the helper modules the user has installed, for this project and machine-wide
-(issue #150). A run_lua script loads one with require("<name>"): the project folder is searched
+userModules lists the helper modules the user has installed, for this project and machine-wide.
+A run_lua script loads one with require("<name>"): the project folder is searched
 first, so a project module overrides a machine-wide one of the same name. It runs inside the
-script's own sandbox.
+script's own sandbox. Each module in use is loaded to fill in loaded/exports/doc; one that
+fails says why in loadError.
 Use an installed helper rather than re-writing what it does; search_gedcom_knowledge("user
 project modules") explains how require behaves. Absent when the Bridge plugin predates user
 modules.

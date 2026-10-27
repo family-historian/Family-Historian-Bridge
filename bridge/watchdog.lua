@@ -32,4 +32,30 @@ function M.stop()
   debug.sethook()
 end
 
+-- Runs fn(...) under pcall with a budget of its own (limit VM instructions), so a loop in fn
+-- fails fn alone. Needed because start()'s hook, once past its limit, raises again every
+-- HOOK_GRANULARITY instructions, so a caught overrun still sinks the rest of the script.
+-- Whatever hook was installed is paused meanwhile and put back with its count unchanged.
+-- Returns pcall's results.
+function M.isolated(limit, fn, ...)
+  local hook, mask, count = debug.gethook()
+  local hookCalls = 0
+  local maxHookCalls = math.floor(limit / HOOK_GRANULARITY)
+  debug.sethook(function()
+    hookCalls = hookCalls + 1
+    if hookCalls > maxHookCalls then
+      -- Level 0: the position would be this file's, which in the bundled plugin is a long
+      -- path into the .fh_lua and tells the user nothing about their module.
+      error('aborted: exceeded the instruction limit (possible infinite loop)', 0)
+    end
+  end, '', HOOK_GRANULARITY)
+  local results = table.pack(pcall(fn, ...))
+  if hook then
+    debug.sethook(hook, mask, count)
+  else
+    debug.sethook()
+  end
+  return table.unpack(results, 1, results.n)
+end
+
 return M

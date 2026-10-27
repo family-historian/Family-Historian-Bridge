@@ -198,14 +198,16 @@ implements.
   array, not an error, when nothing matches; it errors only on a null pointer or a
   missing/malformed `tags` argument (nil, `""`, an empty array, or a non-string entry in the
   array).
-- `userModules.lua`: user project modules (issue #150). Gives every run_lua script a
+- `userModules.lua`: user project modules. Gives every run_lua script a
   `require(name)` that loads `<name>.lua` from `<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI
   Connector\modules\`, then from the machine-wide `AI Connector\modules\` in FH's machine
   Plugin Data folder, compiled against the calling script's own sandbox env, plus
   `fhBridge.listModules()`. `require` is attached by `runScript.lua`, which owns the pre-scans;
-  `listModules` sits in `sandbox.lua`'s read-only `fhBridge` table with the other members; both
-  folders come from `bridgeSession.lua` on each call. Module text gets runScript's unrecognised-`fh*`,
-  leading-dot and bulk-enumeration pre-scans, not the write-name one. See
+  `listModules` sits in `sandbox.lua`'s read-only `fhBridge` table with the other members, and
+  loads each module through the script's `require` on its own `watchdog.isolated` budget to
+  report what it exports. `bridgeSession.lua` asks `userModules.foldersFromFH()` for both
+  folders on each call. Module text gets runScript's unrecognised-`fh*`, leading-dot and
+  bulk-enumeration pre-scans, not the write-name one. See
   `docs/adr/0039-user-project-modules-compile-against-the-calling-sandbox.md`.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,

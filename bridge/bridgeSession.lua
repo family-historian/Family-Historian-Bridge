@@ -397,13 +397,8 @@ function timPoll:action_cb()
     -- -- passing a restricted level here would trip runScript.lua's own bulkEnumerationViolation
     -- pre-scan and break describe_project outright the moment a Visibility level is restricted.
     local privacySettings = not request.forceReadOnly and currentPrivacySettings() or nil
-    -- Re-read per call, so a module edited mid-Session is picked up without a restart.
-    local okMachine, machineDataFile = pcall(fhGetPluginDataFileName, "LOCAL_MACHINE")
-    local modules = {
-        folder = userModules.folderFor(fhGetContextInfo("CI_PROJECT_DATA_FOLDER")),
-        machineFolder = okMachine and userModules.machineFolderFor(machineDataFile) or nil,
-    }
-    local response, rethrowErr, transactionResult = runScript.run(script, accessMode, privacySettings, modules)
+    local response, rethrowErr, transactionResult =
+        runScript.run(script, accessMode, privacySettings, userModules.foldersFromFH())
     client:send(response .. "\n")
     client:close()
 

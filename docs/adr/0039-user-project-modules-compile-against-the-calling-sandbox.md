@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # User project modules compile against the calling script's sandbox
@@ -20,13 +20,25 @@ script, and can do nothing a script can't (ADR 0001's trust model unchanged).
   `C:\ProgramData\Calico Pie\Family Historian 8\Plugin Data`, where the Bridge's own settings
   already live. The subfolder name is fixed, not the plugin's own, so a renamed plugin file
   finds the same modules. Not `CI_APP_DATA_FOLDER` itself, which FH asks plugins not to use.
+- **The machine-wide folder is writable by every account on the PC.** FH 8's installer gives
+  Everyone Modify on that Plugin Data folder. So on a shared PC another account could put a
+  module there that runs in your Session without your having read it, which the project
+  folder doesn't allow. Accepted: such a module still runs inside the sandbox and can do
+  nothing a script can't, and on a one-user PC anything able to write there can already
+  write the project folder. The user guide tells people on a shared PC to keep their
+  modules in the project folder and leave the machine-wide one empty.
 - **Per call, not per Session.** The env and tracker are rebuilt every call; a module bound
   to an earlier env would write past the current call's tracker and rollback. Text is
   re-read each call, so an edited module needs no restart. Within one call a module loads
-  once.
+  once. A module that fails to load isn't remembered, so a script that catches the error
+  with `pcall` can require it again, or carry on without it.
+- **No source cache across calls.** Reading one small text file per require costs about what
+  checking its modified time would, and a cache adds a way to run a stale copy.
 - **Read Bridge-side, not from the sandbox.** `fhLoadTextFile` stays excluded from run_lua;
-  the plugin reads the file. Names are `^[%w_]+$`, so nothing outside the folders is
-  reachable.
+  the plugin reads the file. Names are `^[A-Za-z0-9_]+$` (spelt out, since `%w` follows the
+  C locale), so nothing outside the folders is reachable by name. Junctions and symbolic
+  links inside a folder aren't checked: the folders are the user's own, and a link points
+  only where the user put it.
 - **Pre-scans apply to module text**, minus the write-name scan: a module of write helpers
   is legitimate in Read-only for its read helpers, its write calls find no write function
   there, and in Read-write the runtime write-then-log backstop (ADR 0012) covers module
@@ -34,9 +46,16 @@ script, and can do nothing a script can't (ADR 0001's trust model unchanged).
 - **The user installs modules, not the Bridge.** No tool writes to either folder; copying a
   file in by hand is the review checkpoint (cf. ADRs 0004, 0008).
 - **Discoverable without spending run_lua's description budget** (ADR 0011: it is at 1,942 of
-  1,950 bytes). `fhBridge.listModules()` and `describe_project`'s `userModules` report what is
-  installed and where; the gedcom-knowledge corpus has `run-lua-guidance-user-project-modules`
-  and an `fhBridge.listModules` reference entry.
+  1,950 bytes). `describe_project`'s `userModules` reports what is installed and where.
+  describe_project's own script runs in the sandbox, so the listing reaches it as
+  `fhBridge.listModules()`, which scripts can call too. To say whether each module loaded and
+  what it exports (names, plus an optional `_DOC` table of one-line descriptions), the
+  listing loads every module that isn't shadowed through the script's own `require`, so a
+  later require in that call reuses it. Each load gets its own instruction budget
+  (`watchdog.isolated`): the main watchdog, once past its limit, fires again every thousand
+  instructions, so one looping module would otherwise sink describe_project. The
+  gedcom-knowledge corpus has `run-lua-guidance-user-project-modules` and an
+  `fhBridge.listModules` reference entry.
 
 **Rejected.** A plain `require` in the entry file (unsandboxed, real `fh*`, bypasses the
 tracker and Read-only). A server-side prelude prepended to every script (shifts line

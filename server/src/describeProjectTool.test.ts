@@ -436,6 +436,13 @@ describe("describe_project userModules (issue #150)", () => {
     expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('require("<name>")');
     expect(DESCRIBE_PROJECT_DESCRIPTION).toContain('search_gedcom_knowledge("user');
   });
+
+  it("documents whether each module loaded, what it exports and its _DOC lines", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"loaded"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"loadError"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"exports"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"doc"[^\n]*_DOC/);
+  });
 });
 
 describe("describe_project userModules: machine-wide folder (issue #150)", () => {
