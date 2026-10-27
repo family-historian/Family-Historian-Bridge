@@ -33,41 +33,43 @@ do
   local throwing = userModules.folderSource(F, function() error('disk on fire') end)
   check(throwing('x') == nil, 'folderSource treats a throwing loader as a missing file')
 
-  local disk = { ['P\\both.lua'] = 'project copy', ['M\\both.lua'] = 'machine copy', ['M\\shared.lua'] = 'shared' }
-  local chained = userModules.folderSource(userModules.searchOrder({ folder = 'P', machineFolder = 'M' }),
+  local disk = { ['P\\both.lua'] = 'project copy', ['U\\both.lua'] = 'user copy', ['U\\shared.lua'] = 'shared' }
+  local chained = userModules.folderSource(userModules.searchOrder({ folder = 'P', userFolder = 'U' }),
     function(path) return disk[path] end)
   check(chained('both') == 'project copy', 'folderSource prefers the first folder (the project) when both have the module')
   local sharedText, sharedPath = chained('shared')
-  check(sharedText == 'shared' and sharedPath == 'M\\shared.lua', 'folderSource falls back to the machine-wide folder')
+  check(sharedText == 'shared' and sharedPath == 'U\\shared.lua', 'folderSource falls back to the user folder')
   local _, searched = chained('absent')
-  check(searched == 'P or M', 'folderSource names every folder it searched')
+  check(searched == 'P or U', 'folderSource names every folder it searched')
 end
 
--- machineFolderFor / searchOrder
-check(userModules.machineFolderFor('C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugin Data\\AI Connector (prototype)')
-  == 'C:\\ProgramData\\Calico Pie\\Family Historian 8\\Plugin Data\\AI Connector\\modules',
-  'machineFolderFor uses the fixed AI Connector folder beside whatever the plugin file is called')
-check(userModules.machineFolderFor('') == nil and userModules.machineFolderFor(nil) == nil,
-  'machineFolderFor gives nil when FH returned nothing')
+-- userFolderFor / searchOrder
+check(userModules.userFolderFor('C:\\Users\\me\\AppData\\Roaming\\Calico Pie\\Family Historian 8\\Plugin Data\\AI Connector (prototype)')
+  == 'C:\\Users\\me\\AppData\\Roaming\\Calico Pie\\Family Historian 8\\Plugin Data\\AI Connector\\modules',
+  'userFolderFor uses the fixed AI Connector folder beside whatever the plugin file is called')
+check(userModules.userFolderFor('') == nil and userModules.userFolderFor(nil) == nil,
+  'userFolderFor gives nil when FH returned nothing')
 do
-  local order = userModules.searchOrder({ machineFolder = 'M' })
-  check(#order == 1 and order[1].folder == 'M' and order[1].scope == 'machine',
+  local order = userModules.searchOrder({ userFolder = 'U' })
+  check(#order == 1 and order[1].folder == 'U' and order[1].scope == 'user',
     'searchOrder skips a missing project folder without leaving a gap')
-  local both = userModules.searchOrder({ folder = 'P', machineFolder = 'M' })
-  check(both[1].folder == 'P' and both[1].scope == 'project' and both[2].folder == 'M',
-    'searchOrder puts the project before the machine-wide folder')
+  local both = userModules.searchOrder({ folder = 'P', userFolder = 'U' })
+  check(both[1].folder == 'P' and both[1].scope == 'project' and both[2].folder == 'U',
+    'searchOrder puts the project before the user folder')
   check(#userModules.searchOrder(nil) == 0, 'searchOrder of nothing is empty')
 end
 
 -- foldersFromFH
 do
   fhGetContextInfo = function(key) return key == 'CI_PROJECT_DATA_FOLDER' and 'C:\\Proj.fh_data' or nil end
-  fhGetPluginDataFileName = function() return 'C:\\PD\\AI Connector' end
+  local askedScope
+  fhGetPluginDataFileName = function(scope) askedScope = scope; return 'C:\\PD\\AI Connector' end
   local folders = userModules.foldersFromFH()
   check(folders.folder == 'C:\\Proj.fh_data\\Plugin Data\\AI Connector\\modules'
-    and folders.machineFolder == 'C:\\PD\\AI Connector\\modules', 'foldersFromFH asks FH for both folders')
+    and folders.userFolder == 'C:\\PD\\AI Connector\\modules', 'foldersFromFH asks FH for both folders')
+  check(askedScope == 'CURRENT_USER', 'foldersFromFH asks for the CURRENT_USER scope, not LOCAL_MACHINE')
   fhGetPluginDataFileName = function() error('no such scope') end
-  check(userModules.foldersFromFH().machineFolder == nil, 'foldersFromFH leaves machineFolder nil when FH raises')
+  check(userModules.foldersFromFH().userFolder == nil, 'foldersFromFH leaves userFolder nil when FH raises')
   fhGetContextInfo, fhGetPluginDataFileName = nil, nil
 end
 
@@ -91,19 +93,19 @@ do
   local nothing = userModules.list(nil)
   check(nothing.folder == nil and contains(nothing.error, 'no project'), 'list explains having no folder at all')
 
-  local both = userModules.list({ folder = 'P', machineFolder = 'M', listFolder = function(f)
+  local both = userModules.list({ folder = 'P', userFolder = 'U', listFolder = function(f)
     if f == 'P' then return { { path = 'P\\house.lua' } } end
-    return { { path = 'M\\house.lua' }, { path = 'M\\common.lua' } }
+    return { { path = 'U\\house.lua' }, { path = 'U\\common.lua' } }
   end })
-  check(both.machineFolder == 'M' and #both.modules == 3, 'list covers both the project and machine-wide folders')
-  check(both.modules[1].name == 'common' and both.modules[1].scope == 'machine', 'a machine-only module is scope "machine"')
+  check(both.userFolder == 'U' and #both.modules == 3, 'list covers both the project and user folders')
+  check(both.modules[1].name == 'common' and both.modules[1].scope == 'user', 'a module only in the user folder is scope "user"')
   check(both.modules[2].name == 'house' and both.modules[2].scope == 'project' and not both.modules[2].shadowed,
     'of two same-named modules the project one comes first and is used')
-  check(both.modules[3].name == 'house' and both.modules[3].scope == 'machine' and both.modules[3].shadowed == true,
-    'the machine-wide one it overrides is marked shadowed')
-  local machineOnly = userModules.list({ machineFolder = 'M', listFolder = function() return { { path = 'M\\x.lua' } } end })
-  check(machineOnly.error == nil and #machineOnly.modules == 1, 'with no project open, list still lists the machine-wide folder')
-  check(machineOnly.modules[1].loaded == nil, 'without a require, list does not load anything')
+  check(both.modules[3].name == 'house' and both.modules[3].scope == 'user' and both.modules[3].shadowed == true,
+    'the user one it overrides is marked shadowed')
+  local userOnly = userModules.list({ userFolder = 'U', listFolder = function() return { { path = 'U\\x.lua' } } end })
+  check(userOnly.error == nil and #userOnly.modules == 1, 'with no project open, list still lists the user folder')
+  check(userOnly.modules[1].loaded == nil, 'without a require, list does not load anything')
 
   local required = {}
   local values = {
@@ -115,9 +117,9 @@ do
     if values[name] == nil then error('broken.lua:3: boom', 0) end
     return values[name]
   end
-  local described = userModules.list({ folder = 'P', machineFolder = 'M', listFolder = function(f)
+  local described = userModules.list({ folder = 'P', userFolder = 'U', listFolder = function(f)
     if f == 'P' then return { { path = 'P\\house.lua' }, { path = 'P\\broken.lua' }, { path = 'P\\plain.lua' } } end
-    return { { path = 'M\\house.lua' } }
+    return { { path = 'U\\house.lua' } }
   end }, loader)
   local byKey = {}
   for _, m in ipairs(described.modules) do byKey[m.name .. '/' .. m.scope] = m end
@@ -130,7 +132,7 @@ do
     'a module that fails to load is listed with loaded=false and its error')
   check(byKey['plain/project'].loaded == true and byKey['plain/project'].exports == nil,
     'a module returning a non-table loads but exports nothing')
-  check(byKey['house/machine'].shadowed and byKey['house/machine'].loaded == nil,
+  check(byKey['house/user'].shadowed and byKey['house/user'].loaded == nil,
     'a shadowed module is not loaded, since require would never reach it')
   local houseLoads = 0
   for _, name in ipairs(required) do if name == 'house' then houseLoads = houseLoads + 1 end end

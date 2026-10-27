@@ -627,23 +627,23 @@ do
     'without a modules argument, require says user modules are unavailable')
 end
 
--- Project folder first, then the machine-wide folder, through the real FH-backed reader
+-- Project folder first, then the user's folder, through the real FH-backed reader
 -- (fhLoadTextFile stubbed as a plain global, the way it exists inside FH).
 do
   local disk = {
     ['P\\house.lua'] = 'return "project house"',
-    ['M\\house.lua'] = 'return "machine house"',
-    ['M\\common.lua'] = 'return "machine common"',
+    ['U\\house.lua'] = 'return "user house"',
+    ['U\\common.lua'] = 'return "user common"',
   }
   fhLoadTextFile = function(path) return disk[path] end
-  local both = { folder = 'P', machineFolder = 'M' }
+  local both = { folder = 'P', userFolder = 'U' }
   check(runScript.run("return require('house')", 'read-only', nil, both) == '"project house"',
-    'a project module overrides a machine-wide one of the same name')
-  check(runScript.run("return require('common')", 'read-only', nil, both) == '"machine common"',
-    'a module only in the machine-wide folder is found there')
-  check(runScript.run("return require('common')", 'read-only', nil, { machineFolder = 'M' }) == '"machine common"',
-    'machine-wide modules load with no project folder at all')
-  check(contains(runScript.run("return require('absent')", 'read-only', nil, both), 'no module absent in P or M'),
+    'a project module overrides a user one of the same name')
+  check(runScript.run("return require('common')", 'read-only', nil, both) == '"user common"',
+    'a module only in the user folder is found there')
+  check(runScript.run("return require('common')", 'read-only', nil, { userFolder = 'U' }) == '"user common"',
+    'user modules load with no project folder at all')
+  check(contains(runScript.run("return require('absent')", 'read-only', nil, both), 'no module absent in P or U'),
     'a missing module names both folders searched')
   fhLoadTextFile = nil
 end

@@ -200,7 +200,7 @@ implements.
   array).
 - `userModules.lua`: user project modules. Gives every run_lua script a
   `require(name)` that loads `<name>.lua` from `<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI
-  Connector\modules\`, then from the machine-wide `AI Connector\modules\` in FH's machine
+  Connector\modules\`, then from the user's own `AI Connector\modules\` in FH's per-user
   Plugin Data folder, compiled against the calling script's own sandbox env, plus
   `fhBridge.listModules()`. `require` is attached by `runScript.lua`, which owns the pre-scans;
   `listModules` sits in `sandbox.lua`'s read-only `fhBridge` table with the other members, and

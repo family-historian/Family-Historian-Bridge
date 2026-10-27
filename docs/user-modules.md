@@ -27,20 +27,20 @@ There are two folders, and the AI looks in them in this order:
 1. **This project only:** `Plugin Data\AI Connector\modules` inside your project's data
    folder, for example
    `C:\Users\you\Documents\Family Historian Projects\Smith Family\Smith Family.fh_data\Plugin Data\AI Connector\modules`.
-2. **Every project on this computer:**
-   `C:\ProgramData\Calico Pie\Family Historian 8\Plugin Data\AI Connector\modules`.
+2. **All your projects:** `Calico Pie\Family Historian 8\Plugin Data\AI Connector\modules`
+   in your own Windows application data, for example
+   `C:\Users\you\AppData\Roaming\Calico Pie\Family Historian 8\Plugin Data\AI Connector\modules`.
+   Only your Windows account uses this one. Anyone else who signs in to the same computer
+   has their own.
 
 If both folders have a module with the same name, the project's copy is the one used. So
-you can keep a general version for every project and override it in one.
+you can keep a general version for all your projects and override it in one.
 
-If other people have their own accounts on your computer, keep your modules in the project
-folder. Every account on the computer can save files into the machine-wide folder, so a
-module there could be one you've never read.
-
-The easiest way to find the exact paths on your machine is to ask the AI: "where do my
+The easiest way to find the exact paths on your computer is to ask the AI: "where do my
 helper modules go?". It reads them from `describe_project`, which reports both folders
 even before you've created them. Create any folder that doesn't exist yet. Windows hides
-`ProgramData`, so type the path into File Explorer's address bar rather than browsing to it.
+`AppData`, so type `%APPDATA%\Calico Pie\Family Historian 8\Plugin Data` into File
+Explorer's address bar rather than browsing to it.
 
 ## What a module looks like
 
@@ -173,6 +173,7 @@ at `userModules`. If that section is missing, your Bridge plugin predates user m
 ## Sharing modules
 
 - The project folder travels with the project: copy or back up the project, and its
-  modules go too.
+  modules go too. Your own folder doesn't, so back it up yourself, and copy a module into
+  the project folder if the project needs it wherever it goes.
 - To share a module with someone else, send them the `.lua` file and ask them to read it
   before they put it in one of their folders, as they would any plugin.

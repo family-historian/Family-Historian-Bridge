@@ -205,7 +205,7 @@ end
 -- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
 -- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
 -- default for why callers predating #141 need no changes.
--- modules ({folder=, machineFolder=, listFolder=}) backs fhBridge.listModules; nil reports no
+-- modules ({folder=, userFolder=, listFolder=}) backs fhBridge.listModules; nil reports no
 -- folder. require() itself is attached by runScript.lua, which owns the pre-scans; listModules
 -- loads each module through it, so it reads env.require at call time, not here.
 function M.build(accessMode, privacySettings, modules)

@@ -111,8 +111,8 @@ it's not bound by the Session's Access mode at all.
 ## Your own helper modules
 
 If you want the AI to follow your own house rules the same way every time, or to run the
-same checks after every change, you can keep them as small Lua files in your project's (or
-your computer's) modules folder. The AI loads them with `require` instead of working the
+same checks after every change, you can keep them as small Lua files in your project's
+modules folder, or in your own one that serves all your projects. The AI loads them with `require` instead of working the
 rules out afresh on every question. They run under exactly the same Read-only/Read-write
 rules as the AI's own scripts, and you install them yourself. See
 [docs/user-modules.md](user-modules.md) for where the files go, what one looks like, and

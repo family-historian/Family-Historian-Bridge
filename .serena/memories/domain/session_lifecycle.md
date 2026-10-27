@@ -33,9 +33,9 @@
 - **User project module**: a `<name>.lua` the user installs by hand, loaded by run_lua's
   `require(name)` and compiled against the calling script's own sandbox env (ADR 0039).
   Two folders, searched in order: the **project folder**
-  (`<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI Connector\modules`) and the **machine-wide
-  folder** (`AI Connector\modules` in FH's machine Plugin Data folder). A machine-wide module
-  that a same-named project module overrides is **shadowed**. Avoid "plugin" or "library"
+  (`<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI Connector\modules`) and the **user folder**
+  (`AI Connector\modules` in FH's per-user Plugin Data folder, the `CURRENT_USER` scope). A
+  user module that a same-named project module overrides is **shadowed**. Avoid "plugin" or "library"
   for these: a module is neither installed through FH nor shipped with the Bridge.
 - **FH auto-undo**: FH's own native undo (Ctrl-Z, or automatic on an uncaught Lua error).
   This project implements no undo logic of its own — `run_lua` deliberately re-throws a

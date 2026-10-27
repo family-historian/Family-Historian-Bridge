@@ -13,20 +13,20 @@ gets the same allowlist, write tracker, Visibility-filtered `fhBridge` and watch
 script, and can do nothing a script can't (ADR 0001's trust model unchanged).
 
 - **Two folders, project first.** `<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI Connector\modules\`,
-  then a machine-wide `AI Connector\modules\` in FH's machine Plugin Data folder, so one set
-  of helpers can serve every project and a project can override one by name. The machine
-  folder comes from `fhGetPluginDataFileName("LOCAL_MACHINE")`'s parent, not a hard-coded
-  path: FH's help gives `<Plugins>\Data` for that scope, but FH 8 returns
-  `C:\ProgramData\Calico Pie\Family Historian 8\Plugin Data`, where the Bridge's own settings
-  already live. The subfolder name is fixed, not the plugin's own, so a renamed plugin file
-  finds the same modules. Not `CI_APP_DATA_FOLDER` itself, which FH asks plugins not to use.
-- **The machine-wide folder is writable by every account on the PC.** FH 8's installer gives
-  Everyone Modify on that Plugin Data folder. So on a shared PC another account could put a
-  module there that runs in your Session without your having read it, which the project
-  folder doesn't allow. Accepted: such a module still runs inside the sandbox and can do
-  nothing a script can't, and on a one-user PC anything able to write there can already
-  write the project folder. The user guide tells people on a shared PC to keep their
-  modules in the project folder and leave the machine-wide one empty.
+  then the user's own `AI Connector\modules\` in FH's per-user Plugin Data folder, so one set
+  of helpers can serve all of a user's projects and a project can override one by name. The
+  user folder comes from `fhGetPluginDataFileName("CURRENT_USER")`'s parent, not a
+  hard-coded path: FH's help gives `Calico Pie\Family Historian\Plugin Data` under the
+  user's application data, but FH 8 returns
+  `%APPDATA%\Calico Pie\Family Historian 8\Plugin Data`. The subfolder name is fixed, not the
+  plugin's own, so a renamed plugin file finds the same modules. Not `CI_APP_DATA_FOLDER`,
+  which FH asks plugins not to use.
+- **Per user, not per machine.** The first version searched FH's machine-wide Plugin Data
+  folder (`LOCAL_MACHINE`) instead. FH 8's installer gives Everyone Modify on that folder, so
+  on a shared PC another account could put a module there that would run in your Session
+  without your having read it. The per-user folder is writable only by that user (and
+  SYSTEM and Administrators), so the hand-install checkpoint holds for both folders. Sharing
+  one module between Windows accounts on the same PC means copying it into each.
 - **Per call, not per Session.** The env and tracker are rebuilt every call; a module bound
   to an earlier env would write past the current call's tracker and rollback. Text is
   re-read each call, so an edited module needs no restart. Within one call a module loads

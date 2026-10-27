@@ -233,7 +233,7 @@ end
 -- unfiltered "all"/"all", mirroring accessMode's own default-to-read-only above -- so a
 -- caller that never passes one (any pre-#141 test, or a session with no restriction)
 -- behaves exactly as before.
--- modules ({folder=, machineFolder=}, from userModules.foldersFromFH) gives the script its
+-- modules ({folder=, userFolder=}, from userModules.foldersFromFH) gives the script its
 -- require() and fhBridge.listModules. Omitted, require() still exists but reports that user
 -- modules are unavailable.
 function M.run(scriptText, accessMode, privacySettings, modules)

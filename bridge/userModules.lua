@@ -1,6 +1,6 @@
 -- User project modules: a sandboxed require() for run_lua scripts, loading helper modules
--- the user installs by hand: first from the open project's own modules folder, then from a
--- machine-wide one shared by every project.
+-- the user installs by hand: first from the open project's own modules folder, then from the
+-- user's own one, shared by all their projects.
 --
 -- Each module compiles against the calling script's own sandbox env -- same allowlist, same
 -- write tracker, same Visibility-filtered fhBridge helpers -- so a module can do exactly what
@@ -20,9 +20,9 @@ local M = {}
 -- plugin's name.
 M.SUBFOLDER = 'Plugin Data\\AI Connector\\modules'
 
--- Relative to FH's machine-wide Plugin Data folder. Fixed, not the running plugin's own
--- name, so a renamed plugin file still finds the same modules.
-M.MACHINE_SUBFOLDER = 'AI Connector\\modules'
+-- Relative to FH's per-user Plugin Data folder. Fixed, not the running plugin's own name, so
+-- a renamed plugin file still finds the same modules.
+M.USER_SUBFOLDER = 'AI Connector\\modules'
 
 -- ASCII letters, digits and underscores only, so a name can never reach outside the folder.
 -- Spelt out rather than %w, whose meaning follows the C locale.
@@ -46,40 +46,40 @@ function M.folderFor(projectDataFolder)
   return projectDataFolder .. '\\' .. M.SUBFOLDER
 end
 
--- The machine-wide modules folder, from fhGetPluginDataFileName("LOCAL_MACHINE")'s result
--- ("<machine Plugin Data>\<plugin name>"): its parent folder, then MACHINE_SUBFOLDER. nil
--- when FH returned nothing usable. Take FH's answer, not its help: the help's path for this
--- scope is wrong for FH 8 (ADR 0039).
-function M.machineFolderFor(localMachineDataFile)
-  if type(localMachineDataFile) ~= 'string' then
+-- The user's modules folder, from fhGetPluginDataFileName("CURRENT_USER")'s result
+-- ("<user's Plugin Data>\<plugin name>"): its parent folder, then USER_SUBFOLDER. nil when
+-- FH returned nothing usable. Take FH's answer, not its help: the help's paths for these
+-- scopes don't match FH 8 (ADR 0039).
+function M.userFolderFor(currentUserDataFile)
+  if type(currentUserDataFile) ~= 'string' then
     return nil
   end
-  local root = localMachineDataFile:match('^(.+)[\\/][^\\/]+$')
+  local root = currentUserDataFile:match('^(.+)[\\/][^\\/]+$')
   if not root then
     return nil
   end
-  return root .. '\\' .. M.MACHINE_SUBFOLDER
+  return root .. '\\' .. M.USER_SUBFOLDER
 end
 
--- Both folders for the open project, asked of FH: {folder=, machineFolder=}, either nil
--- when FH can't say.
+-- Both folders for the open project, asked of FH: {folder=, userFolder=}, either nil when
+-- FH can't say.
 function M.foldersFromFH()
-  local ok, machineDataFile = pcall(fhGetPluginDataFileName, 'LOCAL_MACHINE')
+  local ok, userDataFile = pcall(fhGetPluginDataFileName, 'CURRENT_USER')
   return {
     folder = M.folderFor(fhGetContextInfo('CI_PROJECT_DATA_FOLDER')),
-    machineFolder = ok and M.machineFolderFor(machineDataFile) or nil,
+    userFolder = ok and M.userFolderFor(userDataFile) or nil,
   }
 end
 
 -- The folders that are known, in search order: { {scope='project', folder=},
--- {scope='machine', folder=} }, skipping either one that is nil.
+-- {scope='user', folder=} }, skipping either one that is nil.
 function M.searchOrder(modules)
   local order = {}
   if modules and modules.folder then
     table.insert(order, { scope = 'project', folder = modules.folder })
   end
-  if modules and modules.machineFolder then
-    table.insert(order, { scope = 'machine', folder = modules.machineFolder })
+  if modules and modules.userFolder then
+    table.insert(order, { scope = 'user', folder = modules.userFolder })
   end
   return order
 end
@@ -144,19 +144,19 @@ local function describeLoad(entry, require)
 end
 
 -- What is installed, for describe_project/fhBridge.listModules. modules = {folder=,
--- machineFolder=, listFolder=}, any of them nil; listFolder(folder) -> array of
+-- userFolder=, listFolder=}, any of them nil; listFolder(folder) -> array of
 -- {path=, size=, modified=} | false defaults to fhFileUtils.getFolderContents (tests inject).
 -- require, when given, is the calling script's own: each module that would be used is loaded
 -- through it, so loading runs the module's top-level code in that script's sandbox.
--- Returns { folder=, machineFolder=, modules = { {name=, scope="project"|"machine", size=,
+-- Returns { folder=, userFolder=, modules = { {name=, scope="project"|"user", size=,
 -- modified=, shadowed=true when a project module of the same name wins, loaded=, loadError=,
 -- exports=, doc=}, ... }, error=? }. Never errors.
 function M.list(modules, require)
   modules = modules or {}
-  local result = { folder = modules.folder, machineFolder = modules.machineFolder, modules = {} }
+  local result = { folder = modules.folder, userFolder = modules.userFolder, modules = {} }
   local places = M.searchOrder(modules)
   if #places == 0 then
-    result.error = 'no project is open and no machine-wide folder is known, so there is nothing to list'
+    result.error = 'no project is open and no user modules folder is known, so there is nothing to list'
     return result
   end
   local listFolder = modules.listFolder or defaultListFolder

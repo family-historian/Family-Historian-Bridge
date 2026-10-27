@@ -445,9 +445,10 @@ describe("describe_project userModules (issue #150)", () => {
   });
 });
 
-describe("describe_project userModules: machine-wide folder (issue #150)", () => {
-  it("documents the machine-wide folder, the search order and the scope/shadowed fields", () => {
-    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"machineFolder"/);
+describe("describe_project userModules: the user's own folder (issue #150)", () => {
+  it("documents the user folder, the search order and the scope/shadowed fields", () => {
+    expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"userFolder"/);
+    expect(DESCRIBE_PROJECT_DESCRIPTION).not.toMatch(/machineFolder|machine-wide/);
     expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"scope"/);
     expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/"shadowed"/);
     expect(DESCRIBE_PROJECT_DESCRIPTION).toMatch(/project folder is searched\s+first/);
