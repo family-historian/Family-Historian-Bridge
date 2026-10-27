@@ -126,3 +126,26 @@ describe("interpretBridgeResponse mergeIntoResult (issue #109)", () => {
     expect(result.content[0]?.text).toBe('{"individuals":42}');
   });
 });
+
+describe("interpretBridgeResponse reshape", () => {
+  it("reshapes a successful object result before mergeIntoResult, which still wins", () => {
+    const result = interpretBridgeResponse(
+      '{"a":1,"b":2}',
+      { b: "merged" },
+      (r) => ({ ...r, a: (r.a as number) + 10, b: "reshaped", c: true }),
+    );
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({ a: 11, b: "merged", c: true });
+  });
+
+  it("never reshapes an error, an array or a non-object result", () => {
+    let calls = 0;
+    const reshape = (r: Record<string, unknown>) => {
+      calls += 1;
+      return r;
+    };
+    expect(interpretBridgeResponse('{"error":"boom"}', undefined, reshape).isError).toBe(true);
+    interpretBridgeResponse("[1,2]", undefined, reshape);
+    interpretBridgeResponse("42", undefined, reshape);
+    expect(calls).toBe(0);
+  });
+});

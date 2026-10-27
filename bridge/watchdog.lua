@@ -12,46 +12,54 @@ local M = {}
 
 M.INSTRUCTION_LIMIT = 50000000
 local HOOK_GRANULARITY = 1000 -- how many VM instructions elapse between hook calls
+local OVERRUN_MESSAGE = 'exceeded the instruction limit (possible infinite loop)'
+
+-- Installs a count hook that raises message (at error level `level`) once more than limit VM
+-- instructions have run, and again every HOOK_GRANULARITY instructions after that. Returns a
+-- function giving the instructions counted so far, to the nearest HOOK_GRANULARITY.
+local function installCountingHook(limit, message, level)
+  local hookCalls = 0
+  local maxHookCalls = math.floor(limit / HOOK_GRANULARITY)
+  debug.sethook(function()
+    hookCalls = hookCalls + 1
+    if hookCalls > maxHookCalls then
+      error(message, level)
+    end
+  end, '', HOOK_GRANULARITY)
+  return function() return hookCalls * HOOK_GRANULARITY end
+end
 
 -- Installs a count-hook that raises an error once INSTRUCTION_LIMIT VM instructions have
 -- elapsed since this call. Must be paired with a stop() call after the protected
 -- execution (success or failure) so the hook doesn't leak into unrelated code running on
 -- the same thread afterward.
 function M.start()
-  local hookCalls = 0
-  local maxHookCalls = math.floor(M.INSTRUCTION_LIMIT / HOOK_GRANULARITY)
-  debug.sethook(function()
-    hookCalls = hookCalls + 1
-    if hookCalls > maxHookCalls then
-      error('script aborted: exceeded the instruction limit (possible infinite loop)')
-    end
-  end, '', HOOK_GRANULARITY)
+  installCountingHook(M.INSTRUCTION_LIMIT, 'script aborted: ' .. OVERRUN_MESSAGE, 1)
 end
 
 function M.stop()
   debug.sethook()
 end
 
+-- A budget for pcallWithBudget: total instructions shared by every call on it, at most cap
+-- for any one call.
+function M.newBudget(total, cap)
+  return { remaining = total, cap = cap }
+end
+
 -- Runs fn(...) under pcall with a budget of its own, so a loop in fn fails fn alone. Needed
 -- because start()'s hook, once past its limit, raises again every HOOK_GRANULARITY
 -- instructions, so a caught overrun still sinks the rest of the script. Whatever hook was
 -- installed is paused meanwhile and put back with its count unchanged.
--- budget = { remaining = <VM instructions>, cap = <optional per-call limit> }: fn may use up
--- to budget.remaining (and no more than cap), and what it uses (to the nearest
--- HOOK_GRANULARITY) is taken off, so several calls can share one budget.
+-- budget (from newBudget): fn may use up to its cap, or what remains if that's less, and what
+-- it uses (to the nearest HOOK_GRANULARITY, at least one) is taken off what remains, so
+-- several calls can share one budget.
 -- Returns pcall's results.
-function M.isolated(budget, fn, ...)
+function M.pcallWithBudget(budget, fn, ...)
   local hook, mask, count = debug.gethook()
-  local hookCalls = 0
-  local maxHookCalls = math.floor(math.min(budget.remaining, budget.cap or budget.remaining) / HOOK_GRANULARITY)
-  debug.sethook(function()
-    hookCalls = hookCalls + 1
-    if hookCalls > maxHookCalls then
-      -- Level 0: the position would be this file's, which in the bundled plugin is a long
-      -- path into the .fh_lua and tells the user nothing about their module.
-      error('aborted: exceeded the instruction limit (possible infinite loop)', 0)
-    end
-  end, '', HOOK_GRANULARITY)
+  -- Level 0: the position would be this file's, which in the bundled plugin is a long path
+  -- into the .fh_lua and tells the user nothing about their module.
+  local used = installCountingHook(math.min(budget.remaining, budget.cap), 'aborted: ' .. OVERRUN_MESSAGE, 0)
   local results = table.pack(pcall(fn, ...))
   if hook then
     debug.sethook(hook, mask, count)
@@ -59,7 +67,8 @@ function M.isolated(budget, fn, ...)
     debug.sethook()
   end
   -- Only after the hook is swapped back: once fn has overrun, this hook raises on its next tick.
-  budget.remaining = math.max(0, budget.remaining - hookCalls * HOOK_GRANULARITY)
+  -- At least one granule, or a call shorter than that would cost nothing however often it ran.
+  budget.remaining = math.max(0, budget.remaining - math.max(used(), HOOK_GRANULARITY))
   return table.unpack(results, 1, results.n)
 end
 

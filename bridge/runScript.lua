@@ -196,8 +196,8 @@ end
 
 -- Every text pre-scan's message for text, joined with '; ', or nil when all pass. All of them
 -- run rather than stopping at the first hit, so a script tripping several hears about each
--- in one round-trip. accessMode nil skips the write-name scan, as module text is scanned
--- (ADR 0039).
+-- in one round-trip. accessMode nil skips the write-name scan, for module text: a module may
+-- hold write helpers yet be loaded in Read-only for its read helpers.
 local function textViolations(text, accessMode, privacySettings)
   local messages = {}
   for _, message in ipairs({
@@ -217,23 +217,24 @@ local function textViolations(text, accessMode, privacySettings)
 end
 
 -- Gives env its require(), searching userModules.searchOrder(modules). Module text is
--- pre-scanned against modules.privacySettings when present: the Session's real Visibility,
--- which describe_project's own unfiltered script doesn't get, but the modules its listing
--- loads must.
+-- pre-scanned against modules.sessionVisibility when present, else privacySettings.
 local function attachUserModules(env, modules, privacySettings)
   modules = modules or {}
   local order = userModules.searchOrder(modules)
   local source = #order > 0 and userModules.folderSource(order) or nil
-  local modulePrivacy = modules.privacySettings or privacySettings
-  env.require = userModules.makeRequire(env, source, function(text)
+  local modulePrivacy = modules.sessionVisibility or privacySettings
+  local require, loadedValue = userModules.makeRequire(env, source, function(text)
     return textViolations(text, nil, modulePrivacy)
   end)
+  env.require = require
+  -- Also kept where scripts can't reach, for fhBridge.listModules: a script may rebind its own.
+  modules.require, modules.loadedValue = require, loadedValue
 end
 
 -- privacySettings ({privateVisibility=, livingVisibility=}) defaults to unfiltered
 -- "all"/"all", mirroring accessMode's own default-to-read-only above.
--- modules ({folder=, userFolder=, privacySettings=}) gives the script its require() and
--- fhBridge.listModules. Omitted, require() still exists but reports that user project
+-- modules ({folder=, userFolder=, sessionVisibility=}) gives the script its require() and
+-- fhBridge.listModules; attachUserModules adds require= and loadedValue= to it. Omitted, require() still exists but reports that user project
 -- modules are unavailable.
 function M.run(scriptText, accessMode, privacySettings, modules)
   accessMode = accessMode or 'read-only'

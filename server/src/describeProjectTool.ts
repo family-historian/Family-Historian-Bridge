@@ -78,9 +78,9 @@ Returns JSON shaped as:
   "fhAppVersion": "<Family Historian's own application version, e.g. \\"8.0.0\\", from fhGetAppVersion()>",
   "userModules": {
     "folder": "<the project's modules folder, searched first: CI_PROJECT_DATA_FOLDER\\\\Plugin Data\\\\AI Connector\\\\modules, or null with no project>",
-    "userFolder": "<the user's own modules folder, shared by all their projects, searched second: FH's per-user Plugin Data\\\\AI Connector\\\\modules>",
-    "modules": [ { "name": "<the name to require()>", "scope": "<\\"project\\" | \\"user\\">", "shadowed": <true on a user-folder module that a same-named project module overrides>, "size": <bytes>, "modified": "<as FH reports it>", "loaded": <true | false; absent on a shadowed module>, "loadError": "<why it didn't load>", "exports": [ "<the module table's names, sorted>" ], "doc": { "<name>": "<the module's own _DOC line for it>" } }, ... ],
-    "error": "<present only if a folder couldn't be listed>"
+    "userFolder": "<the user's own modules folder, shared by all their projects, searched second: FH's per-user Plugin Data\\\\AI Connector\\\\modules, or null if FH gives none>",
+    "modules": [ { "name": "<the name to require()>", "scope": "<\\"project\\" | \\"user\\">", "shadowed": <true on a user-folder module that a same-named project module overrides, else false>, "size": <bytes, or null>, "modified": "<as FH reports it, or null>", "loaded": <true | false, or null on a shadowed module>, "loadError": "<why it didn't load, or null>", "exports": [ "<the module table's names, sorted>" ] | null, "doc": { "<name>": "<the module's own _DOC line for it>" } | null }, ... ],
+    "error": "<why a folder couldn't be listed, or null>"
   },
   "bridgeState": {
     "bridgeVersion": "<the running Bridge plugin's own version, or null if it couldn't be determined>",
@@ -109,7 +109,7 @@ first, so a project module overrides a user one of the same name. It runs inside
 script's own sandbox. Every module that isn't shadowed is loaded, read-only, to fill in
 loaded/exports/doc; one that fails says why in loadError.
 Use an installed helper rather than re-writing what it does; search_gedcom_knowledge("user
-project modules") explains how require behaves. Absent when the Bridge plugin predates user
+project modules") explains how require behaves. null when the Bridge plugin predates user
 project modules.
 
 bridgeState describes the running Bridge plugin itself, not the FH project — accessMode is
@@ -344,7 +344,7 @@ do
   end
 end
 
--- nil (so absent from the JSON) when the Bridge plugin predates fhBridge.listModules.
+-- nil when the Bridge plugin predates fhBridge.listModules; the server reports that as null.
 local userModules = nil
 if fhBridge and fhBridge.listModules then
   userModules = fhBridge.listModules()
@@ -379,7 +379,48 @@ export async function handleDescribeProject(
   const run = await checkVersionThenRunScript(deps, SERVER_VERSION, DESCRIBE_PROJECT_SCRIPT);
   if (run.block) return run.block;
 
-  return interpretBridgeResponse(run.raw, { bridgeState: run.versionCheck.bridgeState });
+  return interpretBridgeResponse(
+    run.raw,
+    { bridgeState: run.versionCheck.bridgeState },
+    withUserModulesShape,
+  );
+}
+
+function luaListOrNull(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  return value === undefined || value === null ? null : [];
+}
+
+// The Bridge's JSON encoder can't say null (a Lua table can't hold nil) and writes an empty
+// table as {}. So it leaves out what it doesn't know, and an empty list comes back as an
+// object. This puts both right for userModules: unknown fields are null, never omitted, and
+// modules and each module's exports are always arrays.
+export function withUserModulesShape(result: Record<string, unknown>): Record<string, unknown> {
+  const listing = result.userModules;
+  if (typeof listing !== "object" || listing === null) {
+    return { ...result, userModules: null };
+  }
+  const raw = listing as Record<string, unknown>;
+  const modules = Array.isArray(raw.modules) ? raw.modules : [];
+  return {
+    ...result,
+    userModules: {
+      folder: null,
+      userFolder: null,
+      error: null,
+      ...raw,
+      modules: modules.map((entry: Record<string, unknown>) => ({
+        size: null,
+        modified: null,
+        shadowed: false,
+        loaded: null,
+        loadError: null,
+        doc: null,
+        ...entry,
+        exports: luaListOrNull(entry.exports),
+      })),
+    },
+  };
 }
 
 export function registerDescribeProjectTool(

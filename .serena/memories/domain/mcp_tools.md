@@ -10,9 +10,11 @@
   live in `getTemplateFieldCensus` instead), `flagCensus` (Individual record flags only,
   not Fact Flags), `dataQuality.livingStatusAmbiguousCount`, `contextInfo` (9 string/bool
   `CI_*` keys — excludes HWND light-userdata keys and report-only book-context keys),
-  `fhAppVersion`, `bridgeState` (bridgeVersion/serverVersion/versionStatus/accessMode,
-  merged from the same VERSION exchange, no second connection). Unknown fields are `null`,
-  never omitted.
+  `fhAppVersion`, `userModules` (the user project modules installed in the project and user
+  folders, each loaded read-only to report loaded/exports/doc; `fhBridge.listModules`, ADR
+  0039), `bridgeState` (bridgeVersion/serverVersion/versionStatus/accessMode, merged from the
+  same VERSION exchange, no second connection). Unknown fields are `null`, never omitted
+  (the server fills in the nulls and empty arrays the Lua side can't send).
 - **author_fh_plugin**: scaffolds a standalone Report/Query `.fh_lua` plugin, returned as
   text for the user to save. Report gets `@Type: report` + `FH_GetRecordSectionContent`
   wrapper; Query gets neither (no required header/entry-point in FH's own architecture).

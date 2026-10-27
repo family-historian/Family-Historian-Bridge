@@ -4,7 +4,9 @@
 -- spec's Testing Decisions).
 
 package.path = package.path .. ';' .. arg[0]:match("(.*[/\\])") .. '../?.lua'
+  .. ';' .. arg[0]:match("(.*[/\\])") .. '?.lua'
 local runScript = require('runScript')
+local testHelpers = require('testHelpers')
 
 local failures = 0
 
@@ -522,26 +524,19 @@ check(not contains(runScript.run("local records = {}; return records", 'read-onl
   'a bare local variable named records is not mistaken for the fhu.records idiom (word-boundary match requires the fhu. prefix)')
 
 -- User project modules: require() end to end through a real sandbox env, with fhLoadTextFile
--- and fhFileUtils faked over an in-memory project folder.
+-- and fhFileUtils faked (testHelpers.fakeFhFiles) over an in-memory project folder.
 do
   local folder = 'P\\Plugin Data\\AI Connector\\modules'
+  local fake = testHelpers.fakeFhFiles()
   local files = {}
-  local function nameOf(path)
-    return path:sub(1, #folder + 1) == folder .. '\\' and path:sub(#folder + 2):match('^(.+)%.lua$') or nil
+  fake.files = setmetatable({}, { __index = function(_, path)
+    return files[path:sub(#folder + 2):match('^(.+)%.lua$') or '']
+  end })
+  fake.folders[folder] = function()
+    local out = {}
+    for name, text in pairs(files) do table.insert(out, { path = folder .. '\\' .. name .. '.lua', size = #text }) end
+    return out
   end
-  fhLoadTextFile = function(path)
-    local name = nameOf(path)
-    return name and files[name] or nil
-  end
-  package.loaded['fhFileUtils'] = {
-    fileExists = function(path) local name = nameOf(path); return name ~= nil and files[name] ~= nil end,
-    folderExists = function(f) return f == folder end,
-    getFolderContents = function()
-      local out = {}
-      for name in pairs(files) do table.insert(out, { path = folder .. '\\' .. name .. '.lua', size = #files[name] }) end
-      return out
-    end,
-  }
   local modules = { folder = folder }
   local function run(script, mode, privacy)
     return runScript.run(script, mode or 'read-only', privacy, modules)
@@ -620,7 +615,15 @@ do
   resetCommitRollbackStubs()
   local rwListing = run("return fhBridge.listModules()", 'read-write')
   check(contains(rwListing, '"name":"helpers"') and not contains(rwListing, '"loaded"') and not contains(rwListing, 'instruction limit'),
-    'in a read-write Session fhBridge.listModules lists without loading any module')
+    'in a Read-write Session fhBridge.listModules lists without loading any module')
+  local looped = run("for _ = 1, 5 do fhBridge.listModules() end\nreturn fhBridge.listModules()")
+  check(contains(looped, 'budget is spent'),
+    'a script that lists over and over shares one listing budget per call, so a looping module can\'t outrun it')
+  files.selflister = 'local listing = fhBridge.listModules()\n' ..
+    'return { count = #listing.modules, anyLoaded = listing.modules[1].loaded ~= nil }'
+  local selfListed = run("local r = require('selflister')\nreturn r")
+  check(contains(selfListed, '"anyLoaded":false') and not contains(selfListed, 'requires itself'),
+    'a module that lists while it is loading gets names only, not a false "requires itself" for itself')
 
   files.uses_helpers = 'local h = require("helpers")\nreturn { quad = function(n) return h.double(h.double(n)) end }'
   check(run("return require('uses_helpers').quad(5)") == '20', 'a module can require another module end to end')
@@ -636,26 +639,23 @@ do
   check(contains(runScript.run("return require('helpers')", 'read-only'), 'not available'),
     'without a modules argument, require says user project modules are unavailable')
 
-  files.walker = 'local p = fhNewItemPtr()\np:MoveToFirstRecord("INDI")\nreturn 1'
   local restricted = { privateVisibility = 'exclude', livingVisibility = 'all' }
   local describeStyle = runScript.run("return fhBridge.listModules()", 'read-only', nil,
-    { folder = folder, privacySettings = restricted })
+    { folder = folder, sessionVisibility = restricted })
   check(contains(describeStyle, '"name":"walker"') and contains(describeStyle, 'bypasses'),
     'modules are pre-scanned against the Session\'s real Visibility even when the script itself runs unfiltered, as describe_project does')
 
-  fhLoadTextFile = nil
-  package.loaded['fhFileUtils'] = nil
+  fake.restore()
 end
 
--- Project folder first, then the user's folder, through the real FH-backed reader
--- (fhLoadTextFile stubbed as a plain global, the way it exists inside FH).
+-- Project folder first, then the user's folder, through the real FH-backed reader.
 do
-  local disk = {
+  local fake = testHelpers.fakeFhFiles()
+  fake.files = {
     ['P\\house.lua'] = 'return "project house"',
     ['U\\house.lua'] = 'return "user house"',
     ['U\\common.lua'] = 'return "user common"',
   }
-  fhLoadTextFile = function(path) return disk[path] end
   local both = { folder = 'P', userFolder = 'U' }
   check(runScript.run("return require('house')", 'read-only', nil, both) == '"project house"',
     'a project module overrides a user one of the same name')
@@ -665,7 +665,7 @@ do
     'user modules load with no project folder at all')
   check(contains(runScript.run("return require('absent')", 'read-only', nil, both), 'no module absent in P or U'),
     'a missing module names both folders searched')
-  fhLoadTextFile = nil
+  fake.restore()
 end
 
 if failures > 0 then

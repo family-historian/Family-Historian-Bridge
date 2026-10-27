@@ -62,9 +62,12 @@ export function describeBridgeConnectionError(err: unknown): CallToolResult {
 // success path below -- an error/malformed response returns before mergeIntoResult is
 // ever applied, so it never leaks into an error result. run_lua never passes it, so its
 // arbitrary script results are unaffected.
+// reshape, when given, rewrites a successful object result before the merge: describe_project
+// uses it to put back what Lua can't send (null fields, empty arrays).
 export function interpretBridgeResponse(
   raw: string,
   mergeIntoResult?: Record<string, unknown>,
+  reshape?: (result: Record<string, unknown>) => Record<string, unknown>,
 ): CallToolResult {
   let parsed: unknown;
   try {
@@ -89,8 +92,10 @@ export function interpretBridgeResponse(
     return textResult(`Script error: ${parsed.error}${undoHint}`, true);
   }
 
+  const isObject = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+  const reshaped = reshape && isObject ? reshape(parsed as Record<string, unknown>) : parsed;
   const result = mergeIntoResult
-    ? { ...(parsed as Record<string, unknown>), ...mergeIntoResult }
-    : parsed;
+    ? { ...(reshaped as Record<string, unknown>), ...mergeIntoResult }
+    : reshaped;
   return textResult(JSON.stringify(result));
 }

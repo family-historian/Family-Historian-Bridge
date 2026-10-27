@@ -46,7 +46,9 @@ Explorer's address bar rather than browsing to it.
 
 A module is one `.lua` file. Its name is what Claude asks for, so stick to letters, digits
 and underscores: `house_checks.lua` works, but `house checks.lua` and `house-checks.lua`
-don't.
+don't. Case doesn't matter, as it doesn't in Windows file names. Two names are taken:
+`fhUtils` and `fhFileUtils` are Family Historian's own libraries, so a module called either
+is listed but never loads.
 
 Inside, it's ordinary Lua that ends by returning a table of functions. A small example,
 saved as `house_checks.lua`:
@@ -113,8 +115,8 @@ rules, for instance.
 You can write modules yourself, or ask Claude to draft one: "write me a module that checks
 every place name ends with the country". The Bridge can't save it into the folder; that
 step is always yours, so you read it before it's used. (If Claude can save files on your
-computer, as in Claude Code, it can put the module in the folder for you when you ask, but
-it's still your decision and your folder.)
+computer, as in Claude Code, you can ask it to put the module in the folder, but read the
+file before you let it be used: that reading is the check.)
 
 Changes take effect straight away. The files are read fresh for every question, so there's
 no need to Stop and Start the Session after editing one.
@@ -140,8 +142,9 @@ A module can do exactly what Claude's own scripts can, and no more:
   up functions and tables. Loading for the list is always done read-only. If Claude asks
   for the list from inside a script in a Read-write Session, it gets the names only, so a
   list can never change your tree.
-- A module that fails to load fails only that request for it. The rest of Claude's script
-  can carry on.
+- A module that fails to load stops Claude's script there, like any other error, unless
+  the script was written to catch it. When Claude lists your modules, one that fails is
+  shown with its error and the others still load.
 - Most of the safety checks that look at Claude's scripts before they run look at your
   module's text too. The one left out is the check that refuses a Read-only script for
   mentioning a function that changes the tree, so that a module of mixed read and write
@@ -149,9 +152,9 @@ A module can do exactly what Claude's own scripts can, and no more:
 
 ## Troubleshooting
 
-**"no module house_checks in … or …"**: Claude couldn't find the file in either folder. Check
-the name and the `.lua` extension (see above), and that it's in one of the two folders
-listed in the message.
+**"no module house_checks in …"**: Claude couldn't find the file in any folder it looked
+in. Check the name and the `.lua` extension (see above), and that the file is in one of the
+folders the message lists. With no project open, only your own folder is searched.
 
 **"module names are letters, digits and underscores only"**: rename the file, for example
 from `house-checks.lua` to `house_checks.lua`.
@@ -174,7 +177,7 @@ used. If the same name is in both folders, the project's copy wins, and `describ
 marks the other one as **shadowed**.
 
 **Claude doesn't mention your modules at all**: ask it to call `describe_project` and look
-at `userModules`. If that section is missing, your Bridge plugin predates user modules.
+at `userModules`. If it says `null`, your Bridge plugin predates user modules.
 
 ## Sharing modules
 

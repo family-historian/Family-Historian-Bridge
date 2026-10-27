@@ -55,45 +55,48 @@ local ok3, result3 = pcall(function()
 end)
 check(ok3 and result3 == 500500, 'code after stop() runs unaffected by a prior watchdog run')
 
--- isolated(): a loop inside it fails only itself, and the outer watchdog carries on with its
+-- pcallWithBudget(): a loop inside it fails only itself, and the outer watchdog carries on with its
 -- own count, neither tripped by the inner loop nor reset by it.
 watchdog.INSTRUCTION_LIMIT = 200000
 watchdog.start()
-local innerBudget = { remaining = 10000 }
-local okInner, errInner = watchdog.isolated(innerBudget, function() while true do end end)
+local innerBudget = watchdog.newBudget(10000, 10000)
+local okInner, errInner = watchdog.pcallWithBudget(innerBudget, function() while true do end end)
 local okAfter, after = pcall(function()
   local sum = 0
   for i = 1, 1000 do sum = sum + i end
   return sum
 end)
-local okValue, a, b = watchdog.isolated({ remaining = 10000 }, function(x, y) return x + y, 'second' end, 2, 3)
-local shared = { remaining = 30000 }
-local okFirst = watchdog.isolated(shared, function() for _ = 1, 4000 do end end)
+local okValue, a, b = watchdog.pcallWithBudget(watchdog.newBudget(10000, 10000), function(x, y) return x + y, 'second' end, 2, 3)
+local shared = watchdog.newBudget(30000, 30000)
+local okFirst = watchdog.pcallWithBudget(shared, function() for _ = 1, 4000 do end end)
 local afterFirst = shared.remaining
-local okSecond = watchdog.isolated(shared, function() while true do end end)
-local okThird, errThird = watchdog.isolated(shared, function() for _ = 1, 4000 do end end)
+local okSecond = watchdog.pcallWithBudget(shared, function() while true do end end)
+local okThird, errThird = watchdog.pcallWithBudget(shared, function() for _ = 1, 4000 do end end)
 local okOuter, errOuter = pcall(function() while true do end end)
 watchdog.stop()
 watchdog.INSTRUCTION_LIMIT = savedLimit
-local capped = { remaining = 30000, cap = 10000 }
+local capped = watchdog.newBudget(30000, 10000)
 watchdog.start()
-local okCapped = watchdog.isolated(capped, function() while true do end end)
+local okCapped = watchdog.pcallWithBudget(capped, function() while true do end end)
 watchdog.stop()
 check(okCapped == false and capped.remaining >= 19000 and capped.remaining <= 20000,
   'cap limits one call, and only what that call used comes off the shared budget')
+local tiny = watchdog.newBudget(5000, 5000)
+for _ = 1, 3 do watchdog.pcallWithBudget(tiny, function() return 1 end) end
+check(tiny.remaining == 2000, 'every call costs at least one granule, so even very short calls use the budget up')
 check(innerBudget.remaining == 0, 'an overrun uses up the whole budget')
 check(okFirst and afterFirst < 30000 and afterFirst > 0, 'a call that finishes takes what it used off a shared budget')
 check(okSecond == false and shared.remaining == 0, 'a loop uses up what is left of a shared budget')
 check(okThird == false and tostring(errThird):find('instruction limit', 1, true) ~= nil,
   'once a shared budget is spent, the next call on it fails straight away')
 check(okInner == false and tostring(errInner):find('instruction limit', 1, true) ~= nil,
-  'isolated aborts a loop inside it')
-check(tostring(errInner):sub(1, 8) == 'aborted:', 'isolated\'s abort message carries no watchdog.lua position')
-check(okAfter and after == 500500, 'after an isolated overrun, the rest of the script still runs')
-check(okValue and a == 5 and b == 'second', 'isolated passes arguments in and every result out')
+  'pcallWithBudget aborts a loop inside it')
+check(tostring(errInner):sub(1, 8) == 'aborted:', 'pcallWithBudget\'s abort message carries no watchdog.lua position')
+check(okAfter and after == 500500, 'after an overrun inside pcallWithBudget, the rest of the script still runs')
+check(okValue and a == 5 and b == 'second', 'pcallWithBudget passes arguments in and every result out')
 check(okOuter == false and tostring(errOuter):find('instruction limit', 1, true) ~= nil,
   'the outer watchdog is restored and still bounds the script')
-check(debug.gethook() == nil, 'stop() after isolated leaves no hook behind')
+check(debug.gethook() == nil, 'stop() after pcallWithBudget leaves no hook behind')
 
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
