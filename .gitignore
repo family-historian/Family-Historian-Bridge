@@ -25,3 +25,9 @@ test-data/
 
 # Video plan: local-only, own git repo (see video/)
 /video/
+
+# macOS Finder metadata
+.DS_Store
+
+# Claude Code resume checkpoint
+.claude/RESUME.md
