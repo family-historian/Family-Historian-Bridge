@@ -196,10 +196,8 @@ end
 
 -- Every text pre-scan's message for text, joined with '; ', or nil when all pass. All of them
 -- run rather than stopping at the first hit, so a script tripping several hears about each
--- in one round-trip. accessMode nil skips the write-name scan, which is how module text is
--- scanned: a module of write helpers is legitimate in a Read-only Session for its read
--- helpers, its write calls find no write function in a Read-only env, and in Read-write the
--- runtime write-then-log backstop covers module code exactly as it covers the script's own.
+-- in one round-trip. accessMode nil skips the write-name scan, as module text is scanned
+-- (ADR 0039).
 local function textViolations(text, accessMode, privacySettings)
   local messages = {}
   for _, message in ipairs({
@@ -218,23 +216,24 @@ local function textViolations(text, accessMode, privacySettings)
   return table.concat(messages, '; ')
 end
 
--- Gives env its require(), searching userModules.searchOrder(modules). modules.source, when
--- present, replaces the FH-backed file reader (tests).
+-- Gives env its require(), searching userModules.searchOrder(modules). Module text is
+-- pre-scanned against modules.privacySettings when present: the Session's real Visibility,
+-- which describe_project's own unfiltered script doesn't get, but the modules its listing
+-- loads must.
 local function attachUserModules(env, modules, privacySettings)
   modules = modules or {}
   local order = userModules.searchOrder(modules)
-  local source = modules.source or (#order > 0 and userModules.folderSource(order)) or nil
+  local source = #order > 0 and userModules.folderSource(order) or nil
+  local modulePrivacy = modules.privacySettings or privacySettings
   env.require = userModules.makeRequire(env, source, function(text)
-    return textViolations(text, nil, privacySettings)
+    return textViolations(text, nil, modulePrivacy)
   end)
 end
 
--- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
--- unfiltered "all"/"all", mirroring accessMode's own default-to-read-only above -- so a
--- caller that never passes one (any pre-#141 test, or a session with no restriction)
--- behaves exactly as before.
--- modules ({folder=, userFolder=}, from userModules.foldersFromFH) gives the script its
--- require() and fhBridge.listModules. Omitted, require() still exists but reports that user
+-- privacySettings ({privateVisibility=, livingVisibility=}) defaults to unfiltered
+-- "all"/"all", mirroring accessMode's own default-to-read-only above.
+-- modules ({folder=, userFolder=, privacySettings=}) gives the script its require() and
+-- fhBridge.listModules. Omitted, require() still exists but reports that user project
 -- modules are unavailable.
 function M.run(scriptText, accessMode, privacySettings, modules)
   accessMode = accessMode or 'read-only'

@@ -433,13 +433,16 @@ check(type(env.fhBridge.listModules) == 'function', 'fhBridge.listModules presen
 check(env.fhBridge.listModules().folder == nil and env.fhBridge.listModules().error ~= nil,
   'fhBridge.listModules without a modules folder reports an error instead of raising one')
 do
-  local envMods = sandbox.build('read-only', nil, {
-    folder = 'F', listFolder = function() return { { path = 'F\\house.lua', size = 3 } } end,
-  })
+  local savedFileUtils = package.loaded['fhFileUtils']
+  package.loaded['fhFileUtils'] = {
+    folderExists = function(f) return f == 'F' end,
+    getFolderContents = function() return { { path = 'F\\house.lua', size = 3 } } end,
+  }
+  local envMods = sandbox.build('read-only', nil, { folder = 'F' })
   local listing = envMods.fhBridge.listModules()
   check(listing.folder == 'F' and listing.modules[1].name == 'house', 'fhBridge.listModules lists the folder sandbox.build was given')
 
-  local mods = { folder = 'F', listFolder = function() return { { path = 'F\\house.lua' } } end }
+  local mods = { folder = 'F' }
   local loads = {}
   local roEnv = sandbox.build('read-only', nil, mods)
   roEnv.require = function(name) table.insert(loads, 'ro:' .. name); return {} end
@@ -450,6 +453,7 @@ do
   local rwListing = rwEnv.fhBridge.listModules()
   check(#loads == 1 and rwListing.modules[1].name == 'house' and rwListing.modules[1].loaded == nil,
     'in read-write, listModules lists without loading, so a listing never runs module code that writes')
+  package.loaded['fhFileUtils'] = savedFileUtils
 end
 
 -- Write tracker (issue #15): present on every build(), starts false, independent of

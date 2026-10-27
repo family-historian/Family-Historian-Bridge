@@ -397,8 +397,12 @@ function timPoll:action_cb()
     -- -- passing a restricted level here would trip runScript.lua's own bulkEnumerationViolation
     -- pre-scan and break describe_project outright the moment a Visibility level is restricted.
     local privacySettings = not request.forceReadOnly and currentPrivacySettings() or nil
+    -- User project modules are user-supplied text, so they're always pre-scanned against the
+    -- Session's real Visibility, even when describe_project's listing loads them.
+    local modules = userModules.foldersFromFH()
+    modules.privacySettings = currentPrivacySettings()
     local response, rethrowErr, transactionResult =
-        runScript.run(script, accessMode, privacySettings, userModules.foldersFromFH())
+        runScript.run(script, accessMode, privacySettings, modules)
     client:send(response .. "\n")
     client:close()
 

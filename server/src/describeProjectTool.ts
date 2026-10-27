@@ -79,7 +79,7 @@ Returns JSON shaped as:
   "userModules": {
     "folder": "<the project's modules folder, searched first: CI_PROJECT_DATA_FOLDER\\\\Plugin Data\\\\AI Connector\\\\modules, or null with no project>",
     "userFolder": "<the user's own modules folder, shared by all their projects, searched second: FH's per-user Plugin Data\\\\AI Connector\\\\modules>",
-    "modules": [ { "name": "<the name to require()>", "scope": "<\\"project\\" | \\"user\\">", "shadowed": <true on a user module a same-named project module overrides>, "size": <bytes>, "modified": "<as FH reports it>", "loaded": <true | false; absent on a shadowed module>, "loadError": "<why it didn't load>", "exports": [ "<the module table's names, sorted>" ], "doc": { "<name>": "<the module's own _DOC line for it>" } }, ... ],
+    "modules": [ { "name": "<the name to require()>", "scope": "<\\"project\\" | \\"user\\">", "shadowed": <true on a user-folder module that a same-named project module overrides>, "size": <bytes>, "modified": "<as FH reports it>", "loaded": <true | false; absent on a shadowed module>, "loadError": "<why it didn't load>", "exports": [ "<the module table's names, sorted>" ], "doc": { "<name>": "<the module's own _DOC line for it>" } }, ... ],
     "error": "<present only if a folder couldn't be listed>"
   },
   "bridgeState": {
@@ -110,7 +110,7 @@ script's own sandbox. Every module that isn't shadowed is loaded, read-only, to 
 loaded/exports/doc; one that fails says why in loadError.
 Use an installed helper rather than re-writing what it does; search_gedcom_knowledge("user
 project modules") explains how require behaves. Absent when the Bridge plugin predates user
-modules.
+project modules.
 
 bridgeState describes the running Bridge plugin itself, not the FH project — accessMode is
 the Session's real read-only/read-write toggle, distinct from the Read-only sandbox this

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user
+  installs by hand, from the project's `Plugin Data\AI Connector\modules` folder and then from the
+  user's own folder in FH's per-user Plugin Data. Each module runs in the calling script's sandbox,
+  with nothing a script couldn't do. `describe_project` lists them as `userModules` (whether each
+  loaded, what it exports, its `_DOC` lines), also available as `fhBridge.listModules()`. See
+  `docs/user-modules.md` and ADR 0039.
 
 ## 1.0.5
 

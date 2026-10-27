@@ -35,7 +35,8 @@
   Two folders, searched in order: the **project folder**
   (`<CI_PROJECT_DATA_FOLDER>\Plugin Data\AI Connector\modules`) and the **user folder**
   (`AI Connector\modules` in FH's per-user Plugin Data folder, the `CURRENT_USER` scope). A
-  user module that a same-named project module overrides is **shadowed**. Avoid "plugin" or "library"
+  **user-folder module** that a same-named project module overrides is **shadowed** (names
+  compared ignoring case, as Windows does). Avoid "plugin" or "library"
   for these: a module is neither installed through FH nor shipped with the Bridge.
 - **FH auto-undo**: FH's own native undo (Ctrl-Z, or automatic on an uncaught Lua error).
   This project implements no undo logic of its own — `run_lua` deliberately re-throws a

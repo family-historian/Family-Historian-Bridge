@@ -75,6 +75,12 @@ local okThird, errThird = watchdog.isolated(shared, function() for _ = 1, 4000 d
 local okOuter, errOuter = pcall(function() while true do end end)
 watchdog.stop()
 watchdog.INSTRUCTION_LIMIT = savedLimit
+local capped = { remaining = 30000, cap = 10000 }
+watchdog.start()
+local okCapped = watchdog.isolated(capped, function() while true do end end)
+watchdog.stop()
+check(okCapped == false and capped.remaining >= 19000 and capped.remaining <= 20000,
+  'cap limits one call, and only what that call used comes off the shared budget')
 check(innerBudget.remaining == 0, 'an overrun uses up the whole budget')
 check(okFirst and afterFirst < 30000 and afterFirst > 0, 'a call that finishes takes what it used off a shared budget')
 check(okSecond == false and shared.remaining == 0, 'a loop uses up what is left of a shared budget')

@@ -36,13 +36,14 @@ end
 -- because start()'s hook, once past its limit, raises again every HOOK_GRANULARITY
 -- instructions, so a caught overrun still sinks the rest of the script. Whatever hook was
 -- installed is paused meanwhile and put back with its count unchanged.
--- budget = { remaining = <VM instructions> }: fn may use up to budget.remaining, and what it
--- uses (to the nearest HOOK_GRANULARITY) is taken off, so several calls can share one budget.
+-- budget = { remaining = <VM instructions>, cap = <optional per-call limit> }: fn may use up
+-- to budget.remaining (and no more than cap), and what it uses (to the nearest
+-- HOOK_GRANULARITY) is taken off, so several calls can share one budget.
 -- Returns pcall's results.
 function M.isolated(budget, fn, ...)
   local hook, mask, count = debug.gethook()
   local hookCalls = 0
-  local maxHookCalls = math.floor(budget.remaining / HOOK_GRANULARITY)
+  local maxHookCalls = math.floor(math.min(budget.remaining, budget.cap or budget.remaining) / HOOK_GRANULARITY)
   debug.sethook(function()
     hookCalls = hookCalls + 1
     if hookCalls > maxHookCalls then

@@ -202,14 +202,13 @@ end
 -- accessMode ("read-only"/"read-write") comes from the bridge dialog's toggle. Returns the
 -- sandbox env plus a tracker table ({wrote, logged}) the caller can inspect after running a
 -- script -- kept out of env itself so the sandboxed script can't read or tamper with it.
--- privacySettings ({privateVisibility=, livingVisibility=}, issue #141) defaults to
--- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
--- default for why callers predating #141 need no changes.
--- modules ({folder=, userFolder=, listFolder=}) backs fhBridge.listModules; nil reports no
--- folder. require() itself is attached by runScript.lua, which owns the pre-scans. In
--- read-only, listModules loads each module through it (so it reads env.require at call time,
--- not here) to report exports; in read-write it only lists, since loading runs a module's
--- top-level code, and nobody expects a listing to write.
+-- privacySettings ({privateVisibility=, livingVisibility=}) defaults to unfiltered
+-- "all"/"all", mirroring accessMode's own default.
+-- modules ({folder=, userFolder=}) backs fhBridge.listModules; nil reports no folder.
+-- require() itself is attached by runScript.lua, which owns the pre-scans. In read-only,
+-- listModules loads each module through it (so it reads env.require at call time, not here)
+-- to report exports; in read-write it only lists, since loading runs a module's top-level
+-- code, and nobody expects a listing to write.
 function M.build(accessMode, privacySettings, modules)
   accessMode = accessMode or "read-only"
   privacySettings = privacySettings or { privateVisibility = "all", livingVisibility = "all" }

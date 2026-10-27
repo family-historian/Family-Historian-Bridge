@@ -205,9 +205,11 @@ implements.
   `fhBridge.listModules()`. `require` is attached by `runScript.lua`, which owns the pre-scans;
   `listModules` sits in `sandbox.lua`'s read-only `fhBridge` table with the other members; in
   a Read-only Session it loads each module through the script's `require`, on
-  `watchdog.isolated` budgets (5M per module, 10M per listing), to report what it exports. `bridgeSession.lua` asks `userModules.foldersFromFH()` for both
-  folders on each call. Module text gets runScript's unrecognised-`fh*`, leading-dot and
-  bulk-enumeration pre-scans, not the write-name one. See
+  `watchdog.isolated` budgets (5M per module, 10M per listing), to report what it exports.
+  `bridgeSession.lua` asks `userModules.foldersFromFH()` for both folders on each call, and
+  adds the Session's real Visibility settings for pre-scanning module text. Module text gets
+  runScript's unrecognised-`fh*`, leading-dot and bulk-enumeration pre-scans, not the
+  write-name one. See
   `docs/adr/0039-user-project-modules-compile-against-the-calling-sandbox.md`.
 
 `requestFraming.lua`, `runScript.lua`, `sandbox.lua`, `jsonEncode.lua`, `watchdog.lua`,

@@ -36,13 +36,21 @@ script, and can do nothing a script can't (ADR 0001's trust model unchanged).
   checking its modified time would, and a cache adds a way to run a stale copy.
 - **Read Bridge-side, not from the sandbox.** `fhLoadTextFile` stays excluded from run_lua;
   the plugin reads the file. Names are `^[A-Za-z0-9_]+$` (spelt out, since `%w` follows the
-  C locale), so nothing outside the folders is reachable by name. Junctions and symbolic
-  links inside a folder aren't checked: the folders are the user's own, and a link points
-  only where the user put it.
+  C locale), so nothing outside the folders is reachable by name. Names are matched ignoring
+  case, for loading once per call and for shadowing, because Windows finds the same file
+  either way. Junctions and symbolic links inside a folder aren't checked: the folders are
+  the user's own, and a link points only where the user put it.
+- **An unreadable module is an error, not a miss.** `fhLoadTextFile` returns nil for a
+  missing file and an unreadable one alike, so on nil the reader checks whether the file
+  exists; if it does, `require` fails naming it, rather than falling through to a
+  same-named module in the user folder.
 - **Pre-scans apply to module text**, minus the write-name scan: a module of write helpers
   is legitimate in Read-only for its read helpers, its write calls find no write function
   there, and in Read-write the runtime write-then-log backstop (ADR 0012) covers module
-  code exactly as it covers the script's.
+  code exactly as it covers the script's. Module text is always scanned against the
+  Session's real Visibility settings (ADR 0038), including when describe_project's listing
+  loads it: describe_project's own fixed script runs unfiltered, but the modules it loads are
+  user-supplied.
 - **The user installs modules, not the Bridge.** No tool writes to either folder; copying a
   file in by hand is the review checkpoint (cf. ADRs 0004, 0008).
 - **Discoverable without spending run_lua's description budget** (ADR 0011: it is at 1,942 of
@@ -62,8 +70,8 @@ script, and can do nothing a script can't (ADR 0001's trust model unchanged).
   and in a Read-write Session that code could write; the writes would be tracked and logged,
   but nobody expects a listing to write. So in Read-write, `listModules` only lists, without
   `loaded`, `exports` or `doc`. describe_project always runs Read-only, so it always gets the
-  full listing. The
-  gedcom-knowledge corpus has `run-lua-guidance-user-project-modules` and an
+  full listing.
+- The gedcom-knowledge corpus has `run-lua-guidance-user-project-modules` and an
   `fhBridge.listModules` reference entry.
 
 **Rejected.** A plain `require` in the entry file (unsandboxed, real `fh*`, bypasses the

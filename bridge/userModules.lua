@@ -1,6 +1,6 @@
 -- User project modules: a sandboxed require() for run_lua scripts, loading helper modules
 -- the user installs by hand: first from the open project's own modules folder, then from the
--- user's own one, shared by all their projects.
+-- user folder, shared by all that user's projects.
 --
 -- Each module compiles against the calling script's own sandbox env -- same allowlist, same
 -- write tracker, same Visibility-filtered fhBridge helpers -- so a module can do exactly what
@@ -49,10 +49,10 @@ function M.folderFor(projectDataFolder)
   return projectDataFolder .. '\\' .. M.SUBFOLDER
 end
 
--- The user's modules folder, from fhGetPluginDataFileName("CURRENT_USER")'s result
--- ("<user's Plugin Data>\<plugin name>"): its parent folder, then USER_SUBFOLDER. nil when
--- FH returned nothing usable. Take FH's answer, not its help: the help's paths for these
--- scopes don't match FH 8 (ADR 0039).
+-- The user folder, from fhGetPluginDataFileName("CURRENT_USER")'s result ("<user's Plugin
+-- Data>\<plugin name>"): its parent folder, then USER_SUBFOLDER. nil when FH returned nothing
+-- usable. Take FH's answer, not its help: the help's paths for these scopes don't match FH 8
+-- (ADR 0039).
 function M.userFolderFor(currentUserDataFile)
   if type(currentUserDataFile) ~= 'string' then
     return nil
@@ -87,11 +87,20 @@ function M.searchOrder(modules)
   return order
 end
 
--- A source over places (searchOrder's shape). source(name) -> text, path  |  nil,
--- "<folder> or <folder>". loadText(path) -> string|nil defaults to FH's fhLoadTextFile;
--- injectable for tests.
-function M.folderSource(places, loadText)
-  loadText = loadText or function(path) return fhLoadTextFile(path, 'UTF-8') end
+local function fileExists(path)
+  local ok, exists = pcall(function()
+    local fhfu = require('fhFileUtils')
+    return fhfu.fileExists(path)
+  end)
+  return ok and exists == true
+end
+
+-- A source over places (searchOrder's shape), reading with fhLoadTextFile. source(name) ->
+-- text, path  |  nil, "<folder> or <folder>"  |  nil, nil, path when the file is there but
+-- fhLoadTextFile couldn't read it. fhLoadTextFile gives nil for a missing and an unreadable
+-- file alike, so an unreadable project module would otherwise fall through, silently, to a
+-- same-named one in the user folder.
+function M.folderSource(places)
   local searched = {}
   for _, place in ipairs(places) do
     table.insert(searched, place.folder)
@@ -99,35 +108,35 @@ function M.folderSource(places, loadText)
   return function(name)
     for _, folder in ipairs(searched) do
       local path = folder .. '\\' .. name .. '.lua'
-      local ok, text = pcall(loadText, path)
+      local ok, text = pcall(fhLoadTextFile, path, 'UTF-8')
       if ok and type(text) == 'string' then
         return text, path
+      end
+      if fileExists(path) then
+        return nil, nil, path
       end
     end
     return nil, table.concat(searched, ' or ')
   end
 end
 
-local function defaultListFolder(f)
+local function listFolder(folder)
   local fhfu = require('fhFileUtils')
-  if not fhfu.folderExists(f) then return {} end
-  return fhfu.getFolderContents(f, false, true)
+  if not fhfu.folderExists(folder) then return {} end
+  return fhfu.getFolderContents(folder, false, true)
 end
 
--- Loads entry's module through requireFn and records loaded, and loadError or exports (the
--- module table's string keys, sorted) and doc (its _DOC table of one-line descriptions). The
--- load gets up to LIST_LOAD_LIMIT instructions, taken from total (watchdog.isolated's budget
--- shape); once total is spent, the module is reported as not loaded without being run.
-local function describeLoad(entry, requireFn, total)
-  if total.remaining <= 0 then
+-- Loads entry's module through requireFn on the listing's budget (watchdog.isolated's shape,
+-- capped per module), and records loaded, and loadError or exports (the module table's
+-- string keys, sorted) and doc (its _DOC table of one-line descriptions). Once the budget is
+-- spent, the module is reported as not loaded without being run.
+local function describeLoad(entry, requireFn, budget)
+  if budget.remaining <= 0 then
     entry.loaded = false
     entry.loadError = 'not loaded for the listing: the listing\'s instruction budget is spent'
     return
   end
-  local own = { remaining = math.min(M.LIST_LOAD_LIMIT, total.remaining) }
-  local allotted = own.remaining
-  local ok, value = watchdog.isolated(own, requireFn, entry.name)
-  total.remaining = total.remaining - (allotted - own.remaining)
+  local ok, value = watchdog.isolated(budget, requireFn, entry.name)
   entry.loaded = ok
   if not ok then
     entry.loadError = tostring(value)
@@ -156,8 +165,7 @@ local function describeLoad(entry, requireFn, total)
 end
 
 -- What is installed, for describe_project/fhBridge.listModules. modules = {folder=,
--- userFolder=, listFolder=}, any of them nil; listFolder(folder) -> array of
--- {path=, size=, modified=} | false defaults to fhFileUtils.getFolderContents (tests inject).
+-- userFolder=}, either nil; each folder is listed with fhFileUtils.
 -- requireFn, when given, is the calling script's own require: every module that isn't
 -- shadowed is loaded through it, in name order, so loading runs the module's top-level code
 -- in that script's sandbox, outside the script's own watchdog count but within
@@ -170,10 +178,9 @@ function M.list(modules, requireFn)
   local result = { folder = modules.folder, userFolder = modules.userFolder, modules = {} }
   local places = M.searchOrder(modules)
   if #places == 0 then
-    result.error = 'no project is open and no user modules folder is known, so there is nothing to list'
+    result.error = 'no project is open and no user folder is known, so there is nothing to list'
     return result
   end
-  local listFolder = modules.listFolder or defaultListFolder
   local problems = {}
   local inProject = {}
   for _, place in ipairs(places) do
@@ -185,9 +192,10 @@ function M.list(modules, requireFn)
         local name = tostring(item.path or ''):match('([^\\/]+)%.lua$')
         if name and name:match(M.NAME_PATTERN) then
           local entry = { name = name, scope = place.scope, size = item.size, modified = item.modified }
+          -- Windows file names ignore case, so House.lua in the project hides house.lua.
           if place.scope == 'project' then
-            inProject[name] = true
-          elseif inProject[name] then
+            inProject[name:lower()] = true
+          elseif inProject[name:lower()] then
             entry.shadowed = true
           end
           table.insert(result.modules, entry)
@@ -203,10 +211,10 @@ function M.list(modules, requireFn)
     return a.scope == 'project' and b.scope ~= 'project'
   end)
   if requireFn then
-    local total = { remaining = M.LIST_TOTAL_LIMIT }
+    local budget = { remaining = M.LIST_TOTAL_LIMIT, cap = M.LIST_LOAD_LIMIT }
     for _, entry in ipairs(result.modules) do
       if not entry.shadowed then
-        describeLoad(entry, requireFn, total)
+        describeLoad(entry, requireFn, budget)
       end
     end
   end
@@ -218,9 +226,10 @@ end
 --   source: see folderSource; nil means modules are unavailable in this context.
 --   preScan(text) -> violation string | nil: runScript's text pre-scans, applied to each
 --     module before it compiles.
--- Within one call, a module loads once and later requires get the same value. A module
--- that returns nothing yields true, as Lua's own require does. A module that fails to load
--- is not remembered, so a script that catches the error can require it again.
+-- Within one call, a module loads once and later requires get the same value, whatever the
+-- case of the name, since Windows finds the same file either way. A module that returns
+-- nothing yields true, as Lua's own require does. A module that fails to load is not
+-- remembered, so a script that catches the error can require it again.
 function M.makeRequire(env, source, preScan)
   local loaded = {}
   local loading = {}
@@ -229,20 +238,24 @@ function M.makeRequire(env, source, preScan)
     if type(name) ~= 'string' or not name:match(M.NAME_PATTERN) then
       error('require: module names are letters, digits and underscores only, got ' .. tostring(name), 2)
     end
-    if loaded[name] ~= nil then
-      return loaded[name]
+    local key = name:lower()
+    if loaded[key] ~= nil then
+      return loaded[key]
     end
     if FH_LIBRARY_HINTS[name] then
       error('require: ' .. name .. ' -- ' .. FH_LIBRARY_HINTS[name], 2)
     end
     if not source then
-      error('require: user modules are not available here (no modules folder is known)', 2)
+      error('require: user project modules are not available here (no modules folder is known)', 2)
     end
-    if loading[name] then
+    if loading[key] then
       error('require: module ' .. name .. ' requires itself, directly or through another module', 2)
     end
 
-    local text, searched = source(name)
+    local text, searched, unreadable = source(name)
+    if unreadable then
+      error('require: ' .. unreadable .. ' is there but could not be read as UTF-8 text', 2)
+    end
     if not text then
       error('require: no module ' .. name .. ' in ' .. tostring(searched), 2)
     end
@@ -261,16 +274,16 @@ function M.makeRequire(env, source, preScan)
 
     -- Cleared on failure too: a stuck flag would turn a caught error into a false
     -- "requires itself" on the next require. Level 0 keeps the module's own file:line.
-    loading[name] = true
+    loading[key] = true
     local ok, value = pcall(chunk)
-    loading[name] = nil
+    loading[key] = nil
     if not ok then
       error(value, 0)
     end
     if value == nil then
       value = true
     end
-    loaded[name] = value
+    loaded[key] = value
     return value
   end
 end
