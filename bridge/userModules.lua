@@ -28,9 +28,12 @@ M.USER_SUBFOLDER = 'AI Connector\\modules'
 -- Spelt out rather than %w, whose meaning follows the C locale.
 M.NAME_PATTERN = '^[A-Za-z0-9_]+$'
 
--- Instruction budget for loading one module while listing, so a module that loops fails its
--- own entry, not the listing or the describe_project call around it.
+-- Instruction budgets for loading modules while listing: LIST_LOAD_LIMIT for any one module,
+-- so a module that loops fails its own entry, not the listing or the describe_project call
+-- around it; LIST_TOTAL_LIMIT for the whole listing, so several looping modules can't add up
+-- to more than a fifth of watchdog.INSTRUCTION_LIMIT on top of the script's own budget.
 M.LIST_LOAD_LIMIT = 5000000
+M.LIST_TOTAL_LIMIT = 10000000
 
 -- FH-shipped libraries a script might reach for by habit. The sandbox already provides fhu;
 -- the rest are deliberately unavailable over run_lua.
@@ -111,11 +114,20 @@ local function defaultListFolder(f)
   return fhfu.getFolderContents(f, false, true)
 end
 
--- Loads entry's module through require, on its own LIST_LOAD_LIMIT budget, and records
--- loaded, and loadError or exports (the module table's string keys, sorted) and doc (its
--- _DOC table of one-line descriptions).
-local function describeLoad(entry, require)
-  local ok, value = watchdog.isolated(M.LIST_LOAD_LIMIT, require, entry.name)
+-- Loads entry's module through requireFn and records loaded, and loadError or exports (the
+-- module table's string keys, sorted) and doc (its _DOC table of one-line descriptions). The
+-- load gets up to LIST_LOAD_LIMIT instructions, taken from total (watchdog.isolated's budget
+-- shape); once total is spent, the module is reported as not loaded without being run.
+local function describeLoad(entry, requireFn, total)
+  if total.remaining <= 0 then
+    entry.loaded = false
+    entry.loadError = 'not loaded for the listing: the listing\'s instruction budget is spent'
+    return
+  end
+  local own = { remaining = math.min(M.LIST_LOAD_LIMIT, total.remaining) }
+  local allotted = own.remaining
+  local ok, value = watchdog.isolated(own, requireFn, entry.name)
+  total.remaining = total.remaining - (allotted - own.remaining)
   entry.loaded = ok
   if not ok then
     entry.loadError = tostring(value)
@@ -146,12 +158,14 @@ end
 -- What is installed, for describe_project/fhBridge.listModules. modules = {folder=,
 -- userFolder=, listFolder=}, any of them nil; listFolder(folder) -> array of
 -- {path=, size=, modified=} | false defaults to fhFileUtils.getFolderContents (tests inject).
--- require, when given, is the calling script's own: each module that would be used is loaded
--- through it, so loading runs the module's top-level code in that script's sandbox.
+-- requireFn, when given, is the calling script's own require: every module that isn't
+-- shadowed is loaded through it, in name order, so loading runs the module's top-level code
+-- in that script's sandbox, outside the script's own watchdog count but within
+-- LIST_TOTAL_LIMIT for the whole listing. Without it nothing is loaded.
 -- Returns { folder=, userFolder=, modules = { {name=, scope="project"|"user", size=,
 -- modified=, shadowed=true when a project module of the same name wins, loaded=, loadError=,
 -- exports=, doc=}, ... }, error=? }. Never errors.
-function M.list(modules, require)
+function M.list(modules, requireFn)
   modules = modules or {}
   local result = { folder = modules.folder, userFolder = modules.userFolder, modules = {} }
   local places = M.searchOrder(modules)
@@ -181,13 +195,6 @@ function M.list(modules, require)
       end
     end
   end
-  if require then
-    for _, entry in ipairs(result.modules) do
-      if not entry.shadowed then
-        describeLoad(entry, require)
-      end
-    end
-  end
   if #problems > 0 then
     result.error = table.concat(problems, '; ')
   end
@@ -195,6 +202,14 @@ function M.list(modules, require)
     if a.name ~= b.name then return a.name < b.name end
     return a.scope == 'project' and b.scope ~= 'project'
   end)
+  if requireFn then
+    local total = { remaining = M.LIST_TOTAL_LIMIT }
+    for _, entry in ipairs(result.modules) do
+      if not entry.shadowed then
+        describeLoad(entry, requireFn, total)
+      end
+    end
+  end
   return result
 end
 

@@ -139,6 +139,28 @@ do
   check(houseLoads == 1, 'list loads each name once')
 end
 
+-- list: the instruction budgets for loading
+do
+  local savedOne, savedTotal = userModules.LIST_LOAD_LIMIT, userModules.LIST_TOTAL_LIMIT
+  userModules.LIST_LOAD_LIMIT, userModules.LIST_TOTAL_LIMIT = 20000, 30000
+  local loader = function(name)
+    if name:find('loop', 1, true) then while true do end end
+    return { ok = true }
+  end
+  local listing = userModules.list({ folder = 'P', listFolder = function()
+    return { { path = 'P\\c_fine.lua' }, { path = 'P\\b_loop.lua' }, { path = 'P\\a_loop.lua' } }
+  end }, loader)
+  userModules.LIST_LOAD_LIMIT, userModules.LIST_TOTAL_LIMIT = savedOne, savedTotal
+  local a, b, c = listing.modules[1], listing.modules[2], listing.modules[3]
+  check(a.name == 'a_loop' and a.loaded == false and contains(a.loadError, 'instruction limit'),
+    'a looping module fails on its own per-module budget')
+  check(b.name == 'b_loop' and b.loaded == false and contains(b.loadError, 'instruction limit'),
+    'a second looping module gets only what is left of the listing\'s total')
+  check(c.name == 'c_fine' and c.loaded == false and contains(c.loadError, 'budget is spent'),
+    'once the listing\'s total is spent, later modules are listed as not loaded, without running')
+  check(debug.gethook() == nil, 'listing leaves no hook behind')
+end
+
 -- makeRequire
 do
   local env = { tostring = tostring }

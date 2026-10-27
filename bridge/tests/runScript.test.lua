@@ -611,6 +611,10 @@ do
     'fhBridge.listModules reports a module that fails to load, without failing the listing')
   check(contains(listing, 'aborted: exceeded the instruction limit') and contains(listing, '"exports":["double"]'),
     'a module that loops fails its own listing entry on its own budget; the others still load, in any order')
+  resetCommitRollbackStubs()
+  local rwListing = run("return fhBridge.listModules()", 'read-write')
+  check(contains(rwListing, '"name":"helpers"') and not contains(rwListing, '"loaded"') and not contains(rwListing, 'instruction limit'),
+    'in a read-write Session fhBridge.listModules lists without loading any module')
 
   files.uses_helpers = 'local h = require("helpers")\nreturn { quad = function(n) return h.double(h.double(n)) end }'
   check(run("return require('uses_helpers').quad(5)") == '20', 'a module can require another module end to end')

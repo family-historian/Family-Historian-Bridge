@@ -53,7 +53,16 @@ script, and can do nothing a script can't (ADR 0001's trust model unchanged).
   listing loads every module that isn't shadowed through the script's own `require`, so a
   later require in that call reuses it. Each load gets its own instruction budget
   (`watchdog.isolated`): the main watchdog, once past its limit, fires again every thousand
-  instructions, so one looping module would otherwise sink describe_project. The
+  instructions, so one looping module would otherwise sink describe_project. Those loads
+  don't count against the script's own 50M; instead each gets at most 5M and the whole
+  listing at most 10M, so however many modules loop, a listing adds at most a fifth to the
+  script's budget. Modules load in name order, and any the total doesn't reach are listed as
+  not loaded, without running.
+- **The listing loads modules only in Read-only.** Loading runs a module's top-level code,
+  and in a Read-write Session that code could write; the writes would be tracked and logged,
+  but nobody expects a listing to write. So in Read-write, `listModules` only lists, without
+  `loaded`, `exports` or `doc`. describe_project always runs Read-only, so it always gets the
+  full listing. The
   gedcom-knowledge corpus has `run-lua-guidance-user-project-modules` and an
   `fhBridge.listModules` reference entry.
 

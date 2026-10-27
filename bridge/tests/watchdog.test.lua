@@ -59,16 +59,27 @@ check(ok3 and result3 == 500500, 'code after stop() runs unaffected by a prior w
 -- own count, neither tripped by the inner loop nor reset by it.
 watchdog.INSTRUCTION_LIMIT = 200000
 watchdog.start()
-local okInner, errInner = watchdog.isolated(10000, function() while true do end end)
+local innerBudget = { remaining = 10000 }
+local okInner, errInner = watchdog.isolated(innerBudget, function() while true do end end)
 local okAfter, after = pcall(function()
   local sum = 0
   for i = 1, 1000 do sum = sum + i end
   return sum
 end)
-local okValue, a, b = watchdog.isolated(10000, function(x, y) return x + y, 'second' end, 2, 3)
+local okValue, a, b = watchdog.isolated({ remaining = 10000 }, function(x, y) return x + y, 'second' end, 2, 3)
+local shared = { remaining = 30000 }
+local okFirst = watchdog.isolated(shared, function() for _ = 1, 4000 do end end)
+local afterFirst = shared.remaining
+local okSecond = watchdog.isolated(shared, function() while true do end end)
+local okThird, errThird = watchdog.isolated(shared, function() for _ = 1, 4000 do end end)
 local okOuter, errOuter = pcall(function() while true do end end)
 watchdog.stop()
 watchdog.INSTRUCTION_LIMIT = savedLimit
+check(innerBudget.remaining == 0, 'an overrun uses up the whole budget')
+check(okFirst and afterFirst < 30000 and afterFirst > 0, 'a call that finishes takes what it used off a shared budget')
+check(okSecond == false and shared.remaining == 0, 'a loop uses up what is left of a shared budget')
+check(okThird == false and tostring(errThird):find('instruction limit', 1, true) ~= nil,
+  'once a shared budget is spent, the next call on it fails straight away')
 check(okInner == false and tostring(errInner):find('instruction limit', 1, true) ~= nil,
   'isolated aborts a loop inside it')
 check(tostring(errInner):sub(1, 8) == 'aborted:', 'isolated\'s abort message carries no watchdog.lua position')

@@ -438,6 +438,18 @@ do
   })
   local listing = envMods.fhBridge.listModules()
   check(listing.folder == 'F' and listing.modules[1].name == 'house', 'fhBridge.listModules lists the folder sandbox.build was given')
+
+  local mods = { folder = 'F', listFolder = function() return { { path = 'F\\house.lua' } } end }
+  local loads = {}
+  local roEnv = sandbox.build('read-only', nil, mods)
+  roEnv.require = function(name) table.insert(loads, 'ro:' .. name); return {} end
+  check(roEnv.fhBridge.listModules().modules[1].loaded == true and loads[1] == 'ro:house',
+    'in read-only, listModules loads each module through the script\'s require')
+  local rwEnv = sandbox.build('read-write', nil, mods)
+  rwEnv.require = function(name) table.insert(loads, 'rw:' .. name); return {} end
+  local rwListing = rwEnv.fhBridge.listModules()
+  check(#loads == 1 and rwListing.modules[1].name == 'house' and rwListing.modules[1].loaded == nil,
+    'in read-write, listModules lists without loading, so a listing never runs module code that writes')
 end
 
 -- Write tracker (issue #15): present on every build(), starts false, independent of

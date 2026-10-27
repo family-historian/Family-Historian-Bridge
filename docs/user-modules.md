@@ -137,7 +137,9 @@ A module can do exactly what the AI's own scripts can, and no more:
 - Nothing carries over between questions. A module starts fresh every time it's loaded.
 - When the AI lists your modules, it loads each one to see what it offers, so anything at
   the top level of a module (outside its functions) runs then. Keep that part to setting
-  up functions and tables.
+  up functions and tables. Loading for the list is always done read-only. If the AI asks
+  for the list from inside a script in a Read-write Session, it gets the names only, so a
+  list can never change your tree.
 - A module that fails to load fails only that request for it. The rest of the AI's script
   can carry on.
 - Most of the safety checks that look at the AI's scripts before they run look at your

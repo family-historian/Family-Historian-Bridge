@@ -206,8 +206,10 @@ end
 -- unfiltered "all"/"all", mirroring accessMode's own default -- see runScript.lua's own
 -- default for why callers predating #141 need no changes.
 -- modules ({folder=, userFolder=, listFolder=}) backs fhBridge.listModules; nil reports no
--- folder. require() itself is attached by runScript.lua, which owns the pre-scans; listModules
--- loads each module through it, so it reads env.require at call time, not here.
+-- folder. require() itself is attached by runScript.lua, which owns the pre-scans. In
+-- read-only, listModules loads each module through it (so it reads env.require at call time,
+-- not here) to report exports; in read-write it only lists, since loading runs a module's
+-- top-level code, and nobody expects a listing to write.
 function M.build(accessMode, privacySettings, modules)
   accessMode = accessMode or "read-only"
   privacySettings = privacySettings or { privateVisibility = "all", livingVisibility = "all" }
@@ -401,7 +403,9 @@ function M.build(accessMode, privacySettings, modules)
   -- etc.'s public signatures unchanged.
   realFamilyHelper.setPrivacySettings(privacySettings)
   env.fhBridge = {
-    listModules = function() return userModules.list(modules, env.require) end,
+    listModules = function()
+      return userModules.list(modules, accessMode == "read-only" and env.require or nil)
+    end,
     getFamilyGroup = realFamilyHelper.getFamilyGroup,
     getAllDetails = realFamilyHelper.getAllDetails,
     getAncestors = realFamilyHelper.getAncestors,

@@ -106,8 +106,8 @@ are omitted — see the script's own comment for why.
 userModules lists the helper modules the user has installed, for this project and for all
 their projects. A run_lua script loads one with require("<name>"): the project folder is searched
 first, so a project module overrides a user one of the same name. It runs inside the
-script's own sandbox. Each module in use is loaded to fill in loaded/exports/doc; one that
-fails says why in loadError.
+script's own sandbox. Every module that isn't shadowed is loaded, read-only, to fill in
+loaded/exports/doc; one that fails says why in loadError.
 Use an installed helper rather than re-writing what it does; search_gedcom_knowledge("user
 project modules") explains how require behaves. Absent when the Bridge plugin predates user
 modules.
