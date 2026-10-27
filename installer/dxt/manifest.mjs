@@ -1,5 +1,5 @@
-// Builds the manifest.json object for fh-mcp-bridge's .mcpb (MCPB/DXT) bundle -- issue #59,
-// part of the wayfinder map at issue #56. Pure and file-I/O-free by design (installer/build-
+// Builds the manifest.json object for fh-mcp-bridge's .mcpb (MCPB/DXT) bundle.
+// Pure and file-I/O-free by design (installer/build-
 // dxt.mjs does the staging/writing) so its shape can be unit-tested directly; see
 // manifest.test.mjs.
 //
@@ -15,7 +15,7 @@
 // the real schema by `mcpb validate` in build-dxt.mjs, not just this module's own tests.
 //
 // The `tools` array is likewise generated, from server/src/toolNames.json, rather than
-// hand-listed here -- issue #85, which found the test that claimed to guard this list was
+// hand-listed here: the test that claimed to guard this list was
 // only comparing it to a literal copy in the test file itself. server/src/toolNames.test.ts
 // pins that JSON to what the server really registers, so this file now follows the server
 // by construction. Read from src/ rather than dist/ deliberately: dist/ is gitignored, so

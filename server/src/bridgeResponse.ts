@@ -56,7 +56,7 @@ export function describeBridgeConnectionError(err: unknown): CallToolResult {
   return textResult(`Bridge communication error: ${message}`, true);
 }
 
-// mergeIntoResult (issue #109): describe_project's own way to fold bridgeState into its
+// mergeIntoResult: describe_project's own way to fold bridgeState into its
 // fixed script's own JSON object before stringifying, without teaching this shared
 // module (used by run_lua too) anything about what bridgeState is. Only reached on the
 // success path below -- an error/malformed response returns before mergeIntoResult is

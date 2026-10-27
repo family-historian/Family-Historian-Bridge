@@ -7,9 +7,9 @@
 -- MoveToFirstChildItem/MoveNext/IsNotNull/IsNull/Clone, plus globals fhGetTag/fhGetItemText/
 -- fhGetRecordId/fhCreateItem/fhSetValueAsText/fhSetValueAsDate/fhSetValueAsLink/
 -- fhSetValueAsRichText/fhNewDate/fhNewRichText/fhSrcEnableAutoTitle/fhGetRecordLinks
--- (issue #66).
+--.
 --
--- findSources (issue #65) additionally pulls in familyHelper.lua for real (require
+-- findSources additionally pulls in familyHelper.lua for real (require
 -- isn't stubbed away the way sandbox.test.lua/runScript.test.lua stub it, since this
 -- file wants findSources' actual behavior, not just that it was called) — so the fake
 -- environment below also covers familyHelper.lua's own needs: fhGetQualifiedRecordId,
@@ -90,7 +90,7 @@ function PtrMethods:MoveToFirstChildItem(parentPtr)
   self.index = 1
 end
 
--- Needed for citationsForSource (issue #66): parentLoc/recordLoc are stamped on every node
+-- Needed for citationsForSource: parentLoc/recordLoc are stamped on every node
 -- by fhCreateItem below (nil for a top-level record, since it has no parent/isn't nested).
 function PtrMethods:MoveToParentItem(ptrRef)
   local node = currentNode(ptrRef)
@@ -268,7 +268,7 @@ fhCreateItem = function(tagOrShortcut, parentPtr)
     table.insert(parentNode.children, node)
     ptr.list = parentNode.children
     ptr.index = #parentNode.children
-    -- MoveToParentItem/MoveToRecordItem (issue #66): parentLoc is always parentPtr's own
+    -- MoveToParentItem/MoveToRecordItem: parentLoc is always parentPtr's own
     -- location; recordLoc inherits from parentNode, or is parentLoc itself if parentNode
     -- is the record (parentNode.recordLoc == nil).
     node.parentLoc = { list = parentPtr.list, index = parentPtr.index }
@@ -496,7 +496,7 @@ end
 
 -- Simulates FH's real fhGetMetafieldShortcut (fh-help: "Takes a pointer to a metafield
 -- item and returns a shortcut for it... Can also be used with metafield definitions").
--- sourceHelper.lua's own shortcutFor (issue #73) only ever calls this on a metafield
+-- sourceHelper.lua's own shortcutFor only ever calls this on a metafield
 -- *definition* here (an FDEF item, via def.fdefPtr) -- reads that item's own CODE/TYPE
 -- children and builds "~PREFIX-CODE". Deliberately keeps CODE's exact case as stored
 -- (e.g. "~TX-Reg_No"), NOT uppercased the way real FH's shortcut actually is
@@ -709,7 +709,7 @@ local ok3 = pcall(sourceHelper.createSourceFromTemplate, civilRegId, { Type = "A
 check(not ok3, 'Enum value not among the declared options raises an error')
 
 ------------------------------------------------------------------
--- Citation-specific field code errors before any mutation (issue #98):
+-- Citation-specific field code errors before any mutation:
 -- fields is record-level only, so a code whose FDEF carries CITN="Yes" must be rejected,
 -- not silently no-op'd.
 ------------------------------------------------------------------
@@ -745,7 +745,7 @@ check(not okMissingId, 'missing template id raises an error')
 check(contains(errMissingId, '999999'), 'missing-id error names the id that was looked for')
 
 ------------------------------------------------------------------
--- validateCreateSourceFromTemplate (issue #97): the pure validation half of
+-- validateCreateSourceFromTemplate: the pure validation half of
 -- createSourceFromTemplate, exported so sandbox.lua can run it untracked before arming the
 -- write tracker. Same success/failure behavior as createSourceFromTemplate's own steps 1-3,
 -- but never creates anything -- not even on success (that's mutate's job, step 4).
@@ -860,7 +860,7 @@ do
 end
 
 ------------------------------------------------------------------
--- citeSource: an invalid ptrTarget errors before any mutation too (issue #96) -- the same
+-- citeSource: an invalid ptrTarget errors before any mutation too -- the same
 -- validate-before-mutate coverage as the unknown/ambiguous-source cases above, just for the
 -- other argument. Both cases must fail before fhCreateItem("SOUR", ptrTarget) is ever
 -- called, not just eventually.
@@ -880,7 +880,7 @@ check(contains(errStringTarget, 'ptrTarget') and contains(errStringTarget, 'stri
   'the error names ptrTarget and the type actually given, not a raw "attempt to index" crash')
 
 ------------------------------------------------------------------
--- validateCiteSource (issue #97): the pure validation half of citeSource, exported so
+-- validateCiteSource: the pure validation half of citeSource, exported so
 -- sandbox.lua can run it untracked before arming the write tracker. Same success/failure
 -- behavior as citeSource's own checks, but never creates a citation -- not even on success.
 ------------------------------------------------------------------
@@ -901,7 +901,7 @@ check(contains(errValidateBoolTarget, 'boolean'), 'the rejection also names the 
 ------------------------------------------------------------------
 -- validateCiteSource: an Excluded Individual's own record blocks the write, but a Fact
 -- item target on that same Individual does not -- recordVisibility only checks ptrTarget's
--- own tag, so this fires exactly for the whole-record case (issue #141).
+-- own tag, so this fires exactly for the whole-record case.
 ------------------------------------------------------------------
 
 do
@@ -1108,7 +1108,7 @@ do
 end
 
 ------------------------------------------------------------------
--- validateCiteSource with fields (issue #99): same pure-validation contract, extended.
+-- validateCiteSource with fields: same pure-validation contract, extended.
 ------------------------------------------------------------------
 
 do
@@ -1121,7 +1121,7 @@ do
 end
 
 ------------------------------------------------------------------
--- findSources (issue #65): matches record-level fields on the SOUR record itself,
+-- findSources: matches record-level fields on the SOUR record itself,
 -- citation-level fields (CITN) on its citations instead, and reports citedBy regardless.
 ------------------------------------------------------------------
 
@@ -1250,7 +1250,7 @@ do
   check(not okBadTemplate, 'an unresolvable template name raises an error, same as createSourceFromTemplate')
 
   ----------------------------------------------------------------
-  -- getPopulatedTemplateFields (issue #73): the extracted resolution helper findSources'
+  -- getPopulatedTemplateFields: the extracted resolution helper findSources'
   -- own recordMatchesFilters already exercises indirectly above -- these tests call it
   -- directly, reusing the same fixtures.
   ----------------------------------------------------------------

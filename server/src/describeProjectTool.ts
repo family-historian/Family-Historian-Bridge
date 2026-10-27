@@ -11,8 +11,8 @@ import { checkVersionThenRunScript, type BridgeScriptDeps } from "./versionCheck
 
 export type DescribeProjectDeps = BridgeScriptDeps;
 
-// Forces the Bridge's Read-only sandbox regardless of the Session's own Access mode
-// (issue #16) — this script is fixed and known to never call a write function, so it
+// Forces the Bridge's Read-only sandbox regardless of the Session's own Access mode,
+// because this script is fixed and known to never call a write function, so it
 // runs at least privilege rather than inheriting whatever mode the Session happens to be
 // in. See bridge/requestFraming.lua's LUA_RO form and CONTEXT.md's "describe_project" entry.
 // Takes the underlying runLuaOnBridge/queryBridgeVersion as parameters (rather than
@@ -115,8 +115,7 @@ project modules.
 bridgeState describes the running Bridge plugin itself, not the FH project — accessMode is
 the Session's real read-only/read-write toggle, distinct from the Read-only sandbox this
 tool's own fixed script always executes under regardless of that toggle. privacySettings
-reports the Session's current Visibility levels for the Private/Living Record Flags (issue
-#141) — a level other than "all" means fhBridge.* helpers filter or redact matching
+reports the Session's current Visibility levels for the Private/Living Record Flags — a level other than "all" means fhBridge.* helpers filter or redact matching
 Individuals; this section's own flagCensus/dataQuality counts above are never filtered.`;
 
 // Fixed, built-in script (not Claude-authored — see CONTEXT.md "describe_project"). Runs
@@ -128,14 +127,14 @@ Individuals; this section's own flagCensus/dataQuality counts above are never fi
 // MoveToFirstRecord+MoveNext record-walk are both documented, standard patterns (FH8 API
 // help). INDI/FAM/SOUR are GEDCOM 5.5.1 standard tags.
 //
-// sourceTemplateFieldDefinitions (issue #74, ADR 0017 — supersedes issue #67/#73's
-// sourceTemplateFields): issue #67 originally made this section tally *occurrence* counts
+// sourceTemplateFieldDefinitions (ADR 0017 — supersedes the earlier
+// sourceTemplateFields): that originally made this section tally *occurrence* counts
 // — how many SOUR records have each field actually populated, resolved via
-// fhBridge.getPopulatedTemplateFields (issue #73's extracted helper, still used by
+// fhBridge.getPopulatedTemplateFields (an extracted helper, still used by
 // bridge/sourceHelper.lua's findSources). That approach only ever resolved record-level
 // fields, though: a field flagged Citation-specific in its template (FDEF's own CITN child)
 // is populated per-citation, not on the SOUR record itself (see gedcom-knowledge-corpus
-// source-template-fields), so it silently tallied zero forever — issue #74 found a project
+// source-template-fields), so it silently tallied zero forever — a real project
 // where a heavily-used citation-level field (Specific_Item, populated on 1,108 of 1,196
 // citations) was therefore invisible in this census.
 //
@@ -152,16 +151,16 @@ Individuals; this section's own flagCensus/dataQuality counts above are never fi
 // would be misleading here). This is cheap and bounded by template count, not record/
 // citation count — FH only copies templates that have actually been used into the project,
 // so recordCounts._SRCT stays small regardless of how large the rest of the project is.
-// This alone closes issue #74's visibility gap: a citation-scoped field now shows up,
+// This alone closes that visibility gap: a citation-scoped field now shows up,
 // correctly labeled, at no extra traversal cost.
 //
 // Actual occurrence counts — for record-level fields (what the old sourceTemplateFields
-// gave) and citation-level fields (what issue #74 actually asked for) — move to the new
+// gave) and citation-level fields (what the census was really missing) — move to the new
 // opt-in fhBridge.getTemplateFieldCensus(templateNameOrId) helper (bridge/sourceHelper.lua),
 // single-template scoped like findSources/getPopulatedTemplateFields, called only when a
 // caller actually wants field-usage data for one template.
 //
-// flagCensus/dataQuality (issue #51): a single combined walk over every INDI's own direct
+// flagCensus/dataQuality: a single combined walk over every INDI's own direct
 // children, run separately from tallyChildTagsOf above (which tallies INDI+FAM together
 // and doesn't look inside a _FLGS item) since both new pieces are Individual-only and both
 // need a per-record view, not just an aggregate tag count:
@@ -172,7 +171,7 @@ Individuals; this section's own flagCensus/dataQuality counts above are never fi
 //     tallied by its own tag (e.g. "__LIVING"), with a human-readable label resolved via
 //     fhGetTypeInfo(ptr, "label") the first time each tag is seen — there's no read-only
 //     tag-name enumeration API (fhGetFlagTag only maps a known name to its tag, and even
-//     after issue #51's other fix, only round-trips a name you already have), but
+//     after the later fix, only round-trips a name you already have), but
 //     fhGetTypeInfo works on any item pointer, flag instances included, and returns the
 //     same display label FH itself shows for that flag type.
 //   - The "living status ambiguous" data-quality count targets a specific false-positive
@@ -264,8 +263,7 @@ end
 
 local contextInfo = {}
 do
-  -- issue #51's original ask ("add all values from fhGetContextInfo") was missed from
-  -- the itemized follow-up plan and only caught on a later review pass. Of the 11
+  -- Of the 11
   -- documented CI_* keys (FH help: fhGetContextInfo), two are deliberately left out:
   --   - CI_APP_HWND / CI_PARENT_HWND return Lua light userdata (a window handle), not a
   --     string/number/bool — bridge/jsonEncode.lua has no case for "userdata" and
@@ -291,7 +289,7 @@ do
   end
 end
 
--- fhGetAppVersion() (issue #69) returns the three version integers separately, not a
+-- fhGetAppVersion() returns the three version integers separately, not a
 -- pre-joined string (FH help: fhGetAppVersion) — formatted here as a dotted "X.Y.Z"
 -- string to match how BRIDGE_VERSION/SERVER_VERSION are already represented everywhere
 -- else in this codebase (see bridge/versionCompare.lua), rather than shipping a
@@ -369,7 +367,7 @@ return {
 
 // Shares checkVersionThenRunScript's version-check/run-script steps with run_lua
 // (versionCheck.ts's runVersionCheckedScript) but not its final response-shaping step:
-// run_lua ends with appendVersionNote, while describe_project (issue #109, docs/adr/0026)
+// run_lua ends with appendVersionNote, while describe_project (docs/adr/0026)
 // folds the same verdict into the response body as structured bridgeState instead of a
 // free-text note -- run_lua keeps the note unchanged, since its result has no fixed schema
 // to merge structured data into.

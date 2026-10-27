@@ -47,7 +47,7 @@ export function tokenize(query: string): string[] {
   return [...new Set(tokens)];
 }
 
-// Lightweight suffix-stripping instead of a hand-maintained synonym table (issue #139):
+// Lightweight suffix-stripping instead of a hand-maintained synonym table:
 // generalizes to any word pair with zero upkeep, at the cost of occasional non-word stems
 // (e.g. "delete" -> "delet") -- fine here since it's only checked as an OR alongside the
 // exact-substring match, never a replacement for it. First-match-wins, longest/most-specific

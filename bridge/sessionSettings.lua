@@ -29,7 +29,7 @@ M.SCOPE = 'LOCAL_MACHINE'
 local function defaults()
   return {
     accessMode = "read-only", idleTimeoutMinutes = 15, debugLogging = false,
-    -- Visibility levels for Private/Living Record Flags (issue #141): "exclude" (not
+    -- Visibility levels for Private/Living Record Flags: "exclude" (not
     -- returned at all), "nameOnly" (name+relations, no Facts), "all" (unfiltered, today's
     -- behavior). Default "all" so an existing/fresh install's behavior is unchanged until
     -- a user opts into filtering via the Settings dialog.
@@ -38,7 +38,7 @@ local function defaults()
 end
 
 -- "exclude"/"nameOnly"/"all" are the only levels the dialog offers; anything else (a
--- hand-edited settings file, a pre-#141 file missing the field) falls back to "all", same
+-- hand-edited settings file, a file predating the Visibility levels missing the field) falls back to "all", same
 -- reasoning as accessMode's own fallback below.
 local function validVisibility(value)
   return value == "exclude" or value == "nameOnly" or value == "all"
@@ -74,7 +74,7 @@ function M.load()
   return {
     accessMode = accessMode,
     idleTimeoutMinutes = timeoutDisplay.clampMinutes(loaded.idleTimeoutMinutes),
-    -- Anything other than a real boolean (missing field from a pre-#122 settings file,
+    -- Anything other than a real boolean (missing field from an older settings file,
     -- hand-edited junk) falls back to the off-by-default (defaults() above).
     debugLogging = loaded.debugLogging == true,
     privateVisibility = privateVisibility,

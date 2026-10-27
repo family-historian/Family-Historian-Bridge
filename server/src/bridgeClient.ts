@@ -19,8 +19,8 @@ export interface RunLuaOnBridgeOptions {
   timeoutMs?: number;
   /**
    * Forces the Bridge to run this script under its Read-only sandbox regardless of the
-   * Session's own Access mode, via the LUA_RO request form (see bridge/requestFraming.lua
-   * and issue #16). Used exclusively by describeProjectTool.ts — run_lua's own requests
+   * Session's own Access mode, via the LUA_RO request form (see bridge/requestFraming.lua).
+   * Used exclusively by describeProjectTool.ts — run_lua's own requests
    * always leave this unset, so they use the Session's actual Access mode.
    */
   forceReadOnly?: boolean;
@@ -110,7 +110,7 @@ export function runLuaOnBridge(
 
 /**
  * Sends this server's own version to the Bridge under the bodyless VERSION <server-version>
- * framing (see bridge/requestFraming.lua, issue #45) and resolves with the Bridge's raw
+ * framing (see bridge/requestFraming.lua) and resolves with the Bridge's raw
  * response — a `{"version": "..."}` JSON object from a Bridge that supports this, or the
  * older `{"error": "expected STOP or LUA <n>"}` rejection from one that predates it. Sent
  * as its own connection ahead of every LUA/LUA_RO request, not cached — the server has no

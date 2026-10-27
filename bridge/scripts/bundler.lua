@@ -58,8 +58,8 @@ local function replaceOnce(haystack, needle, replacement, label)
   return haystack:sub(1, startIdx - 1) .. replacement .. haystack:sub(endIdx + 1)
 end
 
--- server/package.json is the single source of truth for the Bridge's version (issue #89;
--- previously the @Version header itself was authoritative, per issue #45, which meant a
+-- server/package.json is the single source of truth for the Bridge's version
+-- (previously the @Version header itself was authoritative, which meant a
 -- release could silently ship BRIDGE_VERSION out of sync with server/package.json if
 -- whoever bumped the version forgot the header — see docs/release.md's version-drift
 -- note). Pulled out of the raw package.json text with a plain pattern match rather than a
@@ -75,8 +75,8 @@ function M.extractPackageVersion(packageJsonContent)
   return version
 end
 
--- The @Version header is now a stamped mirror of server/package.json's version (issue
--- #89), same pattern as stampLastUpdated below: fail loudly if the header is missing so a
+-- The @Version header is now a stamped mirror of server/package.json's version,
+-- same pattern as stampLastUpdated below: fail loudly if the header is missing so a
 -- changed/removed header can't silently stop being stamped, rather than shipping a bundle
 -- whose header just goes stale.
 local function stampVersion(entrySource, version)
@@ -131,7 +131,7 @@ function M.buildBundle(entrySource, readModule, packageVersion, todayDate)
   local after = out:sub(splitPoint)
 
   local pieces = { before, "\n-- Bundled sibling modules (generated — see bridge/scripts/build.lua)\n" }
-  table.insert(pieces, string.format("local BRIDGE_VERSION = %q -- injected from server/package.json (issue #89)\n", packageVersion))
+  table.insert(pieces, string.format("local BRIDGE_VERSION = %q -- injected from server/package.json\n", packageVersion))
   for _, name in ipairs(M.MODULE_NAMES) do
     table.insert(pieces, string.format("package.preload[%q] = function()\n%s\nend\n", name, readModule(name)))
   end

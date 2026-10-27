@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Builds a .mcpb (MCPB/DXT) bundle for fh-mcp-bridge's server -- issue #59, part of the
-// wayfinder map at issue #56 (docs/research/claude-app-variant-and-dxt-install-trigger.md's
+// Builds a .mcpb (MCPB/DXT) bundle for fh-mcp-bridge's server (part of the
+// wayfinder map; docs/research/claude-app-variant-and-dxt-install-trigger.md's
 // Q2 confirmed double-click/shellexec-opening a .mcpb is Claude Desktop's own documented
 // install trigger). Cross-platform (Node, not PowerShell/bash) since, unlike the Setup.exe
 // installer (installer/fh-mcp-bridge.iss, Windows-only), a .mcpb doesn't need a bundled
@@ -13,8 +13,8 @@
 //
 // Run installer/verify-dxt.mjs afterwards (or pass --verify) to actually spawn the staged
 // server and confirm its tools register -- the automatable half of "verify it actually
-// installs" from issue #59; the Claude Desktop Settings -> Extensions install itself is
-// hands-on, see that ticket's HITL note.
+// installs"; the Claude Desktop Settings -> Extensions install itself is
+// hands-on.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
@@ -84,7 +84,7 @@ mkdirSync(outputDir, { recursive: true });
 const outputPath = join(outputDir, `fh-mcp-bridge-${version}.mcpb`);
 if (existsSync(outputPath)) rmSync(outputPath);
 
-// Prune .mcpb bundles left behind by earlier versions -- issue #93. output/ isn't wiped
+// Prune .mcpb bundles left behind by earlier versions. output/ isn't wiped
 // wholesale because release-mac.sh's zip and release-windows.ps1's .exe land here too
 // (the two-stage release runs on separate machines), so this only touches the .mcpb's own
 // naming pattern, never files from the other stage.

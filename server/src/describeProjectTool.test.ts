@@ -251,7 +251,7 @@ describe("DESCRIBE_PROJECT_SCRIPT sourceTemplateFieldDefinitions logic (issue #7
   // above. issue #67/#73's sourceTemplateFields walked every SOUR record and tallied real
   // occurrence counts via fhBridge.getPopulatedTemplateFields — but that helper only ever
   // resolves record-level fields, so a Citation-specific field (CITN) silently tallied
-  // zero forever, however often it was actually populated (issue #74). Rather than extend
+  // zero forever, however often it was actually populated. Rather than extend
   // that walk to also scan every citation on every INDI/FAM record (expensive, and paid on
   // every describe_project call whether or not the conversation ever touches sources), the
   // census now reports template field *definitions* only — a cheap walk bounded by how many

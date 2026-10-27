@@ -44,9 +44,9 @@ package.loaded.fhUtils = {
 -- sandbox.build()) are this project's own modules, not FH-shipped -- resolvable for real via
 -- package.path, but their real implementations call further real fh* globals this plain-lua
 -- test process doesn't stub. Stub via package.loaded the same way fhUtils is stubbed above,
--- needed as a prerequisite for the write-then-log tests further down (issue #43), which
+-- needed as a prerequisite for the write-then-log tests further down, which
 -- exercise fhBridge.logActivity as the one avenue to flip tracker.logged. validate* stubs
--- (issue #97) are always-succeeding no-ops, same "independent of the real module's own
+-- are always-succeeding no-ops, same "independent of the real module's own
 -- behavior" reasoning as the mutate stubs beside them -- sandbox.lua's validatedTrackedWrite/
 -- validatedTrackedLog now call these before the real mutate function, and the fixture scripts
 -- below pass a plain 'ptr' string (not a real Item Pointer with :IsNull()), which the real
@@ -64,7 +64,7 @@ package.loaded.sessionLogHelper = {
   logActivity = function(ptrRecord, action) return 'logged:' .. tostring(action) end,
 }
 
--- Commit/rollback stubs (issue #133): bare identifiers, the same ones runScript.lua calls
+-- Commit/rollback stubs: bare identifiers, the same ones runScript.lua calls
 -- for real inside FH. Permitted as bare identifiers in test code per
 -- docs/INTERNAL-commit-rollback-plan.md's naming rule -- never named in comment prose,
 -- including this one (see this file's own assertions below for what each stub is used to
@@ -132,8 +132,8 @@ check(watchdogElapsed < 10, 'the watchdog aborts within a bounded wall-clock tim
 -- the hook is cleared, not just that the aborted script itself terminated.
 check(runScript.run('return 99') == '99', 'a normal script after a watchdog abort still runs correctly')
 
--- Access mode plumbing (issue #13): run() accepts and forwards an accessMode argument to
--- sandbox.build(). Read-write additionally grants the full write API (issue #14) — see
+-- Access mode plumbing: run() accepts and forwards an accessMode argument to
+-- sandbox.build(). Read-write additionally grants the full write API — see
 -- sandbox.test.lua for that allowlist's own present/absent assertions; here we only check
 -- that both modes still behave identically for the basics every script can use.
 check(runScript.run('return {ok=true}', 'read-write') == '{"ok":true}',
@@ -169,7 +169,7 @@ do
   check(fhCommitCalls == 0, 'the rollback path never calls the commit primitive -- rollback alone undoes record creation on FH 8.0.0.12+')
 end
 
--- Rollback-throws fallback (issue #133): when the rollback attempt itself throws, tree
+-- Rollback-throws fallback: when the rollback attempt itself throws, tree
 -- state can't be trusted any more, so this falls back to ADR 0005's original
 -- send-then-rethrow behavior -- ending the whole plugin so FH's own auto-undo can act.
 do
@@ -286,7 +286,7 @@ check(contains(runScript.run(
   'read-write'), '"ok":true'),
   'a script that batches several writes with a single trailing logActivity call completes normally')
 
--- Commit-on-success (issue #133): a successful write-mode call with a tracked write
+-- Commit-on-success: a successful write-mode call with a tracked write
 -- commits exactly once, after the script runs, and reports "committed" as the third
 -- return value.
 do
@@ -299,7 +299,7 @@ do
   check(transactionResult == 'committed', 'a successful write-mode call reports "committed" as the third return value')
 end
 
--- Encode failure after a successful commit (issue #133): the write already committed by
+-- Encode failure after a successful commit: the write already committed by
 -- the time the script's own return value turns out to be unencodable, so the caller still
 -- needs to know via transactionResult, even though the response itself reports an error.
 do
@@ -314,7 +314,7 @@ do
     'the caller still learns the write was committed, even though the response itself is an error')
 end
 
--- No commit when nothing was written (issue #133): a successful call that never triggers
+-- No commit when nothing was written: a successful call that never triggers
 -- the write tracker (read-only, or a read-write call that only reads) never calls commit.
 do
   resetCommitRollbackStubs()
@@ -324,7 +324,7 @@ do
   check(transactionResult == nil, 'a call with nothing written reports no transaction result')
 end
 
--- Commit-throws fallback (issue #133): symmetric with the rollback-throws case above -- if
+-- Commit-throws fallback: symmetric with the rollback-throws case above -- if
 -- the commit primitive itself throws after a successful script run, tree state can't be
 -- trusted any more, so this falls back to ADR 0005's plugin-ending path too.
 do
@@ -339,7 +339,7 @@ do
   check(transactionResult == nil, 'the ADR-0005 fallback reports no transaction result')
 end
 
--- Watchdog abort after a tracked write (issue #133): a runaway script is still a runtime
+-- Watchdog abort after a tracked write: a runaway script is still a runtime
 -- error via pcall, so it goes through the same rollback-first path as any other write-mode
 -- runtime error, not a separate mechanism.
 do
@@ -462,7 +462,7 @@ do
     'a script tripping both the leading-dot check and the unrecognized-fh*-call pre-scan reports both violations')
 end
 
--- privacySettings forwarding (issue #141): M.run passes its third argument through to
+-- privacySettings forwarding: M.run passes its third argument through to
 -- sandbox.build, which calls the real familyHelper.setPrivacySettings -- checked via
 -- familyHelper's own getPrivacySettings accessor since privacySettings isn't part of a
 -- run_lua script's own return value. familyHelper.lua is a real project module (not
@@ -480,7 +480,7 @@ do
     'M.run with no privacySettings argument defaults to unfiltered "all"/"all"')
 end
 
--- Bulk-enumeration pre-scan (issue #141): raw MoveToFirstRecord bypasses every fhBridge.*
+-- Bulk-enumeration pre-scan: raw MoveToFirstRecord bypasses every fhBridge.*
 -- helper's Visibility filtering, so it's rejected while any Visibility level is restricted.
 do
   local restricted = { privateVisibility = 'exclude', livingVisibility = 'all' }

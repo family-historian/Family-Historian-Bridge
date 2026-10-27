@@ -30,7 +30,7 @@ local function readModule(name)
   return readFile(bridgeDir .. name .. ".lua")
 end
 
--- server/package.json is the version's single source of truth (issue #89) — read here
+-- server/package.json is the version's single source of truth — read here
 -- (build.lua does this file's I/O; bundler.lua stays pure string logic, per its own header
 -- comment) and passed through to stamp the @Version header and inject BRIDGE_VERSION.
 local packageJsonContent = readFile(bridgeDir .. "../server/package.json")

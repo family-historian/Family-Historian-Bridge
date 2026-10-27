@@ -1,5 +1,5 @@
 // Typed view over toolNames.json, the single source of truth for which MCP tools this
-// server registers (issue #85). That file's own _comment explains why the list lives in
+// server registers. That file's own _comment explains why the list lives in
 // JSON rather than here.
 //
 // Nothing in this module decides anything -- the register*Tool call sites still name their

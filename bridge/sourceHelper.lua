@@ -405,7 +405,7 @@ function M.validateCiteSource(ptrTarget, sourceNameOrId, fields)
     error("citeSource: ptrTarget must point to the record or Fact item to attach the citation to" .. problem)
   end
   -- ptrTarget may be the record itself or a Fact item on it -- climb onto a separate
-  -- pointer so either case is checked against the owning Individual's flags (issue #141).
+  -- pointer so either case is checked against the owning Individual's flags.
   local owner = fhNewItemPtr()
   owner:MoveToRecordItem(ptrTarget)
   if familyHelper.recordVisibility(owner) == "exclude" then
@@ -539,8 +539,8 @@ function M.getPopulatedTemplateFields(sourPtr)
   return result
 end
 
--- fhGetRecordLinks(sourPtr) returns each linking item itself (issue #66; live-confirmed
--- against a running Bridge -- item-level, arbitrary depth, not resolved up to a record).
+-- fhGetRecordLinks(sourPtr) returns each linking item itself (item-level,
+-- live-confirmed against a running Bridge; arbitrary depth, not resolved up to a record).
 -- For a SOUR target, that's the citation item (tag "SOUR") directly. MoveToParentItem
 -- gives the enclosing Fact/record's own tag (ownTag); MoveToRecordItem gives the owning
 -- INDI/FAM (ownQualifiedId). The citation's own live pointer (Clone()'d) is retained --
@@ -598,7 +598,7 @@ function M.findSources(templateNameOrId, fieldFilters)
 
   local results = {}
   local seen = {}
-  -- fhGetRecordLinks(template) returns the linking _SRCT item itself (issue #66) --
+  -- fhGetRecordLinks(template) returns the linking _SRCT item itself --
   -- MoveToRecordItem climbs to the owning SOUR record. Replaces the old whole-SOUR-table
   -- scan + linkedTemplate(sourPtr) check.
   for _, linkItem in ipairs(fhGetRecordLinks(template)) do
@@ -659,7 +659,7 @@ function M.getTemplateFieldCensus(templateNameOrId)
   end
 
   local seen = {}
-  -- fhGetRecordLinks(template) returns the linking _SRCT item itself (issue #66) --
+  -- fhGetRecordLinks(template) returns the linking _SRCT item itself --
   -- MoveToRecordItem climbs to the owning SOUR record. Replaces the old whole-SOUR-table
   -- scan + linkedTemplate(sourPtr) check.
   for _, linkItem in ipairs(fhGetRecordLinks(template)) do

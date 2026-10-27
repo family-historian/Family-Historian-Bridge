@@ -13,7 +13,7 @@ local familyHelper = require('familyHelper')
 local notePtr = nil  -- set on this Session's first logActivity call
 local textPtr = nil
 local buffer = nil
--- True once the current note has survived a commit at least once (issue #133). Distinct
+-- True once the current note has survived a commit at least once. Distinct
 -- from "textPtr resolves": a pointer into a record a rollback just undid does not reliably
 -- report IsNull() == true, so liveness-checking textPtr is not a safe way to tell "this note
 -- is durable" from "this note only existed inside the failed call". noteConfirmed is
@@ -21,7 +21,7 @@ local buffer = nil
 -- succeeded.
 local noteConfirmed = false
 
--- AI assistant naming (issue #148). sessionAssistant is the first non-empty name the
+-- AI assistant naming. sessionAssistant is the first non-empty name the
 -- server passed this Session; noteAssistant is the value the current note's Title:/
 -- Assistant: header was written with (nil if unknown then); callAssistant is the current
 -- request's own name, used to tag entries that differ from the note's.
@@ -94,8 +94,7 @@ function M.validateLogActivity(ptrRecord, action, media)
       error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ptrRecord)) .. "' item (climbed from a '" .. originalTag .. "' item)")
     end
   end
-  -- Checked last, on the guaranteed record-level pointer (after any climb above) --
-  -- issue #141.
+  -- Checked last, on the guaranteed record-level pointer (after any climb above).
   if familyHelper.recordVisibility(ptrRecord) == "exclude" then
     error("logActivity: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   end
@@ -110,7 +109,7 @@ function M.getNotePtr()
   return notePtr
 end
 
--- Running commit-count total (issue #133), set bridge-side only -- never through
+-- Running commit-count total, set bridge-side only -- never through
 -- sandbox.lua, so a run_lua script can't forge it. nil until bridgeSession.lua's first
 -- read-write call sets it; logActivity appends nothing when nil (read-only Sessions, or
 -- before the first write-mode call, never show a count).
@@ -149,7 +148,7 @@ end
 
 -- sessionLogHelper.recoverAfterRollback()
 -- Bridge-side only. Called after a rolled-back write to resync this module's cached note
--- state with what a rollback actually left on disk (issue #133; see noteConfirmed's own
+-- state with what a rollback actually left on disk (see noteConfirmed's own
 -- comment for why textPtr:IsNull() isn't used to tell the two cases apart).
 --
 -- Two cases, told apart by noteConfirmed:
@@ -217,7 +216,7 @@ function M.logActivity(ptrRecord, action, media)
   buffer:AddText(timeOnly() .. " - " .. entryTag .. action .. ": ", false)
   buffer:AddRecordLink(ptr)  -- live FTF record link: label stays current if the record is renamed
 
-  -- Running commit-count total (issue #133) -- only when bridgeSession.lua has set one via
+  -- Running commit-count total -- only when bridgeSession.lua has set one via
   -- setCommitCount, so a read-only Session (or any call before the first write-mode
   -- request) never shows a stray count.
   if commitCount ~= nil then

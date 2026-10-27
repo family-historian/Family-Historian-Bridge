@@ -39,7 +39,7 @@ end
 -- Deliberately different from whatever @Version the real entry file's header currently
 -- carries, so tests that check the stamped/injected version actually prove buildBundle
 -- overrides it from packageVersion, rather than coincidentally matching what was already
--- there (issue #89).
+-- there.
 local TEST_PACKAGE_VERSION = '9.9.9'
 
 local bundled = bundler.buildBundle(realEntrySource, fakeReadModule, TEST_PACKAGE_VERSION)
@@ -69,7 +69,7 @@ local firstPreloadIdx = bundled:find('package.preload[', 1, true)
 assertTrue(fhInitIdx ~= nil and firstPreloadIdx ~= nil and fhInitIdx < firstPreloadIdx,
   'bundle is spliced in after the fhInitialise(...) call')
 
--- BRIDGE_VERSION (issue #45) is injected from packageVersion (issue #89), not from
+-- BRIDGE_VERSION is injected from packageVersion, not from
 -- whatever the source entry's own @Version header said.
 local versionIdx = bundled:find('local BRIDGE_VERSION = ' .. string.format('%q', TEST_PACKAGE_VERSION), 1, true)
 assertTrue(versionIdx ~= nil, 'bundled output injects BRIDGE_VERSION from the given packageVersion')
@@ -77,7 +77,7 @@ assertTrue(fhInitIdx ~= nil and versionIdx ~= nil and firstPreloadIdx ~= nil and
   fhInitIdx < versionIdx and versionIdx < firstPreloadIdx,
   'BRIDGE_VERSION is injected after fhInitialise(...) and before the bundled modules, so it is in scope for the rest of the file')
 
--- extractPackageVersion (issue #89): pulls "version" out of raw package.json text with a
+-- extractPackageVersion: pulls "version" out of raw package.json text with a
 -- plain pattern match (no JSON parser — matches this project's existing no-JSON-library
 -- stance).
 assertEqual(
@@ -90,7 +90,7 @@ assertEqual(extractOk, false, 'extractPackageVersion fails loudly when the versi
 assertTrue(extractOk == false and tostring(extractErr):find('version', 1, true) ~= nil,
   'extractPackageVersion error message mentions the missing field')
 
--- The @Version header is a stamped mirror of packageVersion (issue #89): it must reflect
+-- The @Version header is a stamped mirror of packageVersion: it must reflect
 -- packageVersion even when the source entry file's own header still says something else —
 -- proving this is an override, not a passthrough of whatever was already there.
 local originalHeaderVersion = realEntrySource:match('@Version:%s*(%S+)')

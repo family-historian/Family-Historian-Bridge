@@ -81,7 +81,7 @@ local READ_ONLY_FH_GLOBAL_NAMES = {
   'fhFtfEncode', 'fhFtfParamEncode',
   'fhGetNamedList', 'fhGetNamedListByIndex', 'fhGetNamedListCount',
   'fhBeginsWithVowel',
-  -- Links (issue #134): fhGetRecordLinks takes a record item pointer and returns a table
+  -- Links: fhGetRecordLinks takes a record item pointer and returns a table
   -- of item pointers linking to it -- pure read, no bCreateIfNone-style write branch.
   'fhGetRecordLinks',
   -- fhGetFlagTag/fhGetFactTag: bare names, present read-only as the guarded wrappers below

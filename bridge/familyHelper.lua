@@ -10,26 +10,26 @@ local utf8Fold = require('utf8Fold')
 
 local M = {}
 
--- Visibility levels for the Private/Living Record Flags (issue #141), set once per
+-- Visibility levels for the Private/Living Record Flags, set once per
 -- run_lua call by sandbox.lua's M.build before env.fhBridge is handed to the script --
 -- module-level rather than threaded through every function's own parameters, since
 -- FH's single-threaded IUP mainloop means one script always runs to completion before the
 -- next starts (see sandbox.lua's own comment at the call site). Defaults to unfiltered
--- "all"/"all" so a caller that never calls this (any pre-#141 test) sees today's behavior.
+-- "all"/"all" so a caller that never calls this (any test predating Visibility) sees today's behavior.
 local currentPrivacySettings = { privateVisibility = "all", livingVisibility = "all" }
 
 function M.setPrivacySettings(settings)
   currentPrivacySettings = settings or { privateVisibility = "all", livingVisibility = "all" }
 end
 
--- Exposed for tests and for recordVisibility (added in a later #141 slice); every other
+-- Exposed for tests and for recordVisibility (added in a later slice); every other
 -- function in this module reads currentPrivacySettings through this accessor, never the
 -- upvalue directly.
 function M.getPrivacySettings()
   return currentPrivacySettings
 end
 
--- Most-restrictive-wins ordering for the two Visibility levels (issue #141).
+-- Most-restrictive-wins ordering for the two Visibility levels.
 local VISIBILITY_RANK = { exclude = 1, nameOnly = 2, all = 3 }
 
 -- Visibility level for ptr's owning record's Private/Living Record Flags, per the currently-
@@ -144,7 +144,7 @@ M.parseQualifiedId = parseQualifiedId
 
 -- Exported so the write-helper validators (factHelper/sourceHelper/sessionLogHelper/
 -- richTextHelper) can block an Excluded Individual's record the same way the read
--- helpers already do (issue #141).
+-- helpers already do.
 M.recordVisibility = recordVisibility
 
 -- The shared "is v a usable live pointer" check every validate*/get* function uses instead
@@ -599,7 +599,7 @@ local function linkDescriptor(ptr)
   end
   -- A link can point at an Excluded Individual even when ptr's own record has no flags
   -- of its own (e.g. a FAM's HUSB/WIFE link) -- redact here too, not just at indiDescriptor,
-  -- so getAllDetails/getFactsByTag can't leak a name through a one-hop link (issue #141).
+  -- so getAllDetails/getFactsByTag can't leak a name through a one-hop link.
   if recordVisibility(target) == "exclude" then
     return { redacted = true, tag = fhGetTag(target), note = REDACTED_NOTE }
   end

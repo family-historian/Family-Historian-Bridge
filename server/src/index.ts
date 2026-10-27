@@ -22,7 +22,7 @@ const FH_HELP_CORPUS_META_PATH = fileURLToPath(
 const FH_HELP_CORPUS_SOURCE_URL = "https://family-historian.co.uk/help/fh8/corpus.jsonl";
 
 // Own file, deliberately separate from fh-help-corpus.jsonl so check_fh_help_updates'
-// wholesale overwrite of that file can never touch this one — see issue #11 and
+// wholesale overwrite of that file can never touch this one — see
 // docs/adr/0003-gedcom-corpus-scope-live-api-only.md. Not synced from anywhere; there is
 // no update-check tool for this corpus.
 const GEDCOM_KNOWLEDGE_CORPUS_PATH = fileURLToPath(

@@ -86,7 +86,7 @@ fhGetNamedListCount = function() end
 fhBeginsWithVowel = function() end
 fhGetRecordLinks = function() end
 
--- Read-write write API (issue #14): stubbed the same way as the read-only surface above,
+-- Read-write write API: stubbed the same way as the read-only surface above,
 -- so the read-write assertions below (present, by reference) and the read-only exclusion
 -- assertions further down (absent) each prove something real, rather than either passing
 -- vacuously.
@@ -107,7 +107,7 @@ fhDeleteItem = function() end
 fhMoveItemAfter = function() end
 fhMoveItemBefore = function() end
 fhSrcEnableAutoTitle = function() end
--- Recording stubs, not no-ops (issue #51): the guarded-forwarding assertions below need to
+-- Recording stubs, not no-ops: the guarded-forwarding assertions below need to
 -- prove the real function actually ran with the original arguments, not just that some
 -- function was called.
 fhGetFactTag = function(strFactName, strFactType, strRecTag, bCreateIfNone)
@@ -152,7 +152,7 @@ fhInitialise = function() end
 -- not just that a callable of some kind is present.
 local fhuCalls = {}
 
--- Modal-dialog and filesystem-writing fhu methods (issue #22): stubbed as recording
+-- Modal-dialog and filesystem-writing fhu methods: stubbed as recording
 -- functions, not no-ops, so the "never forwarded" assertions below prove something real
 -- -- if the proxy ever slipped and called through to one of these, fhuCalls would show
 -- it, rather than the test passing vacuously because the stub does nothing anyway.
@@ -191,11 +191,11 @@ local fakeFhu = {
 }
 package.loaded.fhUtils = fakeFhu
 
--- sourceHelper.lua (issue #18) ships as a sibling module in this project (unlike fhUtils),
+-- sourceHelper.lua ships as a sibling module in this project (unlike fhUtils),
 -- but is stubbed the same way here so this test stays a pure allowlist check, independent
 -- of sourceHelper.lua's own behavior (covered by sourceHelper.test.lua). citeSource
 -- returns an identifiable value for the same forwarding-proof reason as fakeFhu.createIndi
--- above. validateCreateSourceFromTemplate/validateCiteSource (issue #97) record into
+-- above. validateCreateSourceFromTemplate/validateCiteSource record into
 -- helperCallLog (below) and raise when their first argument is the sentinel string 'BAD',
 -- so the validatedTrackedWrite/validatedTrackedLog tests further down can prove both
 -- ordering (validate runs before mutate) and the actual regression fix (a rejected
@@ -224,7 +224,7 @@ local fakeSourceHelper = {
 }
 package.loaded.sourceHelper = fakeSourceHelper
 
--- sessionLogHelper.lua (issue #36) is stubbed the same way, for the same reason: this test
+-- sessionLogHelper.lua is stubbed the same way, for the same reason: this test
 -- stays a pure allowlist check, independent of sessionLogHelper.lua's own behavior (covered
 -- by sessionLogHelper.test.lua). logActivity returns an identifiable value for the same
 -- forwarding-proof reason as fakeSourceHelper.citeSource above. validateLogActivity (issue
@@ -243,7 +243,7 @@ package.loaded.sessionLogHelper = fakeSessionLogHelper
 
 -- richTextHelper.lua (issue #107, docs/adr/0025) is stubbed the same way: getTftfText is
 -- a pure read (present under both access modes, like findSources); validateSetTftfText/
--- setTftfText follow the same validate-then-mutate (issue #97) shape as
+-- setTftfText follow the same validate-then-mutate shape as
 -- createSourceFromTemplate/citeSource/logActivity above, recording into the same
 -- helperCallLog and rejecting on the same 'BAD' sentinel.
 local fakeRichTextHelper = {
@@ -264,7 +264,7 @@ package.loaded.richTextHelper = fakeRichTextHelper
 -- behavior (covered by familyHelper.test.lua). Every stub returns an identifiable value
 -- for the same forwarding-proof reason as fakeSourceHelper.citeSource above.
 local fakeFamilyHelper = {
-  -- setPrivacySettings (issue #141): sandbox.build calls this unconditionally before
+  -- setPrivacySettings: sandbox.build calls this unconditionally before
   -- building env.fhBridge -- a fake missing it would fail every scenario in this file with
   -- an unrelated "attempt to call a nil value" error, not a useful assertion failure.
   setPrivacySettings = function(settings) end,
@@ -277,7 +277,7 @@ local fakeFamilyHelper = {
 }
 package.loaded.familyHelper = fakeFamilyHelper
 
--- factHelper.lua (issue #113) is stubbed the same way, for the same reason: this test
+-- factHelper.lua is stubbed the same way, for the same reason: this test
 -- stays a pure allowlist check, independent of factHelper.lua's own behavior (covered by
 -- factHelper.test.lua). validateCreateFact/createFact's fake signatures match the real
 -- module's own (ptrRecord, sTag, sPlace, dtDate) positional order deliberately -- this
@@ -497,7 +497,7 @@ do
   fake.restore()
 end
 
--- Write tracker (issue #15): present on every build(), starts false, independent of
+-- Write tracker: present on every build(), starts false, independent of
 -- accessMode (a read-only script can never flip it, since it has no write functions).
 check(type(tracker) == 'table' and tracker.wrote == false, 'read-only build returns a tracker with wrote = false')
 
@@ -505,7 +505,7 @@ check(type(tracker) == 'table' and tracker.wrote == false, 'read-only build retu
 -- alongside tracker.wrote, same independence-from-accessMode reasoning.
 check(tracker.logged == false, 'read-only build returns a tracker with logged = false')
 
--- Combined write-name set (issue #43): exported alongside M.build so runScript.lua's
+-- Combined write-name set: exported alongside M.build so runScript.lua's
 -- static pre-scan reuses this exact list rather than a second, driftable copy. Checked as
 -- a set-membership regression guard, not by exact list identity, so the list order (or a
 -- future new write primitive being appended) doesn't make this test brittle.
@@ -522,7 +522,7 @@ do
   check(nameSet['addWitness'] == true, 'WRITE_NAMES includes addWitness (from FHU_WRITE_METHOD_NAMES)')
 end
 
--- Mode-independent known-fh*-global set (issue #81): exported alongside M.build so
+-- Mode-independent known-fh*-global set: exported alongside M.build so
 -- runScript.lua's unrecognized-fh*-call pre-scan reuses this exact list rather than a
 -- second, driftable copy. Checked as set membership, not exact list identity, same
 -- regression-guard style as the WRITE_NAMES check above.
@@ -540,7 +540,7 @@ do
   check(nameSet['fhGetRecordLinks'] == true, 'KNOWN_FH_GLOBAL_NAMES includes fhGetRecordLinks (read-only, issue #134)')
 end
 
--- Excluded-fh*-global reasons (issue #81): a sample from each prose category, proving the
+-- Excluded-fh*-global reasons: a sample from each prose category, proving the
 -- table exists with real reason text rather than just names -- runScript.test.lua covers
 -- the reject-before-execution behavior end to end.
 check(sandbox.EXCLUDED_FH_GLOBAL_REASONS['fhShellExecute'] ~= nil, 'EXCLUDED_FH_GLOBAL_REASONS has a reason for fhShellExecute')
@@ -575,7 +575,7 @@ check(env.fhDeleteItem == nil, 'fhDeleteItem absent (mutates the GEDCOM tree —
 check(env.fhMoveItemAfter == nil, 'fhMoveItemAfter absent (mutates the GEDCOM tree — reserved for Read-write)')
 check(env.fhMoveItemBefore == nil, 'fhMoveItemBefore absent (mutates the GEDCOM tree — reserved for Read-write)')
 check(env.fhSrcEnableAutoTitle == nil, 'fhSrcEnableAutoTitle absent (mutates a Source record\'s flag — reserved for Read-write)')
--- fhGetFactTag/fhGetFlagTag (issue #51): unlike the rest of WRITE_PRIMITIVE_NAMES, these are
+-- fhGetFactTag/fhGetFlagTag: unlike the rest of WRITE_PRIMITIVE_NAMES, these are
 -- NOT entirely excluded from Read-only — each has a genuine pure-lookup branch
 -- (bCreateIfNone = false/nil) that returns an existing tag (or "" if not found) with no
 -- possible mutation, per FH's own docs (fhGetFlagTag.htm, fhGetFactTag.htm). Guarded like
@@ -638,7 +638,7 @@ local env2 = sandbox.build()
 env2.string = nil
 check(env.string == string, 'each build() call returns an independent env table')
 
--- Access mode plumbing (issue #13) + write API (issue #14): build() accepts an accessMode
+-- Access mode plumbing + write API: build() accepts an accessMode
 -- argument, threaded through from the bridge dialog's toggle. "read-write" carries every
 -- read-only capability plus the full write API, granted all at once. Every write primitive
 -- is now wrapped (issue #15, to track whether a script actually wrote before erroring), so
@@ -681,7 +681,7 @@ check(type(envReadWrite3.fhBridge) == 'table', 'read-write build includes fhBrid
 check(envReadWrite3.fhBridge.citeSource('ptr', 'my-source') == 'cited:my-source', 'wrapped fhBridge.citeSource forwards through to the real sourceHelper.citeSource')
 check(trackerReadWrite3.wrote == true, 'calling a wrapped fhBridge method flips the tracker too')
 
--- validatedTrackedWrite/validatedTrackedLog (issue #97): validate runs before mutate, and a
+-- validatedTrackedWrite/validatedTrackedLog: validate runs before mutate, and a
 -- rejected validate call never reaches mutate and never flips the tracker -- the actual
 -- regression this issue was about (a bad call to one of these three used to arm the tracker,
 -- and so trigger ADR 0005's rollback/Session-death path, purely from being entered, even
@@ -809,7 +809,7 @@ envReadWrite8.fhu.createIndi('Jane /Doe/', 'Female')
 check(trackerReadWrite8.wrote == true, 'calling fhu.createIndi flips tracker.wrote')
 check(trackerReadWrite8.logged == false, 'calling fhu.createIndi (not logActivity) leaves tracker.logged false')
 
--- fhGetFactTag/fhGetFlagTag under read-write (issue #51): the FULL, unguarded function —
+-- fhGetFactTag/fhGetFlagTag under read-write: the FULL, unguarded function —
 -- unlike the read-only guarded wrapper above, bCreateIfNone = true still forwards through
 -- rather than erroring, and every call (even bCreateIfNone = false) still flips the tracker
 -- conservatively, exactly as before this change (see WRITE_PRIMITIVE_NAMES's own comment).
@@ -823,7 +823,7 @@ check(envReadWrite10.fhGetFlagTag('Living', false) == 'flagtag:Living:false:nil'
   'read-write fhGetFlagTag forwards through with bCreateIfNone = false too (not just true)')
 check(trackerReadWrite10.wrote == true, 'calling read-write fhGetFlagTag flips the tracker conservatively even on the bCreateIfNone = false branch')
 
--- Modal-dialog and filesystem-writing fhu methods (issue #22): replaced with an
+-- Modal-dialog and filesystem-writing fhu methods: replaced with an
 -- error-raising wrapper rather than being forwarded to the real function or left as a
 -- silent nil -- present (and always erroring) in BOTH read-only and read-write, since the
 -- hang/filesystem risk has nothing to do with access mode. The error names the method, so
@@ -860,7 +860,7 @@ check(#fhuCalls == callsBeforeUnsupportedRW, 'none of the unsupported fhu method
 
 -- createUpdateFact is both a write method (FHU_WRITE_METHOD_NAMES) and one of the
 -- modal-dialog methods above -- it calls getParam internally before doing any write
--- (issue #22). The unsupported-wrapper takes priority over write-gating, so it never
+--. The unsupported-wrapper takes priority over write-gating, so it never
 -- forwards to the real (hang-prone) function in EITHER mode -- unlike the rest of
 -- FHU_WRITE_METHOD_NAMES, it's not nil under read-only (see the type-check assertion
 -- earlier in this file) -- and never flips the write tracker under read-write.

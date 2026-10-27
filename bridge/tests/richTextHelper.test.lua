@@ -44,7 +44,7 @@ function PtrMethods:IsNotNull()
   return not self:IsNull()
 end
 
--- Needed only for familyHelper.recordVisibility's _FLGS walk (issue #141): parentPtr is
+-- Needed only for familyHelper.recordVisibility's _FLGS walk: parentPtr is
 -- either an "owner" record pointer (its own .children, set by MoveToRecordItem below) or a
 -- _FLGS node reached via a previous MoveToFirstChildItem call (its .children field, found
 -- via currentChildNode) -- mirrors factHelper.test.lua/sessionLogHelper.test.lua's own.
@@ -58,7 +58,7 @@ function PtrMethods:MoveNext()
   self.index = self.index + 1
 end
 
--- Needed only for richTextHelper.lua's own Exclude check (issue #141): ptrRef is a
+-- Needed only for richTextHelper.lua's own Exclude check: ptrRef is a
 -- rich-text field pointer, optionally carrying a .owner fixture ({ name, children }
 -- describing the Individual record it belongs to) set per-test below. No .owner set (every
 -- pre-#141 fixture) climbs to a generic non-INDI owner, so recordVisibility trivially
@@ -118,7 +118,7 @@ end
 
 -- Used by setTftfText's own write-result error message (issue #111, docs/adr/0028) to name
 -- which field a failed write targeted (ptr.name, the ordinary case), and by
--- familyHelper.recordVisibility's _FLGS walk (issue #141) to read a child/flag node's own
+-- familyHelper.recordVisibility's _FLGS walk to read a child/flag node's own
 -- tag once MoveToFirstChildItem has positioned ptr onto one (currentChildNode(ptr) ~= nil).
 fhGetTag = function(ptr)
   local node = currentChildNode(ptr)
@@ -400,7 +400,7 @@ check(contains(errWriteFail, 'field-write-failure'), 'the failure names the targ
 ------------------------------------------------------------------
 -- setTftfText/validateSetTftfText: an Excluded Individual's own record blocks the write --
 -- ptr is always a field, never the record itself, so this climbs to the owning record via
--- MoveToRecordItem first (issue #141).
+-- MoveToRecordItem first.
 ------------------------------------------------------------------
 
 local familyHelper = require('familyHelper')

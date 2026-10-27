@@ -23,7 +23,7 @@ export interface GedcomKnowledgeStore {
   entries: GedcomKnowledgeEntry[];
 }
 
-// 20, not 10 (issue #65): the "run_lua guidance" family (breadcrumb ["Bridge project
+// 20, not 10: the "run_lua guidance" family (breadcrumb ["Bridge project
 // conventions", "run_lua guidance", ...]) already has 11 members as of this comment and
 // keeps growing (gedcom-corpus-pattern memory: extend this family rather than growing
 // RUN_LUA_DESCRIPTION) -- search_gedcom_knowledge exposes no caller-settable limit
@@ -37,14 +37,14 @@ const DEFAULT_SEARCH_LIMIT = 20;
 // search_gedcom_knowledge has no caller-settable size limit (query is its only parameter),
 // so an unbounded result for a broad query (e.g. "run_lua guidance", matching every title
 // in that growing family) could itself exceed the client's own response-size ceiling and
-// get diverted to a file dump the caller was never told to open (issue #135). Cap the
+// get diverted to a file dump the caller was never told to open. Cap the
 // serialized result at this many characters -- past it, later-ranked matches drop to a
 // compact {id, title} index instead of their full text, so the caller can always see what
 // exists even when it doesn't fit, and re-query narrowly (e.g. via grep_gedcom_knowledge)
 // instead of silently missing it. The real client-side ceiling isn't documented anywhere
 // (ADR 0011 found ~2KB for tool *descriptions*, but confirmed multi-KB tool *results* work
 // fine); 20,000 sits comfortably inside that confirmed-working range and well under the
-// 71,218 chars that overflowed in #135 -- adjust if it proves too tight or too loose.
+// 71,218 chars that overflowed once -- adjust if it proves too tight or too loose.
 const SEARCH_MAX_TOTAL_BYTES = 20_000;
 
 export function parseGedcomKnowledgeCorpus(jsonlContent: string): GedcomKnowledgeEntry[] {
@@ -77,7 +77,7 @@ export interface GedcomKnowledgeSearchResult {
  * making Claude round-trip through a resource fetch to read one, and no separate result
  * type is needed since nothing is reshaped — up to SEARCH_MAX_TOTAL_BYTES; matches beyond
  * that cap are still named in `index` (id/title only) rather than silently dropped, so a
- * query that matches more than fits in one response (issue #135) still tells the caller
+ * query that matches more than fits in one response still tells the caller
  * everything that matched. */
 // Margin reserved out of SEARCH_MAX_TOTAL_BYTES for the response's own `note` field once
 // truncated -- small and roughly fixed-size (see searchResult's note text), but omitting it
@@ -108,7 +108,7 @@ export function searchGedcomKnowledge(
   // are computed against it, not against the work-bounded `ranked` slice below, so a query
   // matching more than `limit` entries is still reported as truncated with every match
   // named, rather than silently reporting only the first `limit` as if that were everything
-  // (issue #135's failure mode, one level up: a limit-bound cap masquerading as "no more").
+  // (the same failure mode as the byte cap, one level up: a limit-bound cap masquerading as "no more").
   const rankedAll = rankEntries(corpus, query);
   const ranked = rankedAll.slice(0, limit);
   const limitTruncated = ranked.length < rankedAll.length;
@@ -163,7 +163,7 @@ const GREP_MAX_TOTAL_BYTES = 200_000;
  * complete matching entries -- not a truncated excerpt window like searchGedcomKnowledge's
  * own token-overlap fallback for natural-language queries. For when the caller knows a
  * fragment of what they're looking for (a function name, an exact phrase) but a
- * sentence-style search buries it under unrelated matches. See issue #101. */
+ * sentence-style search buries it under unrelated matches. */
 export function grepGedcomKnowledge(
   corpus: GedcomKnowledgeEntry[],
   pattern: string,
@@ -186,7 +186,7 @@ By default the pattern is matched as a literal, case-insensitive substring. Pass
 // Steers Claude's own behavior when it uses this tool. Kept under the ~2048-byte
 // deferred-tool-loading truncation point some MCP clients enforce (same failure class
 // ADR 0011 found for RUN_LUA_DESCRIPTION) -- see gedcomKnowledge.test.ts's own byte-budget
-// tests. Grew past that point once already (3001 bytes) before this re-zoning (issue #101).
+// tests. Grew past that point once already (3001 bytes) before this re-zoning.
 export const SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION = `Search a reference corpus of GEDCOM/Family Historian domain knowledge that goes beyond FH's own end-user help (use search_fh_help for that): FTF rich-text markup syntax, Shared Facts, the Fact Flag vs. Record Flag distinction, Source Template fields, Sentence templates, Data Reference qualifier codes (e.g. "~.NAME:GIVEN_ALL" — query "name qualifiers"/"date qualifiers"/"place and lat/long qualifiers" for each code's canonical list, not fh-help sample scripts), and run_lua's own behavioral guidance (query "run_lua guidance" — see below).
 
 Use this BEFORE writing a run_lua script that reads/writes a Notes/Text field, a fact's flags, a citation's structured fields, or any Data Reference needing a qualifier. Also call it with the exact query "run_lua guidance" once near the start of any conversation using run_lua — tool descriptions can be truncated around ~2KB before reaching you (docs/adr/0011); this query surfaces the call-shape gotchas, citeSource/rollback/fhu-is-a-global guidance, and fhBridge's query helpers directly, or, past a size cap, via a compact index naming each match so you can fetch a narrower one next.

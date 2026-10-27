@@ -63,7 +63,7 @@ function PtrMethods:IsNull()
 end
 
 -- Minimal child-item walk, needed only for familyHelper.recordVisibility's _FLGS walk
--- (issue #141) -- a node's own .children array (nil/empty for every pre-#141 fixture) is
+-- -- a node's own .children array (nil/empty for every pre-#141 fixture) is
 -- reused as the pointed-to list, the same way a top-level recordsByTag[tag] list already is.
 function PtrMethods:MoveToFirstChildItem(parentPtr)
   local parentNode = currentNode(parentPtr)
@@ -117,7 +117,7 @@ local function makeRecord(tag)
 end
 
 -- Adds a Record Flag child (e.g. "__PRIVATE"/"__LIVING") under node's _FLGS item, creating
--- _FLGS on first use -- mirrors familyHelper.test.lua's own addFlag (issue #141).
+-- _FLGS on first use -- mirrors familyHelper.test.lua's own addFlag.
 local function addFlag(node, flagTag)
   node.children = node.children or {}
   local flgs
@@ -225,7 +225,7 @@ do
 end
 
 ------------------------------------------------------------------
--- validateCreateFact: an Excluded Individual's own record blocks the write (issue #141).
+-- validateCreateFact: an Excluded Individual's own record blocks the write.
 ------------------------------------------------------------------
 
 do
@@ -250,7 +250,7 @@ end
 -- createFact: calls fhu.createFact (stubbed via package.loaded.fhUtils, the same lazy
 -- require() pattern sessionSettings.lua/sessionSettings.test.lua already establish) and
 -- returns its result unchanged -- the live fact pointer, not a qualifiedId, so a caller can
--- chain straight into fhBridge.citeSource(thatPointer, ...) (issue #113).
+-- chain straight into fhBridge.citeSource(thatPointer, ...).
 ------------------------------------------------------------------
 
 local function withFakeFhu(fakeFhu, fn)

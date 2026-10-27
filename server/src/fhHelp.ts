@@ -87,7 +87,7 @@ interface FhHelpGrepResponseBody extends FhHelpGrepResult {
 
 const GREP_DEFAULT_MATCH_LIMIT = 10;
 const GREP_MAX_MATCH_LIMIT = 25;
-// Same lesson as the unpaginated resources/list issue (#20): an overly broad pattern
+// Same lesson as the unpaginated resources/list issue: an overly broad pattern
 // (e.g. a single common word) shouldn't be able to dump most of the corpus into one
 // response, even under the match-count cap above.
 const GREP_MAX_TOTAL_BYTES = 200_000;
@@ -95,7 +95,7 @@ const GREP_MAX_TOTAL_BYTES = 200_000;
 /** Full-text grep across the whole corpus (title, breadcrumb, and body), returning the
  * complete text of every matching entry — not a truncated excerpt window like
  * searchFhHelp. For when the caller knows a fragment of what they're looking for (a
- * function name, a sample-script pattern) but not which page holds it. See issue #21. */
+ * function name, a sample-script pattern) but not which page holds it. */
 export function grepFhHelp(
   corpus: FhHelpTopic[],
   pattern: string,

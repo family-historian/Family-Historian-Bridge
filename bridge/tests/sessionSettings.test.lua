@@ -117,7 +117,7 @@ withFakeFhu({
   check(settings.idleTimeoutMinutes == 20, 'a valid stored idleTimeoutMinutes alongside an invalid accessMode still passes through')
 end)
 
--- 6b. Visibility levels (issue #141): valid stored values pass through, invalid/missing
+-- 6b. Visibility levels: valid stored values pass through, invalid/missing
 -- fall back to "all" (today's unfiltered behavior), each field independently.
 withFakeFhu({
   loadOptions = function(defaults, scope)

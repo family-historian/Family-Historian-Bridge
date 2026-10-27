@@ -2,7 +2,7 @@
 // Verifies a built .mcpb bundle actually runs: extracts it exactly like Claude Desktop
 // would, spawns its manifest-declared server command using the bundle's own bundled
 // dependencies (not this repo's dev copy), and connects a real MCP client over stdio to
-// confirm the expected tools register -- issue #59's automatable half of "verify it
+// confirm the expected tools register -- the automatable half of "verify it
 // actually installs and registers the MCP server correctly".
 //
 // What this does NOT (and can't) check: the actual Settings -> Extensions / double-click
@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readToolCatalog } from "./dxt/manifest.mjs";
 
-// Read from server/src/toolNames.json, the single source of truth (issue #85), instead of the
+// Read from server/src/toolNames.json, the single source of truth, instead of the
 // hand-synced third copy that used to sit here -- the drift risk ADR 0015 flagged. This is
 // the strongest of the three checks in that chain: it compares the JSON not to a manifest or
 // to source, but to the tool names a packed .mcpb's server really answers tools/list with.

@@ -5,7 +5,7 @@ import {
   textResult,
 } from "./bridgeResponse.js";
 
-// Bridge/server version-mismatch detection (issue #45): resolved design at
+// Bridge/server version-mismatch detection: resolved design at
 // https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/45#issuecomment-354.
 //
 // A dedicated VERSION request/response is sent as its own connection ahead of every
@@ -38,7 +38,7 @@ export function compareVersions(bridgeVersion: string, serverVersion: string): V
 
 export type AccessMode = "read-only" | "read-write";
 
-// Visibility levels for the Private/Living Record Flags (issue #141) -- same three-value
+// Visibility levels for the Private/Living Record Flags -- same three-value
 // shape on both sides of the wire as bridge/sessionSettings.lua's own privateVisibility/
 // livingVisibility fields.
 export type VisibilityLevel = "exclude" | "nameOnly" | "all";
@@ -53,7 +53,7 @@ export type VersionCheckOutcome =
   | { status: "block"; bridgeVersion: string; serverVersion: string; accessMode: AccessMode | null; privacySettings: PrivacySettings | null }
   // An older Bridge that predates this feature doesn't recognize the VERSION verb and
   // rejects it with the same malformed-framing error every unrecognized header gets
-  // (bridge/requestFraming.lua) — this is itself the "stale Bridge" signal issue #45 exists
+  // (bridge/requestFraming.lua) — this is itself the "stale Bridge" signal the version check exists
   // to catch, so it's treated as a distinct, expected case rather than a parse failure.
   | { status: "unsupported" }
   | { status: "unparseable" };
@@ -78,14 +78,14 @@ export function interpretVersionResponse(raw: string, serverVersion: string): Ve
   }
 
   if (typeof obj.version === "string") {
-    // issue #109: the Bridge's VERSION reply grows from {version} to {version, accessMode}
+    // The Bridge's VERSION reply grows from {version} to {version, accessMode}
     // so describe_project's bridgeState can report the Session's real Access mode. An
     // older Bridge that predates this field (but already supports VERSION itself) simply
     // omits accessMode -- reads as null here, same as any other unrecognized value,
     // distinct from the "unsupported" case above (which never gets this far at all).
     const accessMode: AccessMode | null =
       obj.accessMode === "read-only" || obj.accessMode === "read-write" ? obj.accessMode : null;
-    // Same reasoning as accessMode above: an older Bridge that predates #141 omits
+    // Same reasoning as accessMode above: an older Bridge that predates the Visibility settings omits
     // privacySettings entirely (or a field within it), which reads as null here rather than
     // erroring -- describe_project's bridgeState shape stays fixed regardless.
     const rawPrivacy =
@@ -118,7 +118,7 @@ export interface BridgeState {
 }
 
 // Builds describe_project's bridgeState section from the same VersionCheckOutcome every
-// caller of checkBridgeVersion already computes (issue #109, docs/adr/0026) -- four call
+// caller of checkBridgeVersion already computes (docs/adr/0026) -- four call
 // sites below (one per outcome that doesn't already block the call outright) need this
 // exact shape in lockstep, so a shared builder beats four hand-written literals drifting
 // apart. "unsupported"/"unparseable" have no bridgeVersion/accessMode to report at all --
@@ -159,7 +159,7 @@ export type CheckBridgeVersionResult =
   // twice); "version-mismatch" is a genuine incompatibility every caller should stop for.
   | { block: CallToolResult; reason: "connection-error" | "version-mismatch" }
   // bridgeState is describe_project's own structured home for the same verdict `note`
-  // carries as free text (issue #109, docs/adr/0026) -- run_lua/install_fh_plugin ignore
+  // carries as free text (docs/adr/0026) -- run_lua/install_fh_plugin ignore
   // it and use `note` unchanged, so it's populated unconditionally here rather than behind
   // a caller-supplied flag.
   | { block: null; note: string | null; bridgeState: BridgeState };
@@ -247,8 +247,7 @@ export type VersionCheckedScriptRun =
  * Shared "check the Bridge's version, then run the script" steps — used by both run_lua
  * (runVersionCheckedScript below) and describe_project (describeProjectTool.ts), which
  * differ only in their final response-shaping step: run_lua appends `note` as free text,
- * describe_project merges `bridgeState` into its script's own JSON result instead (issue
- * #109, docs/adr/0026). install_fh_plugin's Bridge call has a different shape entirely (it
+ * describe_project merges `bridgeState` into its script's own JSON result instead (docs/adr/0026). install_fh_plugin's Bridge call has a different shape entirely (it
  * parses the response as a plain JSON value itself, plus a no-Session/explicit-path
  * fallback the other two don't have) and calls checkBridgeVersion directly instead of
  * going through this.

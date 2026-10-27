@@ -61,7 +61,7 @@ function startFakeBridge(
 }
 
 // A fake Bridge that only understands the bodyless VERSION <server-version> framing
-// (issue #45) — mirrors startFakeBridge's shape but for a single-line request/response
+// — mirrors startFakeBridge's shape but for a single-line request/response
 // with no following byte-counted body.
 function startFakeVersionBridge(
   handleVersion: (serverVersion: string) => string,

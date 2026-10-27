@@ -29,7 +29,7 @@ check(sessionPolicy.STATUS_COLOR_READONLY == '212 237 218', 'STATUS_COLOR_READON
 check(sessionPolicy.STATUS_COLOR_READWRITE == '255 243 205', 'STATUS_COLOR_READWRITE is the documented amber')
 check(sessionPolicy.STATUS_COLOR_ERROR == '248 215 218', 'STATUS_COLOR_ERROR is the documented red')
 
--- shouldAutoStopForIdle (issue #34)
+-- shouldAutoStopForIdle
 
 check(sessionPolicy.shouldAutoStopForIdle(nil, 900, 1000) == false,
   'no auto-stop when no Session is running (lastActivityTime nil)')

@@ -104,7 +104,7 @@ function M.validateSetTftfText(ptr, text)
   end
   -- ptr is always a field (Notes/Source TEXT/citation DATA-TEXT), never the record
   -- itself, so recordVisibility needs the owning record -- climbed onto a separate
-  -- pointer, since ptr must still point at the field for the write below (issue #141).
+  -- pointer, since ptr must still point at the field for the write below.
   local owner = fhNewItemPtr()
   owner:MoveToRecordItem(ptr)
   if familyHelper.recordVisibility(owner) == "exclude" then

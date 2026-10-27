@@ -105,7 +105,7 @@ describe("searchGedcomKnowledge", () => {
   it("caps total result size, naming the rest in a compact index rather than dropping them (issue #135)", () => {
     // Each entry's serialized text is ~1KB; more than SEARCH_MAX_TOTAL_BYTES (20,000) worth
     // of matches must truncate, not silently overflow the client's own response-size ceiling
-    // the way a bare "run_lua guidance" search once did (issue #135).
+    // the way a bare "run_lua guidance" search once did.
     const bigText = "x".repeat(1000);
     const manyEntries = Array.from({ length: 30 }, (_, i) =>
       JSON.stringify({
@@ -370,7 +370,7 @@ describe("run_lua guidance corpus entries (docs/adr/0011-run-lua-description-tru
     // corpus's own breadcrumb instead, so this test asserts the invariant that actually
     // matters, not a snapshot of which ones existed when this test was last touched.
     //
-    // The family is bigger than SEARCH_MAX_TOTAL_BYTES (issue #135), so a direct
+    // The family is bigger than SEARCH_MAX_TOTAL_BYTES, so a direct
     // search_gedcom_knowledge call truncates -- the invariant that still must hold is that
     // every family member is named somewhere in the response (full text in matches, or
     // named in index), never silently missing from both.
@@ -632,7 +632,7 @@ describe("SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION byte budget (issue #101 follow-up)
   // Same failure class ADR 0011 found for RUN_LUA_DESCRIPTION: MCP clients that load tool
   // descriptions via deferred/lazy schema-loading truncate around ~2048 bytes. This
   // description had grown past that point (3001 bytes) with no safe-zoning of its own --
-  // re-zoned here while adding the grep_gedcom_knowledge fallback mention (issue #101),
+  // re-zoned here while adding the grep_gedcom_knowledge fallback mention,
   // rather than growing it further.
   it("stays under the observed ~2048-byte truncation point", () => {
     expect(Buffer.byteLength(SEARCH_GEDCOM_KNOWLEDGE_DESCRIPTION, "utf8")).toBeLessThan(2000);

@@ -12,7 +12,7 @@
 -- transactionResult is "committed" for a successful write-mode call, "rolledback" for a
 -- write-mode failure that was undone without ending the plugin, or nil (read-only calls,
 -- a write-mode call that never wrote anything, or the rethrow case above) -- see
--- docs/INTERNAL-commit-rollback-plan.md (issue #133) for the full design.
+-- docs/INTERNAL-commit-rollback-plan.md for the full design.
 
 local sandbox = require('sandbox')
 local json = require('jsonEncode')
@@ -135,7 +135,7 @@ local function dataReferenceViolation(scriptText)
   return table.concat(messages, '; ')
 end
 
--- Bulk-enumeration pre-scan (issue #141): a script that calls MoveToFirstRecord walks the
+-- Bulk-enumeration pre-scan: a script that calls MoveToFirstRecord walks the
 -- raw GEDCOM tree directly, bypassing every fhBridge.* helper's Visibility filtering -- the
 -- one gap this issue's own trust boundary leaves open (raw fh* calls stay unfiltered by
 -- design). Only fires while a Visibility level is actually restricting something -- both
@@ -173,7 +173,7 @@ end
 -- Shared shape for a write-mode response that ends the whole plugin so FH's own auto-undo
 -- can act on the tree (ADR 0005): a JSON error carrying writeSessionRolledBack: true, plus
 -- the original error/message as a second return value the caller re-raises after sending.
--- Fallback of last resort only (issue #133) -- used when the tree's own rollback/commit
+-- Fallback of last resort only -- used when the tree's own rollback/commit
 -- primitive itself throws, at which point tree state can't be trusted and ending the
 -- plugin is the safest available behavior. The ordinary case (that primitive succeeding)
 -- never reaches this -- see attemptRollback below.

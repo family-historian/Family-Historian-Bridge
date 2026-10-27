@@ -103,7 +103,7 @@ test("buildManifest declares only the platforms this project actually ships a re
 });
 
 // What this can and can't prove: it pins the manifest to server/src/toolNames.json, the
-// single source of truth (issue #85). Proving that JSON matches what the server *actually*
+// single source of truth. Proving that JSON matches what the server *actually*
 // registers is server/src/toolNames.test.ts's job -- it stands up a real McpServer and reads
 // back its tools/list. The two together give the guarantee this test's previous name claimed
 // on its own while comparing the manifest to a literal array declared right here.

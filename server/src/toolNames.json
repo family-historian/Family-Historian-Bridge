@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Single source of truth for the MCP tools this server registers -- issue #85.",
+    "Single source of truth for the MCP tools this server registers.",
     "Before this file there were four hand-synced copies of the tool list (the register*Tool",
     "call sites, installer/dxt/manifest.mjs, installer/dxt/manifest.test.mjs and",
     "installer/verify-dxt.mjs), and the test that claimed to catch drift between them compared",

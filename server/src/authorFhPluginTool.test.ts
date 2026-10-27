@@ -174,7 +174,7 @@ describe("SANDBOX_EXCLUDED_FUNCTIONS", () => {
       .map((m) => m[1])
       .filter((name) => name !== "fhBridge");
 
-    // fhGetFactTag/fhGetFlagTag (issue #51) aren't a hard `== nil` exclusion any more —
+    // fhGetFactTag/fhGetFlagTag aren't a hard `== nil` exclusion any more —
     // sandbox.lua guards them instead, so their pure-lookup bCreateIfNone=false branch
     // works read-only while bCreateIfNone=true still errors. author_fh_plugin can't tell
     // which branch a given call uses without evaluating it, so it still flags both names

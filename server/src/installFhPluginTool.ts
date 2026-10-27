@@ -35,7 +35,7 @@ async function resolvePluginsFolder(
   deps: InstallFhPluginDeps,
   explicitPath: string | undefined,
 ): Promise<{ path: string; versionNote: string | null } | { errorResult: CallToolResult }> {
-  // issue #45: checked ahead of the live folder-lookup connection below, same as
+  // Checked ahead of the live folder-lookup connection below, same as
   // run_lua/describe_project. A genuine version-mismatch block stops here, since the
   // lookup below would hit the same incompatible Bridge. A connection-error block just
   // means "couldn't reach the Bridge to check its version" — the lookup below makes the

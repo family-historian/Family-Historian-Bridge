@@ -102,7 +102,7 @@ local radAccessMode = iup.radio{iup.hbox{togReadOnly, togReadWrite, gap="8"}}
 -- whether the popup is currently open.
 local togDebugLogging = iup.toggle{title="Logging", value=lastSettings.debugLogging and "ON" or "OFF"}
 
--- Visibility levels for the Private/Living Record Flags (issue #141): Exclude < Name Only <
+-- Visibility levels for the Private/Living Record Flags: Exclude < Name Only <
 -- All, index-mapped 1/2/3 to match iup.list's 1-based VALUE. Two dropdowns, same shape,
 -- built via newVisibilityList below.
 local VISIBILITY_LABELS = {"Exclude", "Name Only", "All"}
@@ -195,7 +195,7 @@ dlg:map()
 dlg.minsize = dlg.rastersize
 lblStatus.title = "Not listening."
 
--- Settings popup (issues #141, #142): the Idle-timeout spin-box, the two Visibility
+-- Settings popup: the Idle-timeout spin-box, the two Visibility
 -- dropdowns and the relocated Debug-logging toggle. Built once, shown modally via :popup() each time btnSettings is clicked (rather
 -- than build/destroy per click) so currentPrivacySettings/currentDebugLogging can always
 -- read the live widget values even while the popup itself is closed. No Cancel button --
@@ -291,10 +291,10 @@ local timPoll = iup.timer{time=100, run="NO"}
 -- uncaught. An error raised from inside a callback alone never reaches that far -- IUP's
 -- own callback dispatch swallows it first. Ending the plugin this way (rather than just
 -- Stopping the Session) only happens when a write-mode script's own rollback attempt
--- itself fails (see docs/INTERNAL-commit-rollback-plan.md, issue #133).
+-- itself fails.
 local pendingRethrow = nil
 
--- Session-scoped commit counter (issue #133): counts one per committed read-write run_lua
+-- Session-scoped commit counter: counts one per committed read-write run_lua
 -- call, never decrements on a rollback, resets at Start (a fresh dialog/plugin load, same
 -- lifetime as every other module-level local here). sessionLogHelper.setCommitCount is
 -- given commitCount + 1 (the optimistic "count so far including this pending call") before

@@ -345,7 +345,7 @@ local function newFamily(husb, wife, children)
 end
 
 -- Adds a Record Flag child (e.g. "__PRIVATE"/"__LIVING") under indi's _FLGS item, creating
--- _FLGS on first use -- mirrors describe_project's own flag census shape (issue #141).
+-- _FLGS on first use -- mirrors describe_project's own flag census shape.
 local function addFlag(indi, flagTag)
   local flgs
   for _, child in ipairs(indi.children) do
@@ -456,7 +456,7 @@ end
 -- getFamilyGroup/getAncestors/getDescendants: an Excluded relative comes back as a
 -- redacted placeholder (relationship/family/generation/line still present -- only the
 -- individual itself is opaque), never a hard error -- these are traversal results, not a
--- direct lookup of the Excluded person (issue #141).
+-- direct lookup of the Excluded person.
 ------------------------------------------------------------------
 
 do
@@ -549,7 +549,7 @@ do
 end
 
 ------------------------------------------------------------------
--- getAncestors: dnaLine filters results via fhCallBuiltInFunction (issue #78),
+-- getAncestors: dnaLine filters results via fhCallBuiltInFunction,
 -- via the same DNA_LINE_BUILTIN map getDescendants uses -- now including "blood"
 ------------------------------------------------------------------
 
@@ -672,7 +672,7 @@ do
 end
 
 ------------------------------------------------------------------
--- recordVisibility / Visibility levels (issue #141): flag tags read literally
+-- recordVisibility / Visibility levels: flag tags read literally
 -- ("__PRIVATE"/"__LIVING", not via fhGetFlagTag resolution), most-restrictive-wins when
 -- both flags are set, and non-Individual records are always unrestricted (Record Flags
 -- are Individual-only). Exercised through indiDescriptor/getAllDetails/getFactsByTag,
@@ -831,7 +831,7 @@ end
 ------------------------------------------------------------------
 -- getAllDetails: longtext (a dataClass, not a valueType -- longtext's own valueType
 -- is plain "text", same as an ordinary single-line field) goes through
--- fhGetValueAsText, not fhGetDisplayText's short list-representation (issue #70)
+-- fhGetValueAsText, not fhGetDisplayText's short list-representation
 ------------------------------------------------------------------
 
 do
@@ -972,7 +972,7 @@ do
 end
 
 ------------------------------------------------------------------
--- findByNames: Visibility levels (issue #141) -- Exclude keeps the matches[] slot as a
+-- findByNames: Visibility levels -- Exclude keeps the matches[] slot as a
 -- redacted placeholder (never a silent drop -- totalMatches stays honest either way);
 -- Name Only drops lifeDates but keeps id/qualifiedId/name/sex.
 ------------------------------------------------------------------
@@ -1320,7 +1320,7 @@ do
 end
 
 ------------------------------------------------------------------
--- parseQualifiedId (issue #100): tag-scoped id-shape parsing, shared by
+-- parseQualifiedId: tag-scoped id-shape parsing, shared by
 -- sourceHelper.lua's resolveByNameOrId so a caller passing a qualified id string like
 -- "S1186" resolves by id instead of being treated as a Title/NAME lookup. Pure string
 -- parsing against the same QUALIFIED_ID_PREFIX_TAG resolveQualifiedId already uses --
@@ -1418,7 +1418,7 @@ end
 ------------------------------------------------------------------
 -- resolveDate (docs/adr/0030): the shared "accept several date shapes" resolver every
 -- write path that sets a Date-typed field now goes through -- moved here from
--- sourceHelper.lua's own local toDate (issue #113) once factHelper.lua needed the
+-- sourceHelper.lua's own local toDate once factHelper.lua needed the
 -- identical logic too.
 ------------------------------------------------------------------
 

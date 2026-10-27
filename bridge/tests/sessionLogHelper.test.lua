@@ -75,7 +75,7 @@ function PtrMethods:IsNotNull()
 end
 
 -- Minimal child-item walk, needed only for familyHelper.recordVisibility's _FLGS walk
--- (issue #141) -- a node's own .children array (nil/empty for every pre-#141 fixture) is
+-- -- a node's own .children array (nil/empty for every pre-#141 fixture) is
 -- reused as the pointed-to list, same as factHelper.test.lua/sourceHelper.test.lua's own.
 function PtrMethods:MoveToFirstChildItem(parentPtr)
   local node = currentNode(parentPtr)
@@ -98,7 +98,7 @@ function PtrMethods:MoveTo(otherPtr, dataRef)
   end
 end
 
--- Needed for familyHelper.resolvePointer's qualified-id-string resolution (issue #114) --
+-- Needed for familyHelper.resolvePointer's qualified-id-string resolution --
 -- same fake as factHelper.test.lua's own MoveToRecordById.
 function PtrMethods:MoveToRecordById(tag, id)
   local list = recordsByTag[tag] or {}
@@ -130,7 +130,7 @@ fhGetTag = function(ptr)
 end
 fhNewItemPtr = newPtr
 
--- Needed for validateLogActivity's auto-correct climb (issue #117): moves self to point at
+-- Needed for validateLogActivity's auto-correct climb: moves self to point at
 -- ptrRef's owning record, walking the .parent chain as far as needed (a Fact, or something
 -- nested even deeper under it) the same way real MoveToRecordItem climbs regardless of
 -- depth. If the climb doesn't land on a node this fake tree actually has on record (the
@@ -233,7 +233,7 @@ local sessionLogHelper = require('sessionLogHelper')
 local familyHelper = require('familyHelper')
 
 -- Adds a Record Flag child (e.g. "__PRIVATE"/"__LIVING") under indiPtr's _FLGS item,
--- creating _FLGS on first use -- mirrors familyHelper.test.lua's own addFlag (issue #141).
+-- creating _FLGS on first use -- mirrors familyHelper.test.lua's own addFlag.
 local function addFlag(indiPtr, flagTag)
   local node = currentNode(indiPtr)
   node.children = node.children or {}
@@ -345,7 +345,7 @@ local freshNoteNode = recordsByTag["_RNOT"][#recordsByTag["_RNOT"]]
 check(freshNoteNode ~= noteNode, 'the fresh Session\'s note is a different record from the previous Session\'s')
 
 ------------------------------------------------------------------
--- Optional media detail (issue #39): appends an indented (">") #ToDo sub-line as its own
+-- Optional media detail: appends an indented (">") #ToDo sub-line as its own
 -- FTF paragraph under the entry, opt-in per call. Exact no-location wording is pinned to
 -- the 2026-08-01 grilling session's own Nellie Record birth-certificate example from issue
 -- #23/#39; the leading-space indent from that session was replaced with a real FTF indent
@@ -436,7 +436,7 @@ check(#lastSaveAfterBadMedia.richText.segments == segmentCountBeforeBadMedia + 4
 -- rollback/Session-death chain that a caught-early error here now avoids). Each case here
 -- must fail before fhCreateItem/the buffer are ever touched, not just fail eventually.
 ------------------------------------------------------------------
--- Note: a Fact/sub-item ptrRecord is NOT one of these invalid cases (issue #117) -- see the
+-- Note: a Fact/sub-item ptrRecord is NOT one of these invalid cases -- see the
 -- auto-correct section below, after this block.
 ------------------------------------------------------------------
 
@@ -601,7 +601,7 @@ check(contains(errBareNumberQid, "qualified id"),
   'the error is familyHelper.resolvePointer\'s own bare-number rejection, not a generic crash')
 
 ------------------------------------------------------------------
--- validateLogActivity (issue #97): the pure validation half of logActivity, exported so
+-- validateLogActivity: the pure validation half of logActivity, exported so
 -- sandbox.lua can run it untracked before arming the write tracker. Same success/failure
 -- behavior as logActivity's own up-front checks, but never touches the tree -- not even on
 -- success (that's the rest of logActivity's job).
@@ -666,7 +666,7 @@ check(okSave == false, 'logActivity raises when the entry save (fhSetValueAsRich
 check(contains(errSave, "logActivity"), 'the save-failure error names the function')
 
 ------------------------------------------------------------------
--- M.getNotePtr (issue #115): read-only accessor for the module-level notePtr, since it was
+-- M.getNotePtr: read-only accessor for the module-level notePtr, since it was
 -- previously a private local -- bridgeSession.lua needs to read it (without creating one)
 -- to decide whether to call fhOutputNote on Bridge close.
 ------------------------------------------------------------------
@@ -686,7 +686,7 @@ check(currentNode(accessorSessionLogHelper.getNotePtr()).tag == '_RNOT',
   'getNotePtr returns the _RNOT record pointer itself, not its TEXT subfield')
 
 ------------------------------------------------------------------
--- M.setCommitCount (issue #133): bridge-side commit-counter plumbing.
+-- M.setCommitCount: bridge-side commit-counter plumbing.
 ------------------------------------------------------------------
 
 package.loaded['sessionLogHelper'] = nil
@@ -714,7 +714,7 @@ check(segmentsWithCount2[#segmentsWithCount2].text == ' (commit 2)',
   'a later setCommitCount call updates the count subsequent entries report')
 
 ------------------------------------------------------------------
--- M.recoverAfterRollback (issue #133): resyncs cached note state with what a rollback
+-- M.recoverAfterRollback: resyncs cached note state with what a rollback
 -- actually left on disk, rather than unconditionally discarding it.
 ------------------------------------------------------------------
 
@@ -777,7 +777,7 @@ rollbackFreshSessionLogHelper.logActivity(indiCommitE, "created")
 check(#(recordsByTag["_RNOT"] or {}) == rnotBeforeFreshRollback + 1,
   'the first logActivity call after a no-op recoverAfterRollback creates a brand-new _RNOT record, same as a fresh Session')
 
--- Case 3 (issue #133): the note record itself was created in this same not-yet-committed
+-- Case 3: the note record itself was created in this same not-yet-committed
 -- call, so the rollback undid the note's creation too -- NOT just Case 2's "no note ever
 -- existed". markNoteCommitted is never called here, mirroring a fresh Session's very first
 -- run_lua call failing after logActivity's first-ever entry. textPtr:IsNull() can't tell
@@ -815,7 +815,7 @@ check(not deathEntryResurfacedSameCall,
 ------------------------------------------------------------------
 -- validateLogActivity: an Excluded Individual's own record blocks the write, checked on
 -- the guaranteed record-level pointer even when ptrRecord started as a Fact/sub-item and
--- had to climb (issue #141).
+-- had to climb.
 ------------------------------------------------------------------
 
 do
@@ -842,7 +842,7 @@ do
 end
 
 ------------------------------------------------------------------
--- Assistant naming (issue #148)
+-- Assistant naming
 ------------------------------------------------------------------
 
 do
