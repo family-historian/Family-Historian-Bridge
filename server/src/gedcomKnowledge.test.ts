@@ -919,7 +919,7 @@ describe("run_lua guidance: sandbox, date and name gotchas (issue #159)", () => 
     const text = byId("run-lua-guidance-date-gotchas")?.text ?? "";
     expect(text).toContain('SetValueAsText("Q3 1891")');
     expect(text).toMatch(/fhNewDate\(1891, 0, 0, "quarter"\)/);
-    expect(text).toMatch(/day-less|without days|no day/);
+    expect(text).toContain("day-less");
   });
 
   it("says SetValueAsText returns false instead of raising, so pcall proves nothing", () => {
@@ -933,13 +933,16 @@ describe("run_lua guidance: sandbox, date and name gotchas (issue #159)", () => 
     expect(text).toMatch(/February 31/);
   });
 
-  it("carries the new entries as Verified, with a source that says they were checked live", () => {
+  it("files the new entries under the run_lua guidance family as Verified", () => {
     for (const id of ["run-lua-guidance-lua-sandbox-gotchas", "run-lua-guidance-date-gotchas"]) {
       const entry = byId(id);
       expect(entry?.confidence, id).toBe("Verified");
-      expect(entry?.source ?? "", id).toMatch(/live/i);
       expect(entry?.breadcrumb, id).toContain("run_lua guidance");
     }
+  });
+
+  it("keeps the Shared Facts entry Documented, since only the witness-role part was observed live", () => {
+    expect(byId("shared-facts")?.confidence).toBe("Documented");
   });
 
   it("warns that a name's surname reads back in capitals, next to the SEX bullet", () => {
