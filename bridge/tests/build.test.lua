@@ -26,6 +26,23 @@ local function readFile(path)
   return content
 end
 
+-- Every sibling module any bridge/*.lua file requires must be in MODULE_NAMES, or the built
+-- plugin fails at runtime with "module not found" while every standalone test still passes.
+local bridgeDir = arg[0]:match("(.*[/\\])") .. '../'
+local listing = assert(io.popen('ls "' .. bridgeDir .. '"')):read('*a')
+local siblings = {}
+for file in listing:gmatch('([%w_]+)%.lua') do siblings[file] = true end
+local bundledNames = {}
+for _, name in ipairs(bundler.MODULE_NAMES) do bundledNames[name] = true end
+for file in pairs(siblings) do
+  for line in io.lines(bridgeDir .. file .. '.lua') do
+    local required = line:match("^%s*local%s+[%w_]+%s*=%s*require%(?%s*['\"]([%w_]+)['\"]")
+    if required and siblings[required] then
+      assertTrue(bundledNames[required], file .. ' requires ' .. required .. ', which must be in MODULE_NAMES')
+    end
+  end
+end
+
 -- Real entry file, so the splice-point and install-comment anchors are exercised against
 -- the actual text they have to match in production — but with fake, easy-to-assert module
 -- bodies standing in for the real (large) module files.

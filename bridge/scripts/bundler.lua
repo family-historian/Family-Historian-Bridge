@@ -21,7 +21,7 @@ local M = {}
 -- requires sourceHelper.lua and sessionLogHelper.lua from inside a function body, not at
 -- module load time). Order here is arbitrary — see the note above.
 M.MODULE_NAMES = {
-  "bridgeSession", "debugLog", "factHelper", "familyHelper", "jsonEncode", "requestFraming", "richTextHelper",
+  "bridgeSession", "debugLog", "factHelper", "familyHelper", "jsonEncode", "personEventsHelper", "requestFraming", "richTextHelper",
   "runScript", "sandbox", "sessionLogHelper", "sessionPolicy", "sessionSettings",
   "sourceHelper", "timeoutDisplay", "userModules", "utf8Fold", "versionCompare", "watchdog",
 }
