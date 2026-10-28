@@ -11,8 +11,8 @@ Key modules: `requestFraming.lua` (parses `STOP`/`LUA <n>`/`LUA_RO <n>`/`VERSION
 budget abort), `timeoutDisplay.lua`, `versionCompare.lua` (match/warn/block, strict
 major-only, inert pre-1.0), `sourceHelper.lua` (`fhBridge.createSourceFromTemplate`,
 `citeSource`, `findSources`, `getTemplateFieldCensus`), `sessionLogHelper.lua`
-(`fhBridge.logActivity`), `familyHelper.lua` (6 read-only query helpers: getFamilyGroup,
-getAncestors, getDescendants, getAllDetails, findByNames, getFactsByTag — all accept
+(`fhBridge.logActivity`), `familyHelper.lua` (read-only query helpers: getFamilyGroup,
+getAncestors, getDescendants, getAllDetails, findByNames, getFactsByTag, findFact, getPersonEvents — all accept
 either a live pointer or a qualified-id string like `"I219"`), `userModules.lua` (run_lua's
 `require` for user project modules, and `fhBridge.listModules`; ADR 0039).
 

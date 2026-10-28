@@ -121,6 +121,12 @@ implements.
   with a `reason`, and `setTftfText` re-checks and errors outright rather than risk that
   loss. Editing a citation-bearing field's interior remains an open problem, deliberately out
   of scope here; see docs/adr/0025.
+- `personEventsHelper.lua`: `fhBridge.getPersonEvents(ptrIndividual, opts)`, read-only and wired
+  into both access modes. Wraps `fhIndGetFactList` and returns one chronological list of the
+  person's own, family, witnessed (and, with `opts.timeline`, close relatives') facts, each as
+  a plain descriptor with its owner, principals, notes, citations and media. Visibility is
+  applied per entry; the full contract is in the module header and the corpus entry
+  `fhbridge-getpersonevents`.
 - `familyHelper.lua`: six read-only query helpers, unlike the three above (each of
   `sourceHelper.lua`/`sessionLogHelper.lua`/`richTextHelper.lua` has at least one
   read-write-only member). Every fh* function this module calls is a read primitive already

@@ -190,6 +190,12 @@ local function addFlag(indi, flagTag)
   addChild(flgs, flagTag)
 end
 
+local function removeFlag(indi)
+  for i, child in ipairs(indi.children) do
+    if child.tag == "_FLGS" then table.remove(indi.children, i) return end
+  end
+end
+
 local function listOf(...)
   local out = {}
   for _, node in ipairs({ ... }) do table.insert(out, ptrFor(node)) end
@@ -295,6 +301,13 @@ factListResult = listOf(parentsMarriage)
 events = personEventsHelper.getPersonEvents(ptrFor(anne), { timeline = true })
 check(events[1].involvement == "timeline", 'a fact on a Family the person is only a child of is tagged timeline')
 
+factListResult = listOf(parentsMarriage)
+check(#personEventsHelper.getPersonEvents(ptrFor(anne)) == 0, 'a fact that is not own, family or witnessed is skipped unless opts.timeline is on')
+
+local freeText = addChild(baptism, "_SHAN", { valueType = "text", value = "Mr Nobody" })
+factListResult = listOf(freeText)
+check(#personEventsHelper.getPersonEvents(ptrFor(anne), { timeline = true }) == 0, 'a free-text (_SHAN) witness is never returned as the person\'s involvement')
+
 personEventsHelper.getPersonEvents(ptrFor(anne))
 check(factListArgs.ptr.node == anne, 'fhIndGetFactList is called on the person')
 check(factListArgs[1] == true and factListArgs[2] == false and factListArgs[3] == false and factListArgs[4] == false
@@ -336,7 +349,7 @@ check(not okEx and contains(errEx, "Excluded"), 'an Excluded subject raises, nam
 
 setVisibility("all", "nameOnly")
 check(#personEventsHelper.getPersonEvents(ptrFor(anne)) == 0, 'a Name Only subject has no events, as getFactsByTag')
-anne.children[#anne.children] = nil
+removeFlag(anne)
 setVisibility("all", "all")
 
 -- An Excluded owner hides the witnessed fact entirely.
@@ -356,7 +369,7 @@ check(events[2].tag == nil and events[2].text == nil and events[2].date == nil a
 check(events[2].principals[1].qualifiedId == "I" .. carl.id and events[2].principals[1].text == "Carl CLARK",
   'the Name Only owner is shown by name only')
 setVisibility("all", "all")
-carl.children[#carl.children] = nil
+removeFlag(carl)
 
 -- An Excluded spouse hides the family fact they are a principal of.
 addFlag(bob, "__PRIVATE")
@@ -364,6 +377,28 @@ setVisibility("exclude", "all")
 factListResult = listOf(birth, marr)
 events = personEventsHelper.getPersonEvents(ptrFor(anne))
 check(#events == 1 and events[1].tag == "BIRT", 'a family fact with an Excluded principal is hidden entirely')
+setVisibility("all", "all")
+
+-- Private Name Only and both flags: the more restrictive level wins.
+addFlag(carl, "__PRIVATE")
+factListResult = listOf(birth, godparent)
+setVisibility("nameOnly", "all")
+events = personEventsHelper.getPersonEvents(ptrFor(anne))
+check(#events == 2 and events[2].tag == nil, 'a Private Name Only owner leaves a witnessed entry with no fact detail')
+addFlag(carl, "__LIVING")
+setVisibility("nameOnly", "exclude")
+check(#personEventsHelper.getPersonEvents(ptrFor(anne)) == 1, 'with both flags set the more restrictive level (Excluded) wins')
+removeFlag(carl)
+setVisibility("all", "all")
+
+-- A Name Only spouse does not redact the subject's own marriage, only names the spouse.
+addFlag(bob, "__LIVING")
+setVisibility("all", "nameOnly")
+factListResult = listOf(marr)
+events = personEventsHelper.getPersonEvents(ptrFor(anne))
+check(#events == 1 and events[1].tag == "MARR" and events[1].date == "3 June 1925", 'the subject\'s own family fact keeps its detail when the spouse is Name Only')
+check(events[1].principals[1].text == "Bob ADAMS", 'the Name Only spouse is still listed by name')
+removeFlag(bob)
 setVisibility("all", "all")
 
 t.report()

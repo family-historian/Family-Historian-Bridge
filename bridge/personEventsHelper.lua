@@ -17,14 +17,16 @@ local OPTION_FLAGS = {
 }
 
 local OPTION_NAMES = {}
-for _, flag in ipairs(OPTION_FLAGS) do table.insert(OPTION_NAMES, flag.key) end
+local KNOWN_OPTIONS = {}
+for _, flag in ipairs(OPTION_FLAGS) do
+  table.insert(OPTION_NAMES, flag.key)
+  KNOWN_OPTIONS[flag.key] = true
+end
 
 local function factListFlags(opts)
   opts = opts or {}
-  local known = {}
-  for _, flag in ipairs(OPTION_FLAGS) do known[flag.key] = true end
   for key in pairs(opts) do
-    if not known[key] then
+    if not KNOWN_OPTIONS[key] then
       error("getPersonEvents: unknown option '" .. tostring(key) .. "' -- valid options are " ..
         table.concat(OPTION_NAMES, ", "))
     end
@@ -55,6 +57,16 @@ local function childrenWithTag(ptr, tag)
   return found
 end
 
+-- Calls visit(linkItem, targetPtr) for each child of ptr tagged tag whose link resolves.
+local function eachLinkedTarget(ptr, tag, visit)
+  for _, link in ipairs(childrenWithTag(ptr, tag)) do
+    local target = fhGetValueAsLink(link)
+    if target and target:IsNotNull() then
+      visit(link, target)
+    end
+  end
+end
+
 local function recordOf(ptr)
   local record = fhNewItemPtr()
   record:MoveToRecordItem(ptr)
@@ -72,12 +84,7 @@ local function principalsOf(owner)
   end
   local principals = {}
   for _, tag in ipairs({ "HUSB", "WIFE" }) do
-    for _, link in ipairs(childrenWithTag(owner, tag)) do
-      local target = fhGetValueAsLink(link)
-      if target and target:IsNotNull() then
-        table.insert(principals, target)
-      end
-    end
+    eachLinkedTarget(owner, tag, function(_, target) table.insert(principals, target) end)
   end
   return principals
 end
@@ -96,50 +103,58 @@ local function noteTexts(ptr)
   for _, note in ipairs(childrenWithTag(ptr, "NOTE2")) do
     table.insert(notes, { text = fhGetValueAsRichText(note):GetPlainText() })
   end
-  for _, link in ipairs(childrenWithTag(ptr, "NOTE")) do
-    local record = fhGetValueAsLink(link)
-    if record and record:IsNotNull() then
-      local text = fhNewItemPtr()
-      text:MoveTo(record, "~.TEXT")
-      table.insert(notes, {
-        qualifiedId = fhGetQualifiedRecordId(record),
-        text = text:IsNotNull() and fhGetValueAsRichText(text):GetPlainText() or "",
-      })
-    end
-  end
+  eachLinkedTarget(ptr, "NOTE", function(_, record)
+    local text = fhNewItemPtr()
+    text:MoveTo(record, "~.TEXT")
+    table.insert(notes, {
+      qualifiedId = fhGetQualifiedRecordId(record),
+      text = text:IsNotNull() and fhGetValueAsRichText(text):GetPlainText() or "",
+    })
+  end)
   return notes
 end
 
 local function citationsOf(fact)
   local citations = {}
-  for _, link in ipairs(childrenWithTag(fact, "SOUR")) do
-    local source = fhGetValueAsLink(link)
-    if source and source:IsNotNull() then
-      table.insert(citations, {
-        qualifiedId = fhGetQualifiedRecordId(source),
-        title = fhGetDisplayText(source),
-        page = fhGetItemText(link, "~.PAGE"),
-      })
-    end
-  end
+  eachLinkedTarget(fact, "SOUR", function(link, source)
+    table.insert(citations, {
+      qualifiedId = fhGetQualifiedRecordId(source),
+      title = fhGetDisplayText(source),
+      page = fhGetItemText(link, "~.PAGE"),
+    })
+  end)
   return citations
 end
 
 local function mediaOf(fact)
   local media = {}
-  for _, link in ipairs(childrenWithTag(fact, "OBJE")) do
-    local item = fhGetValueAsLink(link)
-    if item and item:IsNotNull() then
-      table.insert(media, { qualifiedId = fhGetQualifiedRecordId(item), name = fhGetDisplayText(item) })
-    end
-  end
+  eachLinkedTarget(fact, "OBJE", function(_, item)
+    table.insert(media, { qualifiedId = fhGetQualifiedRecordId(item), name = fhGetDisplayText(item) })
+  end)
   return media
 end
 
+-- "own", "family" or "witness" for a fact-list item, "timeline" for a close relative's fact
+-- when includeTimeline, else nil (the item is not part of this person's involvement).
+local function classifyInvolvement(witnessLink, owner, subjectId, includeTimeline)
+  if witnessLink then
+    return "witness"
+  elseif fhGetQualifiedRecordId(owner) == subjectId then
+    return "own"
+  elseif fhGetTag(owner) == "FAM" and isSpouseOf(owner, subjectId) then
+    return "family"
+  end
+  return includeTimeline and "timeline" or nil
+end
+
 -- Describes one fact-list item for subjectId, or returns nil when it must stay hidden:
--- an Excluded principal hides the whole entry; a Name Only principal leaves involvement,
--- role and names with no fact detail.
-local function describeEntry(item, subjectId)
+-- an Excluded principal hides the whole entry; a Name Only principal on a witnessed or
+-- timeline fact leaves involvement, role and names with no fact detail. The subject's own
+-- and family facts keep their detail even when a spouse is Name Only.
+local function describeEntry(item, subjectId, includeTimeline)
+  if fhGetTag(item) == "_SHAN" then
+    return nil
+  end
   local witnessLink = fhGetTag(item) == "_SHAR" and item or nil
   local fact = item
   if witnessLink then
@@ -148,26 +163,20 @@ local function describeEntry(item, subjectId)
   end
   local owner = recordOf(fact)
 
+  local involvement = classifyInvolvement(witnessLink, owner, subjectId, includeTimeline)
+  if not involvement then
+    return nil
+  end
+
   local principals = principalsOf(owner)
   local detailVisible = true
   for _, principal in ipairs(principals) do
     local level = familyHelper.recordVisibility(principal)
     if level == "exclude" then
       return nil
-    elseif level == "nameOnly" then
+    elseif level == "nameOnly" and (involvement == "witness" or involvement == "timeline") then
       detailVisible = false
     end
-  end
-
-  local involvement
-  if witnessLink then
-    involvement = "witness"
-  elseif fhGetQualifiedRecordId(owner) == subjectId then
-    involvement = "own"
-  elseif fhGetTag(owner) == "FAM" and isSpouseOf(owner, subjectId) then
-    involvement = "family"
-  else
-    involvement = "timeline"
   end
 
   local entry = { involvement = involvement, owner = fhGetQualifiedRecordId(owner), principals = {} }
@@ -204,15 +213,17 @@ end
 -- An entry is { involvement, owner (qualified id of the owning record), principals (each
 -- { id, qualifiedId, text }), role (witness only), tag, text, date, place, notes,
 -- citations, media, participantNotes (witness only) }. A free-text witness and a name in a
--- note are never matched to the person.
+-- note are never matched to the person. A fact has no id of its own, so an entry names the
+-- record that owns it (owner) rather than the fact.
 --
 -- opts (all optional booleans) pass straight to fhIndGetFactList: witness (true),
 -- timeline (false), timelinePrefsOnly (false), narrative (false), resolveExclusions
 -- (false), excludePrivate (false), excludeRejected (true). Unknown options raise.
 --
 -- Visibility: an Excluded subject raises; a Name Only subject has no events; a fact with
--- an Excluded principal is left out; one whose principal is Name Only keeps involvement,
--- role, owner and names and drops everything else.
+-- an Excluded principal is left out; a witnessed or timeline fact whose principal is Name
+-- Only keeps involvement, role, owner and names and drops everything else. Order is
+-- fhIndGetFactList's own (chronological).
 function M.getPersonEvents(ptrIndividual, opts)
   ptrIndividual = familyHelper.resolvePointer(ptrIndividual)
   local problem = familyHelper.pointerProblem(ptrIndividual)
@@ -235,7 +246,7 @@ function M.getPersonEvents(ptrIndividual, opts)
   local subjectId = fhGetQualifiedRecordId(ptrIndividual)
   local entries = {}
   for _, item in ipairs(fhIndGetFactList(ptrIndividual, table.unpack(flags))) do
-    local entry = describeEntry(item, subjectId)
+    local entry = describeEntry(item, subjectId, flags[2])
     if entry then
       table.insert(entries, entry)
     end

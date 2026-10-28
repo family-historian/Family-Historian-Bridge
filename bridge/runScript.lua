@@ -235,7 +235,7 @@ local function bulkEnumerationViolation(scriptText, privacySettings)
   return 'script calls ' .. triggerName .. ', which enumerates the raw GEDCOM tree and bypasses ' ..
     'this Session\'s Visibility settings (Private: ' .. tostring(privacySettings.privateVisibility) ..
     ', Living: ' .. tostring(privacySettings.livingVisibility) .. ') -- use fhBridge.findByNames/' ..
-    'getFamilyGroup/getAncestors/getDescendants/getAllDetails/getFactsByTag instead, which apply ' ..
+    'getFamilyGroup/getAncestors/getDescendants/getAllDetails/getFactsByTag/getPersonEvents instead, which apply ' ..
     'these settings automatically'
 end
 
