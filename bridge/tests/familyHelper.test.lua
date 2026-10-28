@@ -215,6 +215,10 @@ fhGetDisplayText = function(ptr, dataReference, displayOption)
   local node = ptr.node
   if not node then return "" end
   if node.display then return node.display end
+  -- Real FH prefixes a Date item's display text ("Date: 12 Jun 2010") unless asked for "min".
+  if node.valueType == "date" and type(node.value) == 'string' and displayOption ~= "min" then
+    return "Date: " .. node.value
+  end
   if type(node.value) == 'string' then return node.value end
   return ""
 end
@@ -285,6 +289,18 @@ debug.setmetatable(coroutine.create(function() end), {
         return true
       end
       return false
+    end,
+    GetValueAsText = function(self)
+      local df = dateObjFields[self]
+      return string.format("%04d-%02d-%02d", df.year or 0, df.month or 0, df.day or 0)
+    end,
+    Compare = function(self, other)
+      local a, b = dateObjFields[self], dateObjFields[other]
+      for _, key in ipairs({ "year", "month", "day" }) do
+        local x, y = a[key] or 0, b[key] or 0
+        if x ~= y then return x < y and -1 or 1 end
+      end
+      return 0
     end,
     GetDatePt1 = function(self)
       local year = dateObjFields[self].year
@@ -1481,7 +1497,7 @@ do
     table.insert(parent.children, fact)
     if opts.dateText then
       table.insert(fact.children, { tag = "DATE", children = {}, parent = fact, valueType = "date",
-        value = opts.dateText, dateValue = fhNewDate(opts.year) })
+        value = opts.dateText, dateValue = fhNewDate(opts.year, opts.month, opts.day) })
     end
     if opts.place then
       table.insert(fact.children, { tag = "PLAC", children = {}, parent = fact, valueType = "text", value = opts.place })
@@ -1491,9 +1507,9 @@ do
 
   familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
   local person = newIndi("Findfact Plugin", "Male")
-  local cens1901 = addFact(person, "CENS", { dateText = "31 Mar 1901", year = 1901, place = "Sedgley, Staffordshire" })
-  local cens1911 = addFact(person, "CENS", { dateText = "2 Apr 1911", year = 1911, place = "Dudley, Worcestershire" })
-  local cens1921 = addFact(person, "CENS", { dateText = "19 Jun 1921", year = 1921, place = "Dudley, Worcestershire" })
+  local cens1901 = addFact(person, "CENS", { dateText = "31 Mar 1901", year = 1901, month = 3, day = 31, place = "Sedgley, Staffordshire" })
+  local cens1911 = addFact(person, "CENS", { dateText = "2 Apr 1911", year = 1911, month = 4, day = 2, place = "Dudley, Worcestershire" })
+  local cens1921 = addFact(person, "CENS", { dateText = "19 Jun 1921", year = 1921, month = 6, day = 19, place = "Dudley, Worcestershire" })
   local occuFarmer = addFact(person, "OCCU", { value = "Farmer" })
   local occuMiner = addFact(person, "OCCU", { value = "Coal Miner" })
 
@@ -1507,8 +1523,14 @@ do
 
   check(familyHelper.findFact(ptrFor(person), "OCCU", { value = "coal miner" }).node == occuMiner,
     'value matches case-insensitively and exactly')
-  check(familyHelper.findFact(ptrFor(person), "CENS", { date = "19 Jun 1921" }).node == cens1921,
-    'date matches the fact\'s displayed date text')
+  check(familyHelper.findFact(ptrFor(person), "CENS", { date = fhNewDate(1921, 6, 19) }).node == cens1921,
+    'date given as a Date object matches the fact\'s date')
+  check(familyHelper.findFact(ptrFor(person), "CENS", { date = { year = 1911, month = 4, day = 2 } }).node == cens1911,
+    'date given as a {year,month,day} table matches the fact\'s date')
+  local okOtherDay, errOtherDay = pcall(familyHelper.findFact, ptrFor(person), "CENS", { date = fhNewDate(1911, 4, 3) })
+  check(not okOtherDay and contains(errOtherDay, "date=1911-04-03"), 'a date differing only by day does not match, and the error shows the date asked for')
+  local okBadDate, errBadDate = pcall(familyHelper.findFact, ptrFor(person), "CENS", { date = "not a date" })
+  check(not okBadDate and contains(errBadDate, "not a date"), 'an unparseable date string raises, naming the string')
   check(familyHelper.findFact(ptrFor(person), "CENS", { place = "sedgley, staffordshire" }).node == cens1901,
     'place matches case-insensitively and exactly')
   check(familyHelper.findFact(ptrFor(person), "CENS", { year = 1921, place = "Dudley, Worcestershire" }).node == cens1921,

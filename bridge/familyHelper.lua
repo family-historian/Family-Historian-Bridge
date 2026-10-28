@@ -691,32 +691,39 @@ local function sameText(actual, wanted)
   return actual ~= nil and utf8Fold.lower(actual) == utf8Fold.lower(wanted)
 end
 
--- read(child) for fact's direct child tagged childTag, plus that child's pointer; nil, nil
--- when it has none.
-local function childText(fact, childTag, read)
+-- fact's direct child tagged childTag, or nil when it has none.
+local function childPtr(fact, childTag)
   local child = fhNewItemPtr()
   child:MoveTo(fact, "~." .. childTag)
   if child:IsNull() then
-    return nil, nil
+    return nil
   end
-  return read(child), child
+  return child
 end
 
-local function factMatches(fact, match)
+-- wantedDate: match.date already resolved to a Date object (once per findFact call).
+local function factMatches(fact, match, wantedDate)
   if match.value ~= nil and not sameText(fhGetValueAsText(fact), match.value) then
     return false
   end
-  if match.place ~= nil and not sameText(childText(fact, "PLAC", fhGetValueAsText), match.place) then
-    return false
+  if match.place ~= nil then
+    local place = childPtr(fact, "PLAC")
+    if not place or not sameText(fhGetValueAsText(place), match.place) then
+      return false
+    end
   end
-  if match.date ~= nil or match.year ~= nil then
-    local dateText, datePtr = childText(fact, "DATE", fhGetDisplayText)
-    if match.date ~= nil and dateText ~= match.date then
+  if wantedDate ~= nil or match.year ~= nil then
+    local datePtr = childPtr(fact, "DATE")
+    if not datePtr then
+      return false
+    end
+    local factDate = fhGetValueAsDate(datePtr)
+    if wantedDate ~= nil and factDate:Compare(wantedDate) ~= 0 then
       return false
     end
     if match.year ~= nil then
-      local startPoint = datePtr and fhGetValueAsDate(datePtr):GetDatePt1()
-      if not startPoint or startPoint:IsNull() or startPoint:GetYear() ~= match.year then
+      local startPoint = factDate:GetDatePt1()
+      if startPoint:IsNull() or startPoint:GetYear() ~= match.year then
         return false
       end
     end
@@ -724,11 +731,12 @@ local function factMatches(fact, match)
   return true
 end
 
-local function describeMatch(match)
+local function describeMatch(match, wantedDate)
   local parts = {}
   for _, key in ipairs(FIND_FACT_KEYS) do
     if match[key] ~= nil then
-      table.insert(parts, key .. "=" .. tostring(match[key]))
+      local shown = key == "date" and wantedDate:GetValueAsText() or tostring(match[key])
+      table.insert(parts, key .. "=" .. shown)
     end
   end
   return "{" .. table.concat(parts, ", ") .. "}"
@@ -738,8 +746,9 @@ end
 -- ptrRecord: live pointer or qualified id string. tag: a fact's resolved tag, exact and
 -- case-sensitive (e.g. "CENS", "OCCU"). match: optional table, every key ANDed --
 -- year (number: the year the fact's date starts in; a quarter or range uses its first
--- point), date (the fact's displayed date text, exact), value and place (case-insensitive,
--- exact; place is the whole place text, not a substring).
+-- point), date (a Date object, {year,month,day} table or date string, equal to the fact's
+-- date), value and place (case-insensitive, exact; place is the whole place text, not a
+-- substring).
 --
 -- Looks at ptrRecord's direct children fresh on each call and returns a separate pointer
 -- on the one fact that matches, never the caller's own pointer. Raises, naming the count,
@@ -766,6 +775,8 @@ function M.findFact(ptrRecord, tag, match)
     end
   end
 
+  local wantedDate = resolveDate(match.date, "findFact")
+
   local level = recordVisibility(ptrRecord)
   if level == "exclude" then
     error("findFact: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
@@ -776,14 +787,14 @@ function M.findFact(ptrRecord, tag, match)
     local child = fhNewItemPtr()
     child:MoveToFirstChildItem(ptrRecord)
     while child:IsNotNull() do
-      if fhGetTag(child) == tag and factMatches(child, match) then
+      if fhGetTag(child) == tag and factMatches(child, match, wantedDate) then
         table.insert(matches, child:Clone())
       end
       child:MoveNext()
     end
   end
   if #matches ~= 1 then
-    error("findFact: " .. #matches .. " " .. tag .. " facts match " .. describeMatch(match) ..
+    error("findFact: " .. #matches .. " " .. tag .. " facts match " .. describeMatch(match, wantedDate) ..
       " on this record, expected exactly 1")
   end
   return matches[1]
