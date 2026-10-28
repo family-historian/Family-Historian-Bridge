@@ -14,4 +14,4 @@ export const SERVER_VERSION = (
 // The running server's install root (the folder holding its package.json). Reported so a
 // user with more than one install (Claude Desktop extension, Claude Code registration) can
 // tell which one answered.
-export const SERVER_PATH = dirname(PACKAGE_JSON_PATH);
+export const SERVER_ROOT = dirname(PACKAGE_JSON_PATH);

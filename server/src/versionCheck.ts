@@ -4,7 +4,7 @@ import {
   interpretBridgeResponse,
   textResult,
 } from "./bridgeResponse.js";
-import { SERVER_PATH } from "./serverVersion.js";
+import { SERVER_ROOT } from "./serverVersion.js";
 
 // Bridge/server version-mismatch detection: resolved design at
 // https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/45#issuecomment-354.
@@ -110,7 +110,6 @@ export function interpretVersionResponse(raw: string, serverVersion: string): Ve
 export interface BridgeState {
   bridgeVersion: string | null;
   serverVersion: string;
-  // The install root of the running server, so a mismatch can be traced to the right install.
   serverPath: string;
   // "block" is deliberately excluded: checkBridgeVersion's block outcome short-circuits
   // with an error CallToolResult before any BridgeState is ever built (see below) -- this
@@ -181,7 +180,7 @@ export type CheckBridgeVersionResult =
 export async function checkBridgeVersion(
   queryBridgeVersion: () => Promise<string>,
   serverVersion: string,
-  serverPath: string = SERVER_PATH,
+  serverPath: string = SERVER_ROOT,
 ): Promise<CheckBridgeVersionResult> {
   let raw: string;
   try {
@@ -194,7 +193,7 @@ export async function checkBridgeVersion(
   if (outcome.status === "block") {
     return {
       block: textResult(
-        `Bridge and server have incompatible major versions (Bridge v${outcome.bridgeVersion} vs server v${serverVersion}) — refusing to run the script. Tell the user to update the Bridge plugin and/or the server so their major versions match.`,
+        `Bridge and server have incompatible major versions (Bridge v${outcome.bridgeVersion} vs server v${serverVersion}, running from ${serverPath}) — refusing to run the script. Tell the user to update the Bridge plugin and/or the server so their major versions match.`,
         true,
       ),
       reason: "version-mismatch",

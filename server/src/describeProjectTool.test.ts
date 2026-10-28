@@ -8,7 +8,7 @@ import {
   withUserModulesShape,
   type DescribeProjectDeps,
 } from "./describeProjectTool.js";
-import { SERVER_PATH, SERVER_VERSION } from "./serverVersion.js";
+import { SERVER_ROOT, SERVER_VERSION } from "./serverVersion.js";
 
 // A queryBridgeVersion stub that reports a Bridge on the exact same version as the
 // server — i.e. "match", so version-check tests below don't have to think about it.
@@ -50,7 +50,7 @@ describe("handleDescribeProject", () => {
       versionStatus: "match",
       accessMode: null,
       privacySettings: null,
-      serverPath: SERVER_PATH,
+      serverPath: SERVER_ROOT,
     });
   });
 
@@ -325,7 +325,7 @@ describe("handleDescribeProject version check (issue #45)", () => {
       versionStatus: "warn",
       accessMode: null,
       privacySettings: null,
-      serverPath: SERVER_PATH,
+      serverPath: SERVER_ROOT,
     });
   });
 
@@ -343,7 +343,7 @@ describe("handleDescribeProject version check (issue #45)", () => {
       versionStatus: "unsupported",
       accessMode: null,
       privacySettings: null,
-      serverPath: SERVER_PATH,
+      serverPath: SERVER_ROOT,
     });
   });
 

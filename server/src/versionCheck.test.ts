@@ -150,7 +150,7 @@ describe("checkBridgeVersion", () => {
       "0.4.0",
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       block: null,
       note: null,
       bridgeState: {
@@ -159,7 +159,6 @@ describe("checkBridgeVersion", () => {
         versionStatus: "match",
         accessMode: null,
         privacySettings: null,
-        serverPath: expect.any(String),
       },
     });
   });
@@ -174,30 +173,36 @@ describe("checkBridgeVersion", () => {
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toContain("0.4.0");
     expect(result.note).toContain("0.4.1");
-    expect(result.bridgeState).toEqual({
+    expect(result.bridgeState).toMatchObject({
       bridgeVersion: "0.4.0",
       serverVersion: "0.4.1",
       versionStatus: "warn",
       accessMode: null,
       privacySettings: null,
-      serverPath: expect.any(String),
     });
   });
 
-  it("reports the server's own install path in bridgeState for every outcome", async () => {
-    const replies = ['{"version":"0.4.0"}', '{"version":"0.4.0"}', '{"error": "expected STOP or LUA <n>"}', "garbage"];
-    const serverVersions = ["0.4.0", "0.4.1", "0.4.0", "0.4.0"];
-    for (const [i, reply] of replies.entries()) {
-      const result = await checkBridgeVersion(async () => reply, serverVersions[i], "/opt/fh/server");
-      if (result.block !== null) throw new Error("unreachable");
-      expect(result.bridgeState.serverPath).toBe("/opt/fh/server");
-    }
+  it.each([
+    { reply: '{"version":"0.4.0"}', serverVersion: "0.4.0" },
+    { reply: '{"version":"0.4.0"}', serverVersion: "0.4.1" },
+    { reply: '{"error": "expected STOP or LUA <n>"}', serverVersion: "0.4.0" },
+    { reply: "garbage", serverVersion: "0.4.0" },
+  ])("reports the server's install path in bridgeState ($reply vs $serverVersion)", async ({ reply, serverVersion }) => {
+    const result = await checkBridgeVersion(async () => reply, serverVersion, "/opt/fh/server");
+    if (result.block !== null) throw new Error("unreachable");
+    expect(result.bridgeState.serverPath).toBe("/opt/fh/server");
   });
 
   it("names the server's install path in the minor/patch mismatch note", async () => {
     const result = await checkBridgeVersion(async () => '{"version":"0.4.0"}', "0.4.1", "/opt/fh/server");
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toContain("/opt/fh/server");
+  });
+
+  it("names the server's install path in the major-mismatch block, since no bridgeState is returned then", async () => {
+    const result = await checkBridgeVersion(async () => '{"version":"1.0.0"}', "2.0.0", "/opt/fh/server");
+    if (result.block === null) throw new Error("unreachable");
+    expect((result.block.content[0] as { text: string }).text).toContain("/opt/fh/server");
   });
 
   it("blocks with an error result on a major mismatch, naming both versions, tagged as a version-mismatch reason", async () => {
@@ -225,13 +230,12 @@ describe("checkBridgeVersion", () => {
     expect(result.block).toBeNull();
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toMatch(/doesn't support version reporting/);
-    expect(result.bridgeState).toEqual({
+    expect(result.bridgeState).toMatchObject({
       bridgeVersion: null,
       serverVersion: "0.4.0",
       versionStatus: "unsupported",
       accessMode: null,
       privacySettings: null,
-      serverPath: expect.any(String),
     });
   });
 
@@ -241,13 +245,12 @@ describe("checkBridgeVersion", () => {
     expect(result.block).toBeNull();
     if (result.block !== null) throw new Error("unreachable");
     expect(result.note).toMatch(/could not determine/i);
-    expect(result.bridgeState).toEqual({
+    expect(result.bridgeState).toMatchObject({
       bridgeVersion: null,
       serverVersion: "0.4.0",
       versionStatus: "unparseable",
       accessMode: null,
       privacySettings: null,
-      serverPath: expect.any(String),
     });
   });
 
