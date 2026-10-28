@@ -1524,13 +1524,16 @@ do
   check(not okMany and contains(errMany, "3 ") and contains(errMany, "CENS"),
     'several matches raise, naming the count (3) and the tag')
 
-  local okPartial, errPartial = pcall(familyHelper.findFact, ptrFor(person), "CENS", { place = "Dudley" })
+  local okPartial = pcall(familyHelper.findFact, ptrFor(person), "CENS", { place = "Dudley" })
   check(not okPartial, 'place is an exact match, not a substring match')
+
+  local okYearType, errYearType = pcall(familyHelper.findFact, ptrFor(person), "CENS", { year = "1911" })
+  check(not okYearType and contains(errYearType, "year"), 'a year that is not a number raises, naming year')
 
   local okKey, errKey = pcall(familyHelper.findFact, ptrFor(person), "CENS", { yeer = 1911 })
   check(not okKey and contains(errKey, "yeer"), 'an unknown match key raises, naming it')
 
-  local okTag, errTag = pcall(familyHelper.findFact, ptrFor(person), "", { year = 1911 })
+  local okTag = pcall(familyHelper.findFact, ptrFor(person), "", { year = 1911 })
   check(not okTag, 'an empty tag raises')
 
   local byId = familyHelper.findFact("I" .. person.id, "CENS", { year = 1901 })

@@ -1435,6 +1435,11 @@ do
     'an unknown field code differing only by case names the correct code in the error')
   check(#(currentNode(person).children) == citationsBefore, 'a rejected field code writes nothing')
 
+  local childrenBeforeBad = #(currentNode(person).children)
+  local okBadValue, errBadValue = pcall(sourceHelper.citeSource, person, bookSourceId, { Date = function() end })
+  check(not okBadValue and contains(errBadValue, "Date"), 'a value that is not a string, Date object or date table raises, naming the field')
+  check(#(currentNode(person).children) == childrenBeforeBad, 'a rejected Text-field value is caught before any citation is created')
+
   local okNoMatch, errNoMatch = pcall(sourceHelper.citeSource, person, bookSourceId, { Nonsense = "x" })
   check(not okNoMatch and not contains(errNoMatch, "did you mean"),
     'an unknown code with no case-insensitive match gets no suggestion')

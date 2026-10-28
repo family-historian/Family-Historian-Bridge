@@ -187,23 +187,29 @@ local function shortcutFor(def)
   return fhGetMetafieldShortcut(def.fdefPtr)
 end
 
--- expectCitation=false (createSourceFromTemplate's record-level fields) rejects a
--- citation-specific (CITN) code; true (citeSource's template fields) rejects a
--- record-level code instead. Enum-option validation is identical either way.
 -- A Text-like field (everything but Date and Repository) takes its value as a string. A Date
 -- object or {year,month,day} table is converted to the date's own text, so the caller doesn't
 -- need to know whether a template types its "Date" field as Date or as Text (Record Book
--- templates use Text). Anything else passes through unchanged.
+-- templates use Text). A string, number or boolean passes through unchanged; any other value
+-- raises here rather than as an obscure error inside the setter.
 local function textFieldValue(value, callerName)
   if type(value) == "table" then
     value = familyHelper.resolveDate(value, callerName)
   end
-  if value ~= nil and type(value) ~= "string" and type(value) ~= "number" and type(value) ~= "boolean" then
-    return value:GetValueAsText()
+  local valueType = type(value)
+  if value == nil or valueType == "string" or valueType == "number" or valueType == "boolean" then
+    return value
   end
-  return value
+  local ok, getText = pcall(function() return value.GetValueAsText end)
+  if not ok or type(getText) ~= "function" then
+    error(callerName .. ": expected a string, a Date object or a {year,month,day} table, got a " .. valueType)
+  end
+  return value:GetValueAsText()
 end
 
+-- expectCitation=false (createSourceFromTemplate's record-level fields) rejects a
+-- citation-specific (CITN) code; true (citeSource's template fields) rejects a
+-- record-level code instead. Enum-option validation is identical either way.
 local function validateFields(fields, defs, expectCitation)
   for code, value in pairs(fields) do
     local def = requireFieldDef(defs, code)
@@ -225,6 +231,9 @@ local function validateFields(fields, defs, expectCitation)
       if not ok then
         error("invalid value '" .. tostring(value) .. "' for Enum field '" .. code .. "'")
       end
+    end
+    if def.type ~= "Date" and def.type ~= "Repository" then
+      textFieldValue(value, "field '" .. code .. "'")
     end
   end
 end

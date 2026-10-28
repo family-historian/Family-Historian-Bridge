@@ -684,12 +684,15 @@ function M.getAllDetails(ptr)
 end
 
 local FIND_FACT_KEYS = { "year", "date", "value", "place" }
+local FIND_FACT_KEY_SET = {}
+for _, key in ipairs(FIND_FACT_KEYS) do FIND_FACT_KEY_SET[key] = true end
 
 local function sameText(actual, wanted)
   return actual ~= nil and utf8Fold.lower(actual) == utf8Fold.lower(wanted)
 end
 
--- Text of fact's direct child tagged childTag, or nil when it has none.
+-- read(child) for fact's direct child tagged childTag, plus that child's pointer; nil, nil
+-- when it has none.
 local function childText(fact, childTag, read)
   local child = fhNewItemPtr()
   child:MoveTo(fact, "~." .. childTag)
@@ -754,11 +757,12 @@ function M.findFact(ptrRecord, tag, match)
   if type(match) ~= "table" then
     error("findFact: match must be a table such as { year = 1911 }")
   end
-  local known = {}
-  for _, key in ipairs(FIND_FACT_KEYS) do known[key] = true end
-  for key in pairs(match) do
-    if not known[key] then
+  for key, wanted in pairs(match) do
+    if not FIND_FACT_KEY_SET[key] then
       error("findFact: unknown match key '" .. tostring(key) .. "' -- use year, date, value or place")
+    end
+    if key == "year" and type(wanted) ~= "number" then
+      error("findFact: match.year must be a number, got " .. type(wanted))
     end
   end
 
