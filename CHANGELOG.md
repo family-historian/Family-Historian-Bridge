@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- `citeSource` and `createSourceFromTemplate` accept a Date object or `{year, month, day}` table for a template field typed Text (Record Book templates keep their Date as Text) and store its text; an unknown field code that differs only by case now names the right code in the error (#155).
 - A Read-only script is no longer refused because a comment or string literal merely mentions a write-capable function, and a comment mentioning `logActivity` no longer satisfies the read-write "must log" check (#154).
 - Under Name Only visibility, `getAllDetails` now returns the person's display name (`text`), matching what `linkDescriptor` gives for a link to them (#168).
 - `fhBridge.logActivity` no longer moves the caller's pointer: given a Fact or sub-item pointer, it climbs a copy to the owning record, so the same variable can still be used afterwards (#152).
@@ -11,6 +12,7 @@
 
 ### Added
 
+- `fhBridge.findFact(ptrRecord, tag, match)`: returns a pointer on exactly one Fact of a record, matched by `year`, `date`, `value` and/or `place`, or raises an error with the count when none or several match. Read-only, available in both modes (#156).
 - User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user
   installs by hand, from the project's `Plugin Data\AI Connector\modules` folder and then from the
   user's own folder in FH's per-user Plugin Data. Each module runs in the calling script's sandbox,

@@ -278,6 +278,9 @@ fhCreateItem = function(tagOrShortcut, parentPtr)
 end
 
 fhSetValueAsText = function(ptr, value)
+  if type(value) ~= "string" then
+    error("bad argument #2 to 'fhSetValueAsText' (string expected, got " .. type(value) .. ")")
+  end
   if forceNextWriteFailure then
     forceNextWriteFailure = false
     return false
@@ -398,6 +401,10 @@ debug.setmetatable(coroutine.create(function() end), {
         return true
       end
       return false
+    end,
+    GetValueAsText = function(self)
+      local df = dateObjFields[self]
+      return string.format("%04d-%02d-%02d", df.year or 0, df.month or 0, df.day or 0)
     end,
   },
 })
@@ -1383,6 +1390,54 @@ do
   check(not okCiteLink, 'citeSource raises when linking the citation to its source fails')
   check(contains(errCiteLink, "citeSource") and contains(errCiteLink, "link"),
     'the citation-link error names the function and what it was linking')
+end
+
+------------------------------------------------------------------
+-- Values are converted to each template field's own type: a Date object or {year,month,day}
+-- table given for a Text-typed field (Record Book templates keep their "Date" as Text) is
+-- written as its text, and an unknown field code that differs only by case is named in the
+-- error.
+------------------------------------------------------------------
+
+do
+  resetTree()
+
+  local recordBook = buildTemplate("Record Book Fixture")
+  addFieldDef(recordBook, "Date", "Text", nil, true)
+  addFieldDef(recordBook, "Specific_Item", "Text", nil, true)
+  local bookSource = sourceHelper.createSourceFromTemplate(fhGetRecordId(recordBook), {})
+  local bookSourceId = bookSource.id
+  local person = fhCreateItem("INDI")
+
+  local function citationFieldValue(citation, tag)
+    local node = currentNode(citation)
+    for _, child in ipairs(node.children) do
+      if child.tag == tag then return child.value end
+    end
+  end
+
+  local okDateObj, citationA = pcall(sourceHelper.citeSource, person, bookSourceId, { Date = fhNewDate(1891, 3, 12) })
+  check(okDateObj, 'a Date object given for a Text-typed field does not raise')
+  check(okDateObj and citationFieldValue(citationA, "~TX-Date") == "1891-03-12",
+    'a Date object for a Text-typed field is stored as the date\'s own text')
+
+  local okDateTable, citationB = pcall(sourceHelper.citeSource, person, bookSourceId, { Date = { year = 1895, month = 11, day = 15 } })
+  check(okDateTable and citationFieldValue(citationB, "~TX-Date") == "1895-11-15",
+    'a {year,month,day} table for a Text-typed field is stored as the date\'s text')
+
+  local okString, citationC = pcall(sourceHelper.citeSource, person, bookSourceId, { Date = "Q3 1891" })
+  check(okString and citationFieldValue(citationC, "~TX-Date") == "Q3 1891",
+    'a plain string for a Text-typed field is stored unchanged')
+
+  local citationsBefore = #(currentNode(person).children)
+  local okBadCase, errBadCase = pcall(sourceHelper.citeSource, person, bookSourceId, { SPECIFIC_ITEM = "x" })
+  check(not okBadCase and contains(errBadCase, "SPECIFIC_ITEM") and contains(errBadCase, "Specific_Item"),
+    'an unknown field code differing only by case names the correct code in the error')
+  check(#(currentNode(person).children) == citationsBefore, 'a rejected field code writes nothing')
+
+  local okNoMatch, errNoMatch = pcall(sourceHelper.citeSource, person, bookSourceId, { Nonsense = "x" })
+  check(not okNoMatch and not contains(errNoMatch, "did you mean"),
+    'an unknown code with no case-insensitive match gets no suggestion')
 end
 
 t.report()

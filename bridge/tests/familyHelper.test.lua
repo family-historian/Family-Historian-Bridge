@@ -144,6 +144,12 @@ function PtrMethods:MoveNext(strTag)
   self.node = nil
 end
 
+function PtrMethods:Clone()
+  local copy = newPtr()
+  copy.list, copy.index, copy.node = self.list, self.index, self.node
+  return copy
+end
+
 fhNewItemPtr = newPtr
 
 fhGetTag = function(ptr)
@@ -280,12 +286,25 @@ debug.setmetatable(coroutine.create(function() end), {
       end
       return false
     end,
+    GetDatePt1 = function(self)
+      local year = dateObjFields[self].year
+      return {
+        IsNull = function() return year == nil end,
+        GetYear = function() return year end,
+      }
+    end,
   },
 })
 fhNewDate = function(year, month, day, subtype)
   local co = coroutine.create(function() end)
   dateObjFields[co] = { year = year, month = month, day = day, subtype = subtype }
   return co
+end
+
+-- A Date field's node carries its text as .value (what fhGetDisplayText reads) and the Date
+-- object as .dateValue (what fhGetValueAsDate returns).
+fhGetValueAsDate = function(ptr)
+  return ptr.node.dateValue
 end
 
 local familyHelper = require('familyHelper')
@@ -1450,5 +1469,83 @@ do
     'the rejection names the calling function and the offending string')
 end
 
+
+------------------------------------------------------------------
+-- findFact: exactly one direct child fact of a record, or an error that says why not
+------------------------------------------------------------------
+
+do
+  local function addFact(parent, tag, opts)
+    opts = opts or {}
+    local fact = { tag = tag, children = {}, parent = parent, valueType = "text", value = opts.value }
+    table.insert(parent.children, fact)
+    if opts.dateText then
+      table.insert(fact.children, { tag = "DATE", children = {}, parent = fact, valueType = "date",
+        value = opts.dateText, dateValue = fhNewDate(opts.year) })
+    end
+    if opts.place then
+      table.insert(fact.children, { tag = "PLAC", children = {}, parent = fact, valueType = "text", value = opts.place })
+    end
+    return fact
+  end
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
+  local person = newIndi("Findfact Plugin", "Male")
+  local cens1901 = addFact(person, "CENS", { dateText = "31 Mar 1901", year = 1901, place = "Sedgley, Staffordshire" })
+  local cens1911 = addFact(person, "CENS", { dateText = "2 Apr 1911", year = 1911, place = "Dudley, Worcestershire" })
+  local cens1921 = addFact(person, "CENS", { dateText = "19 Jun 1921", year = 1921, place = "Dudley, Worcestershire" })
+  local occuFarmer = addFact(person, "OCCU", { value = "Farmer" })
+  local occuMiner = addFact(person, "OCCU", { value = "Coal Miner" })
+
+  local found = familyHelper.findFact(ptrFor(person), "CENS", { year = 1911 })
+  check(found.node == cens1911 and fhGetTag(found) == "CENS", 'findFact by year returns a pointer on the one matching fact')
+
+  local recordPtr = ptrFor(person)
+  local foundClone = familyHelper.findFact(recordPtr, "CENS", { year = 1921 })
+  check(foundClone ~= recordPtr and recordPtr.node == person,
+    'findFact returns a separate pointer and leaves the caller\'s record pointer where it was')
+
+  check(familyHelper.findFact(ptrFor(person), "OCCU", { value = "coal miner" }).node == occuMiner,
+    'value matches case-insensitively and exactly')
+  check(familyHelper.findFact(ptrFor(person), "CENS", { date = "19 Jun 1921" }).node == cens1921,
+    'date matches the fact\'s displayed date text')
+  check(familyHelper.findFact(ptrFor(person), "CENS", { place = "sedgley, staffordshire" }).node == cens1901,
+    'place matches case-insensitively and exactly')
+  check(familyHelper.findFact(ptrFor(person), "CENS", { year = 1921, place = "Dudley, Worcestershire" }).node == cens1921,
+    'several match keys are ANDed')
+  check(familyHelper.findFact(ptrFor(person), "OCCU", { value = "Farmer" }).node == occuFarmer,
+    'a fact with no date or place can be found by value')
+
+  local okZero, errZero = pcall(familyHelper.findFact, ptrFor(person), "CENS", { year = 1931 })
+  check(not okZero and contains(errZero, "0 ") and contains(errZero, "CENS"),
+    'no match raises, naming the count (0) and the tag')
+
+  local okMany, errMany = pcall(familyHelper.findFact, ptrFor(person), "CENS", {})
+  check(not okMany and contains(errMany, "3 ") and contains(errMany, "CENS"),
+    'several matches raise, naming the count (3) and the tag')
+
+  local okPartial, errPartial = pcall(familyHelper.findFact, ptrFor(person), "CENS", { place = "Dudley" })
+  check(not okPartial, 'place is an exact match, not a substring match')
+
+  local okKey, errKey = pcall(familyHelper.findFact, ptrFor(person), "CENS", { yeer = 1911 })
+  check(not okKey and contains(errKey, "yeer"), 'an unknown match key raises, naming it')
+
+  local okTag, errTag = pcall(familyHelper.findFact, ptrFor(person), "", { year = 1911 })
+  check(not okTag, 'an empty tag raises')
+
+  local byId = familyHelper.findFact("I" .. person.id, "CENS", { year = 1901 })
+  check(byId.node == cens1901, 'a qualified id string is accepted for the record')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "exclude" })
+  addFlag(person, "__LIVING")
+  local okExcluded, errExcluded = pcall(familyHelper.findFact, ptrFor(person), "CENS", { year = 1911 })
+  check(not okExcluded and contains(errExcluded, "Excluded"), 'findFact on an Excluded Individual raises, naming Excluded')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "nameOnly" })
+  local okNameOnly, errNameOnly = pcall(familyHelper.findFact, ptrFor(person), "CENS", { year = 1911 })
+  check(not okNameOnly and contains(errNameOnly, "0 "), 'under Name Only there are no facts, so findFact reports no match')
+
+  familyHelper.setPrivacySettings({ privateVisibility = "all", livingVisibility = "all" })
+end
 
 t.report()

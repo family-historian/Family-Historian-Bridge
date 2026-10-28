@@ -683,6 +683,108 @@ function M.getAllDetails(ptr)
   return describeItem(ptr)
 end
 
+local FIND_FACT_KEYS = { "year", "date", "value", "place" }
+
+local function sameText(actual, wanted)
+  return actual ~= nil and utf8Fold.lower(actual) == utf8Fold.lower(wanted)
+end
+
+-- Text of fact's direct child tagged childTag, or nil when it has none.
+local function childText(fact, childTag, read)
+  local child = fhNewItemPtr()
+  child:MoveTo(fact, "~." .. childTag)
+  if child:IsNull() then
+    return nil, nil
+  end
+  return read(child), child
+end
+
+local function factMatches(fact, match)
+  if match.value ~= nil and not sameText(fhGetValueAsText(fact), match.value) then
+    return false
+  end
+  if match.place ~= nil and not sameText(childText(fact, "PLAC", fhGetValueAsText), match.place) then
+    return false
+  end
+  if match.date ~= nil or match.year ~= nil then
+    local dateText, datePtr = childText(fact, "DATE", fhGetDisplayText)
+    if match.date ~= nil and dateText ~= match.date then
+      return false
+    end
+    if match.year ~= nil then
+      local startPoint = datePtr and fhGetValueAsDate(datePtr):GetDatePt1()
+      if not startPoint or startPoint:IsNull() or startPoint:GetYear() ~= match.year then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+local function describeMatch(match)
+  local parts = {}
+  for _, key in ipairs(FIND_FACT_KEYS) do
+    if match[key] ~= nil then
+      table.insert(parts, key .. "=" .. tostring(match[key]))
+    end
+  end
+  return "{" .. table.concat(parts, ", ") .. "}"
+end
+
+-- familyHelper.findFact(ptrRecord, tag, match)
+-- ptrRecord: live pointer or qualified id string. tag: a fact's resolved tag, exact and
+-- case-sensitive (e.g. "CENS", "OCCU"). match: optional table, every key ANDed --
+-- year (number: the year the fact's date starts in; a quarter or range uses its first
+-- point), date (the fact's displayed date text, exact), value and place (case-insensitive,
+-- exact; place is the whole place text, not a substring).
+--
+-- Looks at ptrRecord's direct children fresh on each call and returns a separate pointer
+-- on the one fact that matches, never the caller's own pointer. Raises, naming the count,
+-- when zero or several match. Read-only.
+function M.findFact(ptrRecord, tag, match)
+  ptrRecord = resolvePointer(ptrRecord)
+  local problem = pointerProblem(ptrRecord)
+  if problem then
+    error("findFact: pointer must not be null" .. problem)
+  end
+  if type(tag) ~= "string" or tag == "" then
+    error("findFact: tag must be a non-empty string, e.g. \"CENS\"")
+  end
+  match = match or {}
+  if type(match) ~= "table" then
+    error("findFact: match must be a table such as { year = 1911 }")
+  end
+  local known = {}
+  for _, key in ipairs(FIND_FACT_KEYS) do known[key] = true end
+  for key in pairs(match) do
+    if not known[key] then
+      error("findFact: unknown match key '" .. tostring(key) .. "' -- use year, date, value or place")
+    end
+  end
+
+  local level = recordVisibility(ptrRecord)
+  if level == "exclude" then
+    error("findFact: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
+  end
+
+  local matches = {}
+  if level ~= "nameOnly" then
+    local child = fhNewItemPtr()
+    child:MoveToFirstChildItem(ptrRecord)
+    while child:IsNotNull() do
+      if fhGetTag(child) == tag and factMatches(child, match) then
+        table.insert(matches, child:Clone())
+      end
+      child:MoveNext()
+    end
+  end
+  if #matches ~= 1 then
+    error("findFact: " .. #matches .. " " .. tag .. " facts match " .. describeMatch(match) ..
+      " on this record, expected exactly 1")
+  end
+  return matches[1]
+end
+
 -- familyHelper.getFactsByTag(ptr, tags)
 -- ptr: live pointer or qualified id string, any record type. tags: one tag string (e.g.
 -- "CENS") or an array of tag strings -- FH's own resolved tag, exact and case-sensitive

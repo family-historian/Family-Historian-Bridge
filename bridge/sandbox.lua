@@ -430,6 +430,7 @@ function M.build(accessMode, privacySettings, modules)
     getDescendants = realFamilyHelper.getDescendants,
     findByNames = realFamilyHelper.findByNames,
     getFactsByTag = realFamilyHelper.getFactsByTag,
+    findFact = realFamilyHelper.findFact,
     findSources = realSourceHelper.findSources,
     getPopulatedTemplateFields = realSourceHelper.getPopulatedTemplateFields,
     getTemplateFieldCensus = realSourceHelper.getTemplateFieldCensus,

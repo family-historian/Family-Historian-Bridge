@@ -142,7 +142,17 @@ end
 local function requireFieldDef(defs, code)
   local def = defs[code]
   if not def then
-    error("unknown field code '" .. tostring(code) .. "' for this template")
+    -- Codes are matched exactly (the shortcut tags read back upper case, so the wrong case
+    -- is an easy guess); name the real code when only the case differs.
+    local suggestion = ""
+    local wanted = utf8Fold.lower(tostring(code))
+    for defCode in pairs(defs) do
+      if utf8Fold.lower(defCode) == wanted then
+        suggestion = " -- did you mean '" .. defCode .. "'?"
+        break
+      end
+    end
+    error("unknown field code '" .. tostring(code) .. "' for this template" .. suggestion)
   end
   return def
 end
@@ -180,6 +190,20 @@ end
 -- expectCitation=false (createSourceFromTemplate's record-level fields) rejects a
 -- citation-specific (CITN) code; true (citeSource's template fields) rejects a
 -- record-level code instead. Enum-option validation is identical either way.
+-- A Text-like field (everything but Date and Repository) takes its value as a string. A Date
+-- object or {year,month,day} table is converted to the date's own text, so the caller doesn't
+-- need to know whether a template types its "Date" field as Date or as Text (Record Book
+-- templates use Text). Anything else passes through unchanged.
+local function textFieldValue(value, callerName)
+  if type(value) == "table" then
+    value = familyHelper.resolveDate(value, callerName)
+  end
+  if value ~= nil and type(value) ~= "string" and type(value) ~= "number" and type(value) ~= "boolean" then
+    return value:GetValueAsText()
+  end
+  return value
+end
+
 local function validateFields(fields, defs, expectCitation)
   for code, value in pairs(fields) do
     local def = requireFieldDef(defs, code)
@@ -338,7 +362,7 @@ local function setField(sour, value, def, code, callerName)
     familyHelper.checkWrite(fhSetValueAsLink(item, value), message)
   else
     -- Text, Name, Place, Address, Enum, URL all land via the same plain-string setter.
-    familyHelper.checkWrite(fhSetValueAsText(item, value), message)
+    familyHelper.checkWrite(fhSetValueAsText(item, textFieldValue(value, callerName)), message)
   end
 end
 
