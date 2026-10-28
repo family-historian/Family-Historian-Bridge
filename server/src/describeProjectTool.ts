@@ -85,6 +85,7 @@ Returns JSON shaped as:
   "bridgeState": {
     "bridgeVersion": "<the running Bridge plugin's own version, or null if it couldn't be determined>",
     "serverVersion": "<this server's own version>",
+    "serverPath": "<the folder this server is running from — tells apart separate installs, e.g. a Claude Desktop extension and a Claude Code registration>",
     "versionStatus": "<\\"match\\" | \\"warn\\" | \\"unsupported\\" | \\"unparseable\\">",
     "accessMode": "<\\"read-only\\" | \\"read-write\\", the current Bridge Session's real Access mode, or null if the Bridge predates this field>",
     "privacySettings": {

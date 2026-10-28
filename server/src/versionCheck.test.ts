@@ -159,6 +159,7 @@ describe("checkBridgeVersion", () => {
         versionStatus: "match",
         accessMode: null,
         privacySettings: null,
+        serverPath: expect.any(String),
       },
     });
   });
@@ -179,7 +180,24 @@ describe("checkBridgeVersion", () => {
       versionStatus: "warn",
       accessMode: null,
       privacySettings: null,
+      serverPath: expect.any(String),
     });
+  });
+
+  it("reports the server's own install path in bridgeState for every outcome", async () => {
+    const replies = ['{"version":"0.4.0"}', '{"version":"0.4.0"}', '{"error": "expected STOP or LUA <n>"}', "garbage"];
+    const serverVersions = ["0.4.0", "0.4.1", "0.4.0", "0.4.0"];
+    for (const [i, reply] of replies.entries()) {
+      const result = await checkBridgeVersion(async () => reply, serverVersions[i], "/opt/fh/server");
+      if (result.block !== null) throw new Error("unreachable");
+      expect(result.bridgeState.serverPath).toBe("/opt/fh/server");
+    }
+  });
+
+  it("names the server's install path in the minor/patch mismatch note", async () => {
+    const result = await checkBridgeVersion(async () => '{"version":"0.4.0"}', "0.4.1", "/opt/fh/server");
+    if (result.block !== null) throw new Error("unreachable");
+    expect(result.note).toContain("/opt/fh/server");
   });
 
   it("blocks with an error result on a major mismatch, naming both versions, tagged as a version-mismatch reason", async () => {
@@ -213,6 +231,7 @@ describe("checkBridgeVersion", () => {
       versionStatus: "unsupported",
       accessMode: null,
       privacySettings: null,
+      serverPath: expect.any(String),
     });
   });
 
@@ -228,6 +247,7 @@ describe("checkBridgeVersion", () => {
       versionStatus: "unparseable",
       accessMode: null,
       privacySettings: null,
+      serverPath: expect.any(String),
     });
   });
 

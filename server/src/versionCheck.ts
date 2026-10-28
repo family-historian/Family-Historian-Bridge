@@ -4,6 +4,7 @@ import {
   interpretBridgeResponse,
   textResult,
 } from "./bridgeResponse.js";
+import { SERVER_PATH } from "./serverVersion.js";
 
 // Bridge/server version-mismatch detection: resolved design at
 // https://forgejo-direct.taubman.uk/jane/fh-mcp-bridge/issues/45#issuecomment-354.
@@ -109,6 +110,8 @@ export function interpretVersionResponse(raw: string, serverVersion: string): Ve
 export interface BridgeState {
   bridgeVersion: string | null;
   serverVersion: string;
+  // The install root of the running server, so a mismatch can be traced to the right install.
+  serverPath: string;
   // "block" is deliberately excluded: checkBridgeVersion's block outcome short-circuits
   // with an error CallToolResult before any BridgeState is ever built (see below) -- this
   // union only needs to model the statuses a real BridgeState value can actually carry.
@@ -128,6 +131,7 @@ export interface BridgeState {
 function bridgeStateFor(
   outcome: Exclude<VersionCheckOutcome, { status: "block" }>,
   serverVersion: string,
+  serverPath: string,
 ): BridgeState {
   switch (outcome.status) {
     case "match":
@@ -135,6 +139,7 @@ function bridgeStateFor(
       return {
         bridgeVersion: outcome.bridgeVersion,
         serverVersion,
+        serverPath,
         versionStatus: outcome.status,
         accessMode: outcome.accessMode,
         privacySettings: outcome.privacySettings,
@@ -144,6 +149,7 @@ function bridgeStateFor(
       return {
         bridgeVersion: null,
         serverVersion,
+        serverPath,
         versionStatus: outcome.status,
         accessMode: null,
         privacySettings: null,
@@ -175,6 +181,7 @@ export type CheckBridgeVersionResult =
 export async function checkBridgeVersion(
   queryBridgeVersion: () => Promise<string>,
   serverVersion: string,
+  serverPath: string = SERVER_PATH,
 ): Promise<CheckBridgeVersionResult> {
   let raw: string;
   try {
@@ -194,7 +201,7 @@ export async function checkBridgeVersion(
     };
   }
 
-  const bridgeState = bridgeStateFor(outcome, serverVersion);
+  const bridgeState = bridgeStateFor(outcome, serverVersion, serverPath);
 
   switch (outcome.status) {
     case "match":
@@ -202,7 +209,7 @@ export async function checkBridgeVersion(
     case "warn":
       return {
         block: null,
-        note: `Note: the Bridge plugin's version (${outcome.bridgeVersion}) does not match the server's (${serverVersion}). This usually just means one side was updated more recently than the other.`,
+        note: `Note: the Bridge plugin's version (${outcome.bridgeVersion}) does not match the server's (${serverVersion}, running from ${serverPath}). This usually just means one side was updated more recently than the other.`,
         bridgeState,
       };
     case "unsupported":

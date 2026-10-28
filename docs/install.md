@@ -67,6 +67,23 @@ For what Claude can and can't do in each mode, how to get it to write you a stan
 instead, and day-to-day troubleshooting, see **[docs/user-guide.md](user-guide.md)** —
 everything from its "Using it" section onward applies here too.
 
+## Using it from both Claude Desktop and Claude Code
+
+Claude Desktop and Claude Code don't share an install. Installing the extension in Claude
+Desktop does not update a server you registered earlier with Claude Code (for example in
+`~/.claude.json`), so the two can run different versions side by side.
+
+- **Which one answered?** `describe_project` reports `bridgeState.serverVersion` and
+  `bridgeState.serverPath`, the folder the running server was loaded from. A version-mismatch
+  note names the same path. Compare it with where you installed the extension to see which
+  install you're talking to.
+- **Update both.** After installing a new version in Claude Desktop, update or re-register the
+  Claude Code copy too.
+- **Tool names can differ.** The same server may appear under different tool-name prefixes in
+  different clients (for example `mcp__fh-mcp-bridge__*` in one and
+  `mcp__Family_Historian_Bridge__*` in another). Don't hard-code the prefix in notes or skills;
+  refer to the tools by their short names (`run_lua`, `describe_project`).
+
 ## Privacy and security notes
 
 Everything stays on your own PC (`127.0.0.1` only), with one deliberate exception (an

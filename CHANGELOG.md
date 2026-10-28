@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `describe_project`'s `bridgeState.serverPath` and the version-mismatch note report the folder the running server loaded from, and the install guide explains running from both Claude Desktop and Claude Code (#158).
+
 ### Fixed
 
 - A raw `fhSetValueAsText` on a `NOTE` item (a link to a shared Note record, where FH silently discards text) is now refused with an error pointing to `NOTE2` and `fhBridge.setNote` (#157).
