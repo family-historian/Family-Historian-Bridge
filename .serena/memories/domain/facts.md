@@ -30,3 +30,10 @@
 - **Clarifying question**: on ambiguous natural-language scope (unspecified generation
   depth, ambiguous place spelling), ask the user rather than silently guessing and running
   a run_lua script against the guess.
+- **Involvement**: how a Person relates to an event in `getPersonEvents`: `own` (a Fact on
+  their Individual record), `family` (a Fact on a Family record they are a spouse/child of),
+  or `witness` (a linked participant on a Shared Fact owned by someone else). Avoid
+  "participation" alone — it covers only `witness`.
+- **Linked participation**: a Shared Fact participant that resolves to an Individual record
+  (`_SHAR`). A name-only participant (`_SHAN`) or a name merely mentioned in a note is never
+  linked participation and is never matched to a Person.
