@@ -13,6 +13,7 @@
 
 ### Added
 
+- `run_lua` guidance for traps that fail silently: no `select`, `gsub` patterns, `table.sort` locale ordering, quarter dates, `Date:SetValueAsText` returning false, unvalidated days, surnames read back in capitals, and setting a witness role (#159).
 - `fhBridge.setNote(ptr, text)`: sets the inline note (NOTE2) on a record, fact or citation, creating it when there is none. Read-write only (#157).
 - `fhBridge.findFact(ptrRecord, tag, match)`: returns a pointer on exactly one Fact of a record, matched by `year`, `date`, `value` and/or `place`, or raises an error with the count when none or several match. Read-only, available in both modes (#156).
 - User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user

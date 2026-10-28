@@ -875,3 +875,84 @@ describe("user project modules corpus entries (issue #150)", () => {
     expect(fhuEntry?.text).toMatch(/run-lua-guidance-user-project-modules/);
   });
 });
+
+describe("run_lua guidance: sandbox, date and name gotchas (issue #159)", () => {
+  const CORPUS_PATH = fileURLToPath(new URL("../data/gedcom-knowledge-corpus.jsonl", import.meta.url));
+  const corpus = loadGedcomKnowledgeFromFile(CORPUS_PATH);
+  const byId = (id: string) => corpus.find((e) => e.id === id);
+
+  function namedBy(query: string): Set<string> {
+    const result = searchGedcomKnowledge(corpus, query);
+    return new Set([...result.matches.map((r) => r.id), ...(result.index?.map((r) => r.id) ?? [])]);
+  }
+
+  it("finds the sandbox gotchas by the names an agent would hit", () => {
+    expect(namedBy("select gsub table.sort sandbox").has("run-lua-guidance-lua-sandbox-gotchas")).toBe(true);
+    expect(namedBy("string.gsub plain text").has("run-lua-guidance-lua-sandbox-gotchas")).toBe(true);
+  });
+
+  it("finds the date gotchas by quarter and by SetValueAsText", () => {
+    expect(namedBy("quarter date").has("run-lua-guidance-date-gotchas")).toBe(true);
+    expect(namedBy("Date SetValueAsText returns false").has("run-lua-guidance-date-gotchas")).toBe(true);
+  });
+
+  it("says select is absent and how to avoid needing it", () => {
+    const text = byId("run-lua-guidance-lua-sandbox-gotchas")?.text ?? "";
+    expect(text).toMatch(/`select`/);
+    expect(text).toMatch(/global 'select'/);
+    expect(text).toMatch(/local ok, /);
+  });
+
+  it("gives the plain-text splice for gsub and warns that brackets become a character class", () => {
+    const text = byId("run-lua-guidance-lua-sandbox-gotchas")?.text ?? "";
+    expect(text).toContain("string.find(s, old, 1, true)");
+    expect(text).toMatch(/character class/);
+  });
+
+  it("says table.sort on strings follows locale collation, not code points", () => {
+    const text = byId("run-lua-guidance-lua-sandbox-gotchas")?.text ?? "";
+    expect(text).toMatch(/locale/);
+    expect(text).toMatch(/code.point/);
+  });
+
+  it("shows how to make a quarter date and that fhNewDate cannot", () => {
+    const text = byId("run-lua-guidance-date-gotchas")?.text ?? "";
+    expect(text).toContain('SetValueAsText("Q3 1891")');
+    expect(text).toMatch(/fhNewDate\(1891, 0, 0, "quarter"\)/);
+    expect(text).toMatch(/day-less|without days|no day/);
+  });
+
+  it("says SetValueAsText returns false instead of raising, so pcall proves nothing", () => {
+    const text = byId("run-lua-guidance-date-gotchas")?.text ?? "";
+    expect(text).toMatch(/returns false/);
+    expect(text).toMatch(/pcall/);
+  });
+
+  it("says fhNewDate does not validate the day", () => {
+    const text = byId("run-lua-guidance-date-gotchas")?.text ?? "";
+    expect(text).toMatch(/February 31/);
+  });
+
+  it("carries the new entries as Verified, with a source that says they were checked live", () => {
+    for (const id of ["run-lua-guidance-lua-sandbox-gotchas", "run-lua-guidance-date-gotchas"]) {
+      const entry = byId(id);
+      expect(entry?.confidence, id).toBe("Verified");
+      expect(entry?.source ?? "", id).toMatch(/live/i);
+      expect(entry?.breadcrumb, id).toContain("run_lua guidance");
+    }
+  });
+
+  it("warns that a name's surname reads back in capitals, next to the SEX bullet", () => {
+    const text = byId("run-lua-guidance-call-shape-gotchas")?.text ?? "";
+    expect(text).toMatch(/NAME:SURNAME/);
+    expect(text).toMatch(/capitals/);
+    expect(text).toMatch(/case-insensitive/);
+  });
+
+  it("records the witness ROLE finding on the Shared Facts entry", () => {
+    const text = byId("shared-facts")?.text ?? "";
+    expect(text).toContain("fhu.addWitness");
+    expect(text).toMatch(/same call/);
+    expect(text).toMatch(/later call/);
+  });
+});
