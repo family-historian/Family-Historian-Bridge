@@ -36,15 +36,39 @@ for _, name in ipairs(sandbox.KNOWN_FH_GLOBAL_NAMES) do
   knownFhGlobalNames[name] = true
 end
 
+-- Index just past the closing bracket of a long-bracket form whose opener (with `level`
+-- equals signs) starts at `start`; the end of the text when it never closes.
+local function longBracketEnd(text, start, level)
+  local _, closeEnd = text:find(']' .. level .. ']', start, true)
+  return (closeEnd or #text) + 1
+end
+
+-- Index just past a quoted string opened by `quote` at `start`. An unterminated string
+-- ends at the line break, which is where Lua itself would fail to compile.
+local function shortStringEnd(text, start, quote)
+  local cursor = start + 1
+  while cursor <= #text do
+    local c = text:sub(cursor, cursor)
+    if c == '\\' then
+      cursor = cursor + 2
+    elseif c == quote then
+      return cursor + 1
+    elseif c == '\n' then
+      return cursor
+    else
+      cursor = cursor + 1
+    end
+  end
+  return cursor
+end
+
 -- Returns scriptText with comments and string literals (short and long-bracket forms)
 -- each replaced by one space, so a name scan sees only code. A heuristic tokenizer, not a
--- parser: an unterminated string ends at the line break, an unterminated long form at the
--- end of the text.
+-- parser.
 local function stripCommentsAndStrings(scriptText)
   local parts = {}
   local pos = 1
-  local len = #scriptText
-  while pos <= len do
+  while pos <= #scriptText do
     local special = scriptText:find('[%-%[\'"]', pos)
     if not special then
       parts[#parts + 1] = scriptText:sub(pos)
@@ -56,33 +80,17 @@ local function stripCommentsAndStrings(scriptText)
     if scriptText:sub(special, special + 1) == '--' then
       local level = scriptText:match('^%-%-%[(=*)%[', special)
       if level then
-        local _, closeEnd = scriptText:find(']' .. level .. ']', special, true)
-        skipTo = (closeEnd or len) + 1
+        skipTo = longBracketEnd(scriptText, special, level)
       else
-        skipTo = scriptText:find('\n', special, true) or len + 1
+        skipTo = scriptText:find('\n', special, true) or #scriptText + 1
       end
     elseif char == '[' then
       local level = scriptText:match('^%[(=*)%[', special)
       if level then
-        local _, closeEnd = scriptText:find(']' .. level .. ']', special, true)
-        skipTo = (closeEnd or len) + 1
+        skipTo = longBracketEnd(scriptText, special, level)
       end
-    elseif char == '"' or char == "'" then
-      local cursor = special + 1
-      while cursor <= len do
-        local c = scriptText:sub(cursor, cursor)
-        if c == '\\' then
-          cursor = cursor + 2
-        elseif c == char then
-          cursor = cursor + 1
-          break
-        elseif c == '\n' then
-          break
-        else
-          cursor = cursor + 1
-        end
-      end
-      skipTo = cursor
+    elseif char ~= '-' then
+      skipTo = shortStringEnd(scriptText, special, char)
     end
     if skipTo then
       parts[#parts + 1] = ' '

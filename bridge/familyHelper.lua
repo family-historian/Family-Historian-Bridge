@@ -703,6 +703,7 @@ function M.getFactsByTag(ptr, tags)
   if level == "exclude" then
     error("getFactsByTag: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   elseif level == "nameOnly" then
+    -- Empty by design: the name is on getAllDetails; NAME facts carry more than the display name.
     return {}
   end
 

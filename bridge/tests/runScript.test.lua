@@ -276,6 +276,15 @@ check(refusedAsWrite("return 'a' .. tostring(fhCreateItem('X'))", 'read-only'),
 check(refusedAsWrite("local s = '--'\nfhu.createIndi(s)", 'read-only'),
   'a string containing dashes does not hide a following real write-capable call as a comment')
 
+check(not refusedAsWrite("return 'unterminated fhCreateItem\n", 'read-only'),
+  'a write-capable name in an unterminated string (ends at the line break) does not trip the read-only pre-scan')
+check(refusedAsWrite("return 'unterminated\nfhu.createIndi('X')", 'read-only'),
+  'a real write-capable call on the line after an unterminated string is still refused')
+
+-- The leading-dot scan still reads string contents: it is the one pre-scan that needs them.
+check(contains(runScript.run("return fhGetItemText(ptr, '.DATE')", 'read-only'), 'leading dot'),
+  'stripping comments and strings for the write-name scan leaves the leading-dot scan reading literals')
+
 -- A logActivity mention in a comment does not satisfy the read-write "must log" check.
 check(refusedAsWrite("-- fhBridge.logActivity\nfhu.createIndi('X')", 'read-write'),
   'a logActivity mention in a comment does not satisfy the read-write pre-scan')
