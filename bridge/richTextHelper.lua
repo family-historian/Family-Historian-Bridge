@@ -93,6 +93,16 @@ function M.getTftfText(ptr)
   return { text = toSelfContainedTftf(sText, tblRecLinks), editable = true }
 end
 
+-- ptr is a field or item inside a record, never the record itself, so recordVisibility needs the
+-- owning record -- climbed onto a separate pointer, since ptr must stay where the caller put it.
+local function rejectExcluded(ptr, callerName)
+  local owner = fhNewItemPtr()
+  owner:MoveToRecordItem(ptr)
+  if familyHelper.recordVisibility(owner) == "exclude" then
+    error(callerName .. ": this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
+  end
+end
+
 -- The validation half of setTftfText, checked up front, untracked, so sandbox.lua's write
 -- tracker never arms for a call rejected here. Re-checks for citations at write time (not
 -- just whatever getTftfText saw earlier) in case the field gained one by hand in FH's own
@@ -102,14 +112,7 @@ function M.validateSetTftfText(ptr, text)
   if problem then
     error("setTftfText: ptr must point to the rich-text field to write" .. problem)
   end
-  -- ptr is always a field (Notes/Source TEXT/citation DATA-TEXT), never the record
-  -- itself, so recordVisibility needs the owning record -- climbed onto a separate
-  -- pointer, since ptr must still point at the field for the write below.
-  local owner = fhNewItemPtr()
-  owner:MoveToRecordItem(ptr)
-  if familyHelper.recordVisibility(owner) == "exclude" then
-    error("setTftfText: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
-  end
+  rejectExcluded(ptr, "setTftfText")
   if type(text) ~= "string" then
     error("setTftfText: text must be a string in tFTF syntax")
   end
@@ -132,6 +135,55 @@ function M.setTftfText(ptr, text)
   local rt = fhNewRichText()
   rt:SetText(text, true, true)
   familyHelper.checkWrite(fhSetValueAsRichText(ptr, rt), "setTftfText: failed to write - FH declined the write to this '" .. fhGetTag(ptr) .. "' field")
+end
+
+-- How many inline NOTE2 notes ptr has as direct children, and a pointer to the first. A NOTE
+-- child is a link to a shared Note record, not an inline note, and is not counted.
+local function findInlineNotes(ptr)
+  local child = fhNewItemPtr()
+  child:MoveToFirstChildItem(ptr)
+  local count, first = 0, nil
+  while child:IsNotNull() do
+    if fhGetTag(child) == "NOTE2" then
+      count = count + 1
+      first = first or child:Clone()
+    end
+    child:MoveNext()
+  end
+  return count, first
+end
+
+-- The validation half of setNote, untracked: a call rejected here never writes or creates
+-- anything. ptr is the record, fact or citation the note belongs to.
+function M.validateSetNote(ptr, text)
+  local problem = familyHelper.pointerProblem(ptr)
+  if problem then
+    error("setNote: ptr must point to the record, fact or citation to set the note on" .. problem)
+  end
+  rejectExcluded(ptr, "setNote")
+  if type(text) ~= "string" then
+    error("setNote: text must be a string in tFTF syntax")
+  end
+  local count, existing = findInlineNotes(ptr)
+  if count > 1 then
+    error("setNote: this item has " .. count .. " inline NOTE2 notes -- refusing to guess which to replace; " ..
+      "edit one through its own pointer with fhBridge.setTftfText")
+  end
+  if existing then
+    M.validateSetTftfText(existing, text)
+  end
+end
+
+-- Sets ptr's inline note (NOTE2) to text, tFTF syntax as for setTftfText: creates the NOTE2
+-- when there is none, replaces its text when there is exactly one. Read-write only.
+function M.setNote(ptr, text)
+  M.validateSetNote(ptr, text)
+  local _, field = findInlineNotes(ptr)
+  if not field then
+    field = fhCreateItem("NOTE2", ptr)
+    familyHelper.checkCreated(field, "setNote: failed to create the NOTE2 note")
+  end
+  M.setTftfText(field, text)
 end
 
 return M

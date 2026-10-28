@@ -74,6 +74,14 @@ function PtrMethods:MoveToRecordItem(ptrRef)
   self.null = false
 end
 
+-- Positioned on a child node that carries a .field fixture pointer, Clone() hands back that
+-- pointer, so the rich-text fixtures keyed by it stay reachable from a walked-to child.
+function PtrMethods:Clone()
+  local node = currentChildNode(self)
+  if node and node.field then return node.field end
+  return newPtr(self.name, self.null)
+end
+
 fhNewItemPtr = function() return newPtr('unset-ptr', false) end
 
 local nullFieldPtr = newPtr('null-field', true)
@@ -142,6 +150,16 @@ end
 
 fhNewRichText = function()
   return newFakeRichText({})
+end
+
+-- fhCreateItem fake: records the call and returns a fresh empty rich-text field, so setNote's
+-- create path has something real to write into.
+local createItemCalls = {}
+fhCreateItem = function(tag, parent)
+  local created = newPtr('created-' .. tag)
+  fixturesByFieldPtr[created] = { sText = '', bRich = true, tblRecLinks = nil, tblCitations = nil }
+  table.insert(createItemCalls, { tag = tag, parent = parent, ptr = created })
+  return created
 end
 
 local richTextHelper = require('richTextHelper')
@@ -436,5 +454,84 @@ familyHelper.setPrivacySettings(nil)
 -- proves the block is driven by the Session setting, not something baked into the fixture.
 local okAfterReset = pcall(richTextHelper.validateSetTftfText, fieldOnExcluded, 'some text')
 check(okAfterReset == true, 'the same field is no longer blocked once privateVisibility is back to "all"')
+
+
+------------------------------------------------------------------
+-- setNote: sets the inline NOTE2 note on a record, fact or citation -- creates it when there
+-- is none, replaces its text when there is exactly one, refuses when there are several.
+------------------------------------------------------------------
+
+local function noteField(name, fixture)
+  local field = newPtr(name)
+  fixturesByFieldPtr[field] = fixture or { sText = 'old note', bRich = true, tblRecLinks = nil, tblCitations = nil }
+  return field
+end
+
+do
+  local factNoNote = newPtr('fact-no-note')
+  factNoNote.children = { { tag = 'DATE', children = {} } }
+  local createsBefore, writesBefore = #createItemCalls, #setValueAsRichTextCalls
+  richTextHelper.setNote(factNoNote, 'A new inline note')
+  check(#createItemCalls == createsBefore + 1 and createItemCalls[#createItemCalls].tag == 'NOTE2'
+    and createItemCalls[#createItemCalls].parent == factNoNote,
+    'setNote creates a NOTE2 under the target when it has none')
+  check(#setValueAsRichTextCalls == writesBefore + 1
+    and setValueAsRichTextCalls[#setValueAsRichTextCalls].ptr == createItemCalls[#createItemCalls].ptr
+    and setTextCalls[#setTextCalls].text == 'A new inline note',
+    'setNote writes the text into the NOTE2 it just created')
+
+  local existing = noteField('existing-note')
+  local factOneNote = newPtr('fact-one-note')
+  factOneNote.children = { { tag = 'DATE', children = {} }, { tag = 'NOTE2', children = {}, field = existing } }
+  createsBefore, writesBefore = #createItemCalls, #setValueAsRichTextCalls
+  richTextHelper.setNote(factOneNote, 'Replacement text')
+  check(#createItemCalls == createsBefore, 'setNote creates nothing when the target already has a NOTE2')
+  check(#setValueAsRichTextCalls == writesBefore + 1
+    and setValueAsRichTextCalls[#setValueAsRichTextCalls].ptr == existing
+    and setTextCalls[#setTextCalls].text == 'Replacement text',
+    'setNote replaces the text of the one existing NOTE2')
+
+  local noteLinkOnly = newPtr('fact-link-note-only')
+  noteLinkOnly.children = { { tag = 'NOTE', children = {}, field = noteField('shared-note-link') } }
+  createsBefore = #createItemCalls
+  richTextHelper.setNote(noteLinkOnly, 'Inline beside a shared note')
+  check(#createItemCalls == createsBefore + 1 and createItemCalls[#createItemCalls].tag == 'NOTE2',
+    'a NOTE (shared note link) is not mistaken for an inline note: setNote still creates a NOTE2')
+
+  local factTwoNotes = newPtr('fact-two-notes')
+  factTwoNotes.children = {
+    { tag = 'NOTE2', children = {}, field = noteField('first-note') },
+    { tag = 'NOTE2', children = {}, field = noteField('second-note') },
+  }
+  createsBefore, writesBefore = #createItemCalls, #setValueAsRichTextCalls
+  local okTwo, errTwo = pcall(richTextHelper.setNote, factTwoNotes, 'Which one?')
+  check(okTwo == false and contains(errTwo, '2'), 'setNote refuses when there are several NOTE2 notes, naming the count')
+  check(#createItemCalls == createsBefore and #setValueAsRichTextCalls == writesBefore,
+    'a refused setNote writes and creates nothing')
+
+  local cited = noteField('cited-note', { sText = 'cited', bRich = true, tblRecLinks = nil, tblCitations = { [1] = {} } })
+  local factCited = newPtr('fact-cited-note')
+  factCited.children = { { tag = 'NOTE2', children = {}, field = cited } }
+  writesBefore = #setValueAsRichTextCalls
+  local okCited, errCited = pcall(richTextHelper.setNote, factCited, 'discard the citation?')
+  check(okCited == false and contains(errCited, 'citation'), 'setNote refuses to replace a note that has embedded citations')
+  check(#setValueAsRichTextCalls == writesBefore, 'a citation-bearing note is left untouched')
+
+  local okNilPtr = pcall(richTextHelper.setNote, nil, 'text')
+  check(okNilPtr == false, 'setNote rejects a nil ptr')
+  local okBadText = pcall(richTextHelper.setNote, factNoNote, 123)
+  check(okBadText == false, 'setNote rejects a non-string text')
+
+  local okValidateOnly = pcall(richTextHelper.validateSetNote, factTwoNotes, 'text')
+  check(okValidateOnly == false, 'validateSetNote rejects what setNote rejects, without writing')
+
+  local excludedFact = newPtr('fact-on-excluded')
+  excludedFact.children = {}
+  excludedFact.owner = { name = 'INDI', children = { { tag = '_FLGS', children = { { tag = '__PRIVATE', children = {} } } } } }
+  familyHelper.setPrivacySettings({ privateVisibility = 'exclude', livingVisibility = 'all' })
+  local okExcludedNote, errExcludedNote = pcall(richTextHelper.setNote, excludedFact, 'text')
+  check(okExcludedNote == false and contains(errExcludedNote, 'Excluded'), 'setNote raises when the owning Individual is Excluded')
+  familyHelper.setPrivacySettings(nil)
+end
 
 t.report()

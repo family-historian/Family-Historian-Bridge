@@ -256,6 +256,14 @@ local fakeRichTextHelper = {
     table.insert(helperCallLog, { 'setTftfText', ptr })
     return 'settftf:' .. tostring(ptr)
   end,
+  validateSetNote = function(ptr, text)
+    table.insert(helperCallLog, { 'validateSetNote', ptr })
+    if ptr == 'BAD' then error('validateSetNote rejected it') end
+  end,
+  setNote = function(ptr, text)
+    table.insert(helperCallLog, { 'setNote', ptr })
+    return 'setnote:' .. tostring(ptr)
+  end,
 }
 package.loaded.richTextHelper = fakeRichTextHelper
 
@@ -429,6 +437,7 @@ check(env.fhBridge.createSourceFromTemplate == nil, 'fhBridge.createSourceFromTe
 check(env.fhBridge.citeSource == nil, 'fhBridge.citeSource absent under read-only')
 check(env.fhBridge.logActivity == nil, 'fhBridge.logActivity absent under read-only')
 check(env.fhBridge.setTftfText == nil, 'fhBridge.setTftfText absent under read-only (calls the real fhSetValueAsRichText write global directly — must not be reachable without the write gate)')
+check(env.fhBridge.setNote == nil, 'fhBridge.setNote absent under read-only (creates and writes a NOTE2 item)')
 check(env.fhBridge.createFact == nil, 'fhBridge.createFact absent under read-only (calls the real fhUtils.createFact write path directly — must not be reachable without the write gate)')
 
 -- fhBridge.listModules: read-only, so present in both modes; with no modules
@@ -790,6 +799,42 @@ check(type(envReadWriteSetTftf.fhBridge.setTftfText) == 'function' and envReadWr
 check(envReadWriteSetTftf.fhBridge.setTftfText('ptr', 'some text') == 'settftf:ptr', 'wrapped fhBridge.setTftfText forwards through to the real richTextHelper.setTftfText')
 check(trackerReadWriteSetTftf.wrote == true, 'calling a wrapped fhBridge.setTftfText flips the tracker too')
 check(trackerReadWriteSetTftf.logged == false, 'calling fhBridge.setTftfText (not logActivity) leaves tracker.logged false')
+
+
+-- fhBridge.setNote (richTextHelper): wrapped like setTftfText, and a call its validation
+-- rejects never arms the tracker.
+helperCallLog = {}
+local envReadWriteSetNote, trackerReadWriteSetNote = sandbox.build("read-write")
+check(type(envReadWriteSetNote.fhBridge.setNote) == 'function' and envReadWriteSetNote.fhBridge.setNote ~= fakeRichTextHelper.setNote,
+  'read-write fhBridge.setNote is wrapped, not the raw function')
+local okRejectSetNote = pcall(envReadWriteSetNote.fhBridge.setNote, 'BAD', 'text')
+check(okRejectSetNote == false and trackerReadWriteSetNote.wrote == false,
+  'a setNote call rejected by validation raises and leaves tracker.wrote false')
+check(envReadWriteSetNote.fhBridge.setNote('ptr', 'some text') == 'setnote:ptr' and trackerReadWriteSetNote.wrote == true,
+  'a valid setNote call forwards through to richTextHelper.setNote and flips the tracker')
+
+-- A raw fhSetValueAsText on a NOTE sub-item silently stores nothing (NOTE links a shared Note
+-- record; an inline note is NOTE2): refused with a pointer to the right tag, before the
+-- write tracker arms.
+local realFhGetTag, realFhHasParentItem = fhGetTag, fhHasParentItem
+fhGetTag = function(ptr) return ptr.tag end
+fhHasParentItem = function(ptr) return ptr.sub end
+local setTextCalls = {}
+fhSetValueAsText = function(ptr, value) table.insert(setTextCalls, value); return true end
+local envNoteGuard, trackerNoteGuard = sandbox.build("read-write")
+local okNote, errNote = pcall(envNoteGuard.fhSetValueAsText, { tag = 'NOTE', sub = true }, 'inline text')
+check(okNote == false and tostring(errNote):find('NOTE2', 1, true) ~= nil and tostring(errNote):find('setNote', 1, true) ~= nil,
+  'fhSetValueAsText on a NOTE sub-item raises, naming NOTE2 and fhBridge.setNote')
+check(trackerNoteGuard.wrote == false and #setTextCalls == 0,
+  'a refused NOTE write never reaches the real write and leaves tracker.wrote false')
+check(envNoteGuard.fhSetValueAsText({ tag = 'NOTE2', sub = true }, 'inline text') == true and #setTextCalls == 1 and trackerNoteGuard.wrote == true,
+  'fhSetValueAsText on a NOTE2 sub-item still writes through the tracker')
+check(envNoteGuard.fhSetValueAsText({ tag = 'NOTE', sub = false }, 'record text') == true and #setTextCalls == 2,
+  'fhSetValueAsText on a top-level NOTE record is left alone')
+check(envNoteGuard.fhSetValueAsText({ tag = 'OCCU', sub = true }, 'Farmer') == true and #setTextCalls == 3,
+  'fhSetValueAsText on an ordinary field is left alone')
+fhGetTag, fhHasParentItem = realFhGetTag, realFhHasParentItem
+fhSetValueAsText = function() end
 
 -- fhBridge.createFact (require('factHelper'), issue #113): present, wrapped, forwards
 -- through and flips the tracker the same way createSourceFromTemplate/citeSource/

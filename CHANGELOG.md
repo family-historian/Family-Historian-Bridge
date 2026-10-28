@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A raw `fhSetValueAsText` on a `NOTE` item (a link to a shared Note record, where FH silently discards text) is now refused with an error pointing to `NOTE2` and `fhBridge.setNote` (#157).
 - `citeSource` and `createSourceFromTemplate` accept a Date object or `{year, month, day}` table for a template field typed Text (Record Book templates keep their Date as Text) and store its text; an unknown field code that differs only by case now names the right code in the error (#155).
 - A Read-only script is no longer refused because a comment or string literal merely mentions a write-capable function, and a comment mentioning `logActivity` no longer satisfies the read-write "must log" check (#154).
 - Under Name Only visibility, `getAllDetails` now returns the person's display name (`text`), matching what `linkDescriptor` gives for a link to them (#168).
@@ -12,6 +13,7 @@
 
 ### Added
 
+- `fhBridge.setNote(ptr, text)`: sets the inline note (NOTE2) on a record, fact or citation, creating it when there is none. Read-write only (#157).
 - `fhBridge.findFact(ptrRecord, tag, match)`: returns a pointer on exactly one Fact of a record, matched by `year`, `date`, `value` and/or `place`, or raises an error with the count when none or several match. Read-only, available in both modes (#156).
 - User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user
   installs by hand, from the project's `Plugin Data\AI Connector\modules` folder and then from the

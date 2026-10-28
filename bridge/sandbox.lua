@@ -445,6 +445,16 @@ function M.build(accessMode, privacySettings, modules)
       env[name] = trackedWrite(_G[name])
     end
 
+    -- A NOTE sub-item links a shared Note record; fhSetValueAsText on it stores nothing and
+    -- raises nothing. The inline note is NOTE2. Refused before the tracker arms.
+    local trackedSetText = env.fhSetValueAsText
+    env.fhSetValueAsText = function(ptr, ...)
+      if fhGetTag(ptr) == "NOTE" and fhHasParentItem(ptr) then
+        error("fhSetValueAsText: a NOTE item links a shared Note record, so text set on it is silently discarded -- use NOTE2 for an inline note (fhBridge.setNote does this)")
+      end
+      return trackedSetText(ptr, ...)
+    end
+
     -- createSourceFromTemplate/citeSource/logActivity/setTftfText/createFact each call
     -- real fh* write globals directly (not via fhu), so each stays gated to read-write
     -- here. validatedTrackedWrite/validatedTrackedLog (not plain trackedWrite) for these,
@@ -462,6 +472,8 @@ function M.build(accessMode, privacySettings, modules)
       realSessionLogHelper.validateLogActivity, realSessionLogHelper.logActivity)
     env.fhBridge.setTftfText = validatedTrackedWrite(
       realRichTextHelper.validateSetTftfText, realRichTextHelper.setTftfText)
+    env.fhBridge.setNote = validatedTrackedWrite(
+      realRichTextHelper.validateSetNote, realRichTextHelper.setNote)
     env.fhBridge.createFact = validatedTrackedWrite(
       realFactHelper.validateCreateFact, realFactHelper.createFact)
   end
