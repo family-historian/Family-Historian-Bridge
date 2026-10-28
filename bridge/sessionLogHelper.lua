@@ -73,9 +73,8 @@ function M.validateLogActivity(ptrRecord, action, media)
   end
   -- ptrRecord must be a record itself, not a Fact/sub-item (AddRecordLink requires a
   -- record). If it is a Fact/sub-item, MoveToRecordItem climbs to its owning record
-  -- instead of erroring (docs/adr/0031) -- done after the action/media checks below
-  -- since MoveToRecordItem mutates ptrRecord in place, and a call that's going to fail
-  -- validation anyway shouldn't touch the caller's pointer first.
+  -- instead of erroring (docs/adr/0031). The climb runs on a clone: MoveToRecordItem moves
+  -- its receiver in place, and the caller's own pointer must stay on the item it was given.
   if type(action) ~= "string" or action == "" then
     error("logActivity: action must be a non-empty string describing what happened")
   end
@@ -84,6 +83,7 @@ function M.validateLogActivity(ptrRecord, action, media)
   end
   if fhHasParentItem(ptrRecord) then
     local originalTag = tostring(fhGetTag(ptrRecord))  -- for the error message below
+    ptrRecord = ptrRecord:Clone()
     ptrRecord:MoveToRecordItem(ptrRecord)
     -- Defensive backstop -- MoveToRecordItem should always resolve to a real record.
     problem = familyHelper.pointerProblem(ptrRecord)

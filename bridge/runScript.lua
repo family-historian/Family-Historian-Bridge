@@ -115,11 +115,11 @@ local DATA_REF_CALL_SHAPES = {
 local function dataReferenceViolation(scriptText)
   local messages = {}
   for _, shape in ipairs(DATA_REF_CALL_SHAPES) do
-    -- '.-' (non-greedy) matches the 1st argument up to the first comma, so this doesn't
-    -- see through an expression containing its own comma as the 1st argument -- same class
-    -- of limitation eachFhCallName above already has. The %1 backreference requires the
-    -- captured quote character to match at both ends.
-    local pattern = '%f[%w_]' .. shape.name .. '%s*%(.-,%s*([\'"])(%.[^\'"]*)%1'
+    -- '[^\n]-' (non-greedy, one line) matches the 1st argument up to the first comma that
+    -- is followed by a leading-dot literal, so a separator literal in a later call or line
+    -- never pairs with an earlier correct call. The %1 backreference requires the captured
+    -- quote character to match at both ends.
+    local pattern = '%f[%w_]' .. shape.name .. '%s*%([^\n]-,%s*([\'"])(%.[^\'"]*)%1'
     local _, ref = scriptText:match(pattern)
     if ref then
       table.insert(messages, "script calls " .. shape.name .. "(..., '" .. ref ..

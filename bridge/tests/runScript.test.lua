@@ -448,6 +448,13 @@ check(not contains(runScript.run("return fhGetItemText(ptr, 'INDI.BIRT.DATE')"),
 check(not contains(runScript.run("child:MoveToFirstChildItem(parentPtr, '.FLGS')"), 'leading dot'),
   'MoveToFirstChildItem is not mistaken for MoveTo by the leading-dot check')
 
+-- The match is confined to one line: a correct MoveTo earlier in a script must not pair
+-- with an unrelated dot-leading literal (a '. ' separator) in a later call.
+check(not contains(runScript.run("local p = fhNewItemPtr()\np:MoveTo(p, '~.DATE')\nlocal parts = {'a','b'}\nreturn table.concat(parts, '. ')", 'read-only'), 'leading dot'),
+  'a dot-leading literal in a later call is not paired with an earlier correct MoveTo')
+check(contains(runScript.run("local p = fhNewItemPtr()\np:MoveTo(fhGetItemPtr(p, '~.X'), '.DATE')", 'read-only'), 'leading dot'),
+  'a bare-leading-dot MoveTo whose first argument contains its own call is still rejected')
+
 -- Known text-heuristic limitation, same as every other pre-scan here: a data reference
 -- built into a variable first, rather than passed as a literal, isn't caught.
 check(not contains(runScript.run("local ref = '.DATE'; child:MoveTo(otherPtr, ref)"), 'leading dot'),

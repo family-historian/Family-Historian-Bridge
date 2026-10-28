@@ -130,6 +130,11 @@ fhGetTag = function(ptr)
 end
 fhNewItemPtr = newPtr
 
+-- Real FH pointers clone; validateLogActivity climbs a clone so the caller's pointer stays put.
+function PtrMethods:Clone()
+  return setmetatable({ list = self.list, index = self.index }, PtrMethods)
+end
+
 -- Needed for validateLogActivity's auto-correct climb: moves self to point at
 -- ptrRef's owning record, walking the .parent chain as far as needed (a Fact, or something
 -- nested even deeper under it) the same way real MoveToRecordItem climbs regardless of
@@ -513,6 +518,22 @@ local citationLink = citationSave.richText.segments[#citationSave.richText.segme
 check(citationLink.kind == 'reclink' and citationLink.node == currentNode(indiG),
   'a pointer nested two levels deep (a citation under a Fact) still climbs all the way to the owning record')
 
+-- The climb must not move the caller's own pointer: a script that logs with a Fact pointer
+-- and then keeps using that variable must still be on the Fact.
+local keepPtr = newPtr()
+keepPtr.list = { factNode }
+keepPtr.index = 1
+freshSessionLogHelper.logActivity(keepPtr, "created")
+check(currentNode(keepPtr) == factNode,
+  'logActivity leaves the caller\'s Fact pointer on the Fact after climbing to log')
+
+local keepValidatePtr = newPtr()
+keepValidatePtr.list = { factNode }
+keepValidatePtr.index = 1
+local validated = freshSessionLogHelper.validateLogActivity(keepValidatePtr, "created")
+check(currentNode(keepValidatePtr) == factNode and currentNode(validated) == currentNode(indiG),
+  'validateLogActivity returns the owning record without moving the pointer it was given')
+
 -- Defensive backstop: if the climb doesn't land on a record this fake tree actually has on
 -- file (modelling a real-world "MoveToRecordItem couldn't resolve to anything usable" case),
 -- validateLogActivity's re-check after climbing still catches it as a bad pointer instead of
@@ -624,17 +645,15 @@ check(okValidateOnlyBadType == false, 'validateLogActivity rejects a wrong-typed
 check(contains(errValidateOnlyBadType, "number") and contains(errValidateOnlyBadType, "42"),
   'the rejection names both the type and the value actually given')
 
--- A fresh Fact fixture, not the module-level factPtr above -- that one was already climbed
--- (and so mutated in place, matching MoveToRecordItem's real "moves this pointer" contract)
--- by the earlier logActivity(factPtr, ...) call, so by now it points at indiG, not the Fact.
+-- A fresh Fact fixture for the validate-only call below.
 local factPtr2 = newPtr()
 factPtr2.list = { factNode }
 factPtr2.index = 1
 
 local okValidateOnlyFactPtr, resolvedValidateOnlyFactPtr = pcall(freshSessionLogHelper.validateLogActivity, factPtr2, "created")
 check(okValidateOnlyFactPtr == true, 'validateLogActivity also auto-corrects a Fact/sub-item ptrRecord (issue #117), same as logActivity')
-check(resolvedValidateOnlyFactPtr == factPtr2 and currentNode(resolvedValidateOnlyFactPtr) == currentNode(indiG),
-  'the returned pointer is the same object, now climbed to point at the Fact\'s owning record')
+check(resolvedValidateOnlyFactPtr ~= factPtr2 and currentNode(resolvedValidateOnlyFactPtr) == currentNode(indiG) and currentNode(factPtr2) == factNode,
+  'the returned pointer is a clone climbed to the Fact\'s owning record; the given pointer stays on the Fact')
 
 ------------------------------------------------------------------
 -- Write-result checks (issue #111, docs/adr/0028): a bOK=false/NULL-pointer failure from
