@@ -455,7 +455,7 @@ function M.build(accessMode, privacySettings, modules)
       return trackedSetText(ptr, ...)
     end
 
-    -- createSourceFromTemplate/citeSource/logActivity/setTftfText/createFact each call
+    -- createSourceFromTemplate/citeSource/logActivity/setTftfText/setNote/createFact each call
     -- real fh* write globals directly (not via fhu), so each stays gated to read-write
     -- here. validatedTrackedWrite/validatedTrackedLog (not plain trackedWrite) for these,
     -- since each has its own pure validation phase worth running before the tracker arms
