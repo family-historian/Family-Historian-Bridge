@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- A Read-only script is no longer refused because a comment or string literal merely mentions a write-capable function, and a comment mentioning `logActivity` no longer satisfies the read-write "must log" check (#154).
+- Under Name Only visibility, `getAllDetails` now returns the person's display name (`text`), matching what `linkDescriptor` gives for a link to them (#168).
 - `fhBridge.logActivity` no longer moves the caller's pointer: given a Fact or sub-item pointer, it climbs a copy to the owning record, so the same variable can still be used afterwards (#152).
 - The leading-dot Data Reference check no longer rejects a script because a dot-leading literal such as `'. '` follows an earlier, correct `MoveTo(...)`; it now looks only at the same line (#153).
 

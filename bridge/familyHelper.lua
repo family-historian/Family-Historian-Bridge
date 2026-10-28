@@ -665,6 +665,8 @@ end
 --
 -- Returns ptr's own value (if any) plus every child/subfield beneath it, recursively, as
 -- one JSON-safe tree (see describeItem). Works on any item, not just a top-level record.
+-- Under Name Only visibility it returns just { tag, id, qualifiedId, text } -- the same
+-- shape linkDescriptor gives for a link to that record -- with no facts.
 function M.getAllDetails(ptr)
   ptr = resolvePointer(ptr)
   local problem = pointerProblem(ptr)
@@ -676,7 +678,7 @@ function M.getAllDetails(ptr)
   if level == "exclude" then
     error("getAllDetails: this Individual is Excluded by the Session's Visibility settings. Don't retrieve this person's data by another route.")
   elseif level == "nameOnly" then
-    return { tag = fhGetTag(ptr), id = fhGetRecordId(ptr), qualifiedId = fhGetQualifiedRecordId(ptr) }
+    return { tag = fhGetTag(ptr), id = fhGetRecordId(ptr), qualifiedId = fhGetQualifiedRecordId(ptr), text = fhGetDisplayText(ptr) }
   end
   return describeItem(ptr)
 end

@@ -254,6 +254,32 @@ check(contains(
   '"ok":true'),
   'a read-write script that both writes and logs passes the pre-scan and runs normally')
 
+-- A write-capable name that appears only in a comment or a string literal is not a call:
+-- the write-name pre-scan reads the script with those stripped.
+local function refusedAsWrite(script, mode)
+  local response = runScript.run(script, mode)
+  return contains(response, 'write-capable')
+end
+
+check(not refusedAsWrite("-- later we will call createFact here\nreturn 1", 'read-only'),
+  'a write-capable name in a line comment does not trip the read-only pre-scan')
+check(not refusedAsWrite("return 'see fhCreateItem docs'", 'read-only'),
+  'a write-capable name in a string literal does not trip the read-only pre-scan')
+check(not refusedAsWrite("--[==[ fhCreateItem\ncreateFact ]==]\nreturn 1", 'read-only'),
+  'a write-capable name in a long-bracket comment does not trip the read-only pre-scan')
+check(not refusedAsWrite("return [[fhCreateItem]]", 'read-only'),
+  'a write-capable name in a long-bracket string does not trip the read-only pre-scan')
+check(not refusedAsWrite("return 'it\\'s fhCreateItem'", 'read-only'),
+  'a write-capable name after an escaped quote inside a string does not trip the read-only pre-scan')
+check(refusedAsWrite("return 'a' .. tostring(fhCreateItem('X'))", 'read-only'),
+  'a real write-capable call after a string literal is still refused')
+check(refusedAsWrite("local s = '--'\nfhu.createIndi(s)", 'read-only'),
+  'a string containing dashes does not hide a following real write-capable call as a comment')
+
+-- A logActivity mention in a comment does not satisfy the read-write "must log" check.
+check(refusedAsWrite("-- fhBridge.logActivity\nfhu.createIndi('X')", 'read-write'),
+  'a logActivity mention in a comment does not satisfy the read-write pre-scan')
+
 -- Read-write script that calls a write function but logActivity's only appearance in the
 -- source never actually executes (dead code): passes the pre-scan (the text is present),
 -- but is caught by the post-run backstop.

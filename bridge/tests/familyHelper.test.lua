@@ -744,7 +744,9 @@ do
 
   local details = familyHelper.getAllDetails(ptrFor(nameOnly))
   check(details.tag == "INDI" and details.id == nameOnly.id and details.qualifiedId == "I" .. nameOnly.id,
-    'getAllDetails under Name Only returns identity fields only')
+    'getAllDetails under Name Only returns the record\'s identity fields')
+  check(details.text == "Nameonly Plugin",
+    'getAllDetails under Name Only carries the display name, same as linkDescriptor')
   check(details.children == nil and details.value == nil,
     'getAllDetails under Name Only carries no facts (no children/value)')
 

@@ -36,14 +36,75 @@ for _, name in ipairs(sandbox.KNOWN_FH_GLOBAL_NAMES) do
   knownFhGlobalNames[name] = true
 end
 
+-- Returns scriptText with comments and string literals (short and long-bracket forms)
+-- each replaced by one space, so a name scan sees only code. A heuristic tokenizer, not a
+-- parser: an unterminated string ends at the line break, an unterminated long form at the
+-- end of the text.
+local function stripCommentsAndStrings(scriptText)
+  local parts = {}
+  local pos = 1
+  local len = #scriptText
+  while pos <= len do
+    local special = scriptText:find('[%-%[\'"]', pos)
+    if not special then
+      parts[#parts + 1] = scriptText:sub(pos)
+      break
+    end
+    parts[#parts + 1] = scriptText:sub(pos, special - 1)
+    local skipTo
+    local char = scriptText:sub(special, special)
+    if scriptText:sub(special, special + 1) == '--' then
+      local level = scriptText:match('^%-%-%[(=*)%[', special)
+      if level then
+        local _, closeEnd = scriptText:find(']' .. level .. ']', special, true)
+        skipTo = (closeEnd or len) + 1
+      else
+        skipTo = scriptText:find('\n', special, true) or len + 1
+      end
+    elseif char == '[' then
+      local level = scriptText:match('^%[(=*)%[', special)
+      if level then
+        local _, closeEnd = scriptText:find(']' .. level .. ']', special, true)
+        skipTo = (closeEnd or len) + 1
+      end
+    elseif char == '"' or char == "'" then
+      local cursor = special + 1
+      while cursor <= len do
+        local c = scriptText:sub(cursor, cursor)
+        if c == '\\' then
+          cursor = cursor + 2
+        elseif c == char then
+          cursor = cursor + 1
+          break
+        elseif c == '\n' then
+          break
+        else
+          cursor = cursor + 1
+        end
+      end
+      skipTo = cursor
+    end
+    if skipTo then
+      parts[#parts + 1] = ' '
+      pos = skipTo
+    else
+      parts[#parts + 1] = char
+      pos = special + 1
+    end
+  end
+  return table.concat(parts)
+end
+
 -- Static pre-scan: a best-effort heuristic over the script's raw source text, not a
 -- security boundary -- the runtime backstop in M.run below is what actually guarantees no
 -- write escapes detection. Runs before load() is even attempted, so it catches a violation
--- even in a script that wouldn't otherwise compile.
+-- even in a script that wouldn't otherwise compile. Reads the script with comments and
+-- string literals stripped, so a name that is only mentioned there doesn't count.
 local function preScanViolation(scriptText, accessMode)
+  local code = stripCommentsAndStrings(scriptText)
   local writeName = nil
   for _, name in ipairs(sandbox.WRITE_NAMES) do
-    if containsName(scriptText, name) then
+    if containsName(code, name) then
       writeName = name
       break
     end
@@ -56,7 +117,7 @@ local function preScanViolation(scriptText, accessMode)
     return 'script calls ' .. writeName .. ', a write-capable function, but the bridge is in Read-only mode'
   end
 
-  if accessMode == 'read-write' and not containsName(scriptText, 'logActivity') then
+  if accessMode == 'read-write' and not containsName(code, 'logActivity') then
     return 'script calls ' .. writeName .. ', a write-capable function, but never calls fhBridge.logActivity to log the write'
   end
 
