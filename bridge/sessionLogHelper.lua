@@ -64,7 +64,9 @@ end
 -- sessionLogHelper.validateLogActivity(ptrRecord, action, media)
 -- The validation half of logActivity, extracted so sandbox.lua can call it before
 -- arming the write tracker -- a rejected call here should never look like a write.
--- Returns the resolved live pointer for logActivity to reuse.
+-- Returns the resolved live pointer for logActivity to reuse: a clone climbed to the owning
+-- record when given a Fact/sub-item, otherwise the caller's own pointer. Never moves the
+-- pointer it was given.
 function M.validateLogActivity(ptrRecord, action, media)
   ptrRecord = familyHelper.resolvePointer(ptrRecord)
   local problem = familyHelper.pointerProblem(ptrRecord)
@@ -73,8 +75,8 @@ function M.validateLogActivity(ptrRecord, action, media)
   end
   -- ptrRecord must be a record itself, not a Fact/sub-item (AddRecordLink requires a
   -- record). If it is a Fact/sub-item, MoveToRecordItem climbs to its owning record
-  -- instead of erroring (docs/adr/0031). The climb runs on a clone: MoveToRecordItem moves
-  -- its receiver in place, and the caller's own pointer must stay on the item it was given.
+  -- instead of erroring. The climb runs on a clone: MoveToRecordItem moves its receiver in
+  -- place, and the caller's own pointer must stay on the item it was given.
   if type(action) ~= "string" or action == "" then
     error("logActivity: action must be a non-empty string describing what happened")
   end
@@ -83,16 +85,17 @@ function M.validateLogActivity(ptrRecord, action, media)
   end
   if fhHasParentItem(ptrRecord) then
     local originalTag = tostring(fhGetTag(ptrRecord))  -- for the error message below
-    ptrRecord = ptrRecord:Clone()
-    ptrRecord:MoveToRecordItem(ptrRecord)
+    local ownerPtr = ptrRecord:Clone()
+    ownerPtr:MoveToRecordItem(ownerPtr)
     -- Defensive backstop -- MoveToRecordItem should always resolve to a real record.
-    problem = familyHelper.pointerProblem(ptrRecord)
+    problem = familyHelper.pointerProblem(ownerPtr)
     if problem then
       error("logActivity: ptrRecord's owning record could not be resolved via MoveToRecordItem from a '" .. originalTag .. "' item" .. problem)
     end
-    if fhHasParentItem(ptrRecord) then
-      error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ptrRecord)) .. "' item (climbed from a '" .. originalTag .. "' item)")
+    if fhHasParentItem(ownerPtr) then
+      error("logActivity: ptrRecord must point to the record this activity concerns, not a Fact or sub-item within one -- got a '" .. tostring(fhGetTag(ownerPtr)) .. "' item (climbed from a '" .. originalTag .. "' item)")
     end
+    ptrRecord = ownerPtr
   end
   -- Checked last, on the guaranteed record-level pointer (after any climb above).
   if familyHelper.recordVisibility(ptrRecord) == "exclude" then

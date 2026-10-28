@@ -51,21 +51,11 @@ enough that the climb doesn't land on a clean, top-level record still produces t
 own clear error, rather than reaching `AddRecordLink` with a broken pointer and failing there
 with a confusing, disconnected message.
 
-Note that `MoveToRecordItem` mutates the pointer object it's called on in place (per FH's own
-docs: "Moves *this* pointer..."), not a copy, a caller that holds onto the original `ptrRecord`
-object after calling `logActivity`/`validateLogActivity` will find it now pointing at the
-climbed-to record, not the original item. In practice this is never observed to matter: every
-`run_lua` script this project has seen passes a pointer straight into `logActivity` inline (fresh
-off `fhCreateItem`/`fhGetValueAsLink`/etc.) and never reuses that same pointer object afterward.
-
-That mutate-in-place side effect does still need to respect `validateLogActivity`'s own
-long-standing contract of validating everything up front, before touching anything (its own
-doc comment: the buffer is module-level state a bad call shouldn't be allowed to leave in an
-inconsistent partial state). The climb is therefore ordered *after* the `action`/`media`
-checks, not immediately next to the `fhHasParentItem` check that decides whether it's needed,
-a call that's going to error on a bad `action`/`media` anyway must leave the caller's Fact
-pointer exactly as passed, not climb it first and still fail (caught in code review, before
-merge, with its own regression test in `sessionLogHelper.test.lua`).
+`MoveToRecordItem` moves the pointer it is called on in place (per FH's own docs: "Moves *this*
+pointer..."). The climb therefore runs on a clone, and `validateLogActivity` returns that clone, so
+the caller's own pointer stays on the Fact it was given. An earlier version climbed the caller's
+pointer in place; a script that logged with a Fact pointer and then kept using the same variable
+found it on the owning record, so a following `citeSource` landed on the record, not the Fact.
 
 ## Consequences
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- `fhBridge.logActivity` no longer moves the caller's pointer: given a Fact or sub-item pointer, it climbs a copy to the owning record, so the same variable can still be used afterwards (#152).
+- The leading-dot Data Reference check no longer rejects a script because a dot-leading literal such as `'. '` follows an earlier, correct `MoveTo(...)`; it now looks only at the same line (#153).
+
 ### Added
 
 - User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user
