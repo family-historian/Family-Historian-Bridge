@@ -271,6 +271,11 @@ package.loaded.richTextHelper = fakeRichTextHelper
 -- reason: this test stays a pure allowlist check, independent of familyHelper.lua's own
 -- behavior (covered by familyHelper.test.lua). Every stub returns an identifiable value
 -- for the same forwarding-proof reason as fakeSourceHelper.citeSource above.
+local fakePersonEventsHelper = {
+  getPersonEvents = function(ptr, opts) return 'getpersonevents' end,
+}
+package.loaded.personEventsHelper = fakePersonEventsHelper
+
 local fakeFamilyHelper = {
   -- setPrivacySettings: sandbox.build calls this unconditionally before
   -- building env.fhBridge -- a fake missing it would fail every scenario in this file with
@@ -429,6 +434,7 @@ check(env.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.
 check(env.fhBridge.findByNames == fakeFamilyHelper.findByNames, 'fhBridge.findByNames present under read-only, by reference')
 check(env.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag present under read-only, by reference')
 check(env.fhBridge.findFact == fakeFamilyHelper.findFact, 'fhBridge.findFact present under read-only, by reference')
+check(env.fhBridge.getPersonEvents == fakePersonEventsHelper.getPersonEvents, 'fhBridge.getPersonEvents present under read-only, by reference')
 check(env.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources present under read-only, by reference (a pure read, unlike sourceHelper.lua\'s other two members)')
 check(env.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields present under read-only, by reference (issue #73 -- a pure read, same as findSources)')
 check(env.fhBridge.getTemplateFieldCensus == fakeSourceHelper.getTemplateFieldCensus, 'fhBridge.getTemplateFieldCensus present under read-only, by reference (issue #74 -- a pure read, same as findSources/getPopulatedTemplateFields)')
@@ -770,6 +776,7 @@ check(envReadWrite3.fhBridge.getAncestors == fakeFamilyHelper.getAncestors, 'fhB
 check(envReadWrite3.fhBridge.getDescendants == fakeFamilyHelper.getDescendants, 'fhBridge.getDescendants still present under read-write, by reference')
 check(envReadWrite3.fhBridge.findByNames == fakeFamilyHelper.findByNames, 'fhBridge.findByNames still present under read-write, by reference')
 check(envReadWrite3.fhBridge.getFactsByTag == fakeFamilyHelper.getFactsByTag, 'fhBridge.getFactsByTag still present under read-write, by reference')
+check(envReadWrite3.fhBridge.getPersonEvents == fakePersonEventsHelper.getPersonEvents, 'fhBridge.getPersonEvents still present under read-write, by reference')
 check(envReadWrite3.fhBridge.findFact == fakeFamilyHelper.findFact, 'fhBridge.findFact still present under read-write, by reference')
 check(envReadWrite3.fhBridge.findSources == fakeSourceHelper.findSources, 'fhBridge.findSources still present under read-write, by reference (still unwrapped -- it never writes)')
 check(envReadWrite3.fhBridge.getPopulatedTemplateFields == fakeSourceHelper.getPopulatedTemplateFields, 'fhBridge.getPopulatedTemplateFields still present under read-write, by reference (issue #73 -- still unwrapped, it never writes)')

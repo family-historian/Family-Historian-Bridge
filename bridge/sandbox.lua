@@ -395,6 +395,7 @@ function M.build(accessMode, privacySettings, modules)
   local realFamilyHelper = require('familyHelper')
   local realSourceHelper = require('sourceHelper')
   local realRichTextHelper = require('richTextHelper')
+  local realPersonEventsHelper = require('personEventsHelper')
   local userModules = require('userModules')
   -- Module-level, not threaded through every fhBridge.* call's own parameters: FH's IUP
   -- mainloop is single-threaded (one script runs to completion before the next starts, same
@@ -431,6 +432,7 @@ function M.build(accessMode, privacySettings, modules)
     findByNames = realFamilyHelper.findByNames,
     getFactsByTag = realFamilyHelper.getFactsByTag,
     findFact = realFamilyHelper.findFact,
+    getPersonEvents = realPersonEventsHelper.getPersonEvents,
     findSources = realSourceHelper.findSources,
     getPopulatedTemplateFields = realSourceHelper.getPopulatedTemplateFields,
     getTemplateFieldCensus = realSourceHelper.getTemplateFieldCensus,

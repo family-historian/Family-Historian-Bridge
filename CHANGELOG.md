@@ -4,6 +4,7 @@
 
 ### Added
 
+- `fhBridge.getPersonEvents(ptrIndividual, opts)` returns everything a person is recorded as involved in (their own, family and witnessed facts, optionally close relatives' timeline facts) as one chronological list, with each fact's principals, notes, citations and media (#160).
 - `describe_project`'s `bridgeState.serverPath` and the version-mismatch note report the folder the running server loaded from, and the install guide explains running from both Claude Desktop and Claude Code (#158).
 
 ### Fixed
