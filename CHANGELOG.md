@@ -4,14 +4,27 @@
 
 ## 2.0.0
 
-- Server now writes one stderr line per Bridge connection failure, version block and communication error (error class, host:port, tool, server version and path; no script text or tree data), so Claude Desktop's MCP log shows the cause (#169).
-- A generic "Bridge communication error" result now tells Claude not to retry and to report the message to the user (#169).
-- Bridge dialog shows "N changes applied this Session - not saved to the project" once a read-write call has committed (#165).
+**Major release: update the Bridge plugin and the server together.** The server refuses to run scripts against a Bridge whose major version differs. Install the 2.0.0 `AI_Connector.fh_lua` and the 2.0.0 `.mcpb`, then reload the plugin in FH (Tools -> Plugins; FH does not hot-reload an open plugin) and click Start.
 
 ### Added
 
+- The Bridge dialog shows "N changes applied this Session - not saved to the project" once a read-write call has committed, so it is clear when FH holds unsaved changes; the plugin cannot save the project (#165).
+- The server writes one stderr line per Bridge connection failure, version block and communication error (error class, host:port, tool, server version and path; no script text or tree data), so the host's MCP log shows the cause. On Claude Desktop that line appears in `~/Library/Logs/Claude/main.log` as well as the per-server log (#169).
+- User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user
+  installs by hand, from the project's `Plugin Data\AI Connector\modules` folder and then from the
+  user's own folder in FH's per-user Plugin Data. Each module runs in the calling script's sandbox,
+  with nothing a script couldn't do. `describe_project` lists them as `userModules` (whether each
+  loaded, what it exports, its `_DOC` lines), also available as `fhBridge.listModules()`. See
+  `docs/user-modules.md` and ADR 0039.
 - `fhBridge.getPersonEvents(ptrIndividual, opts)` returns everything a person is recorded as involved in (their own, family and witnessed facts, optionally close relatives' timeline facts) as one chronological list, with each fact's principals, notes, citations and media (#160).
+- `fhBridge.setNote(ptr, text)`: sets the inline note (NOTE2) on a record, fact or citation, creating it when there is none. Read-write only (#157).
+- `fhBridge.findFact(ptrRecord, tag, match)`: returns a pointer on exactly one Fact of a record, matched by `year`, `date`, `value` and/or `place`, or raises an error with the count when none or several match. Read-only, available in both modes (#156).
 - `describe_project`'s `bridgeState.serverPath` and the version-mismatch note report the folder the running server loaded from, and the install guide explains running from both Claude Desktop and Claude Code (#158).
+- `run_lua` guidance for traps that fail silently: no `select`, `gsub` patterns, `table.sort` locale ordering, quarter dates, `Date:SetValueAsText` returning false, unvalidated days, surnames read back in capitals, and setting a witness role (#159).
+
+### Changed
+
+- A generic "Bridge communication error" result now tells Claude not to retry and to report the message to the user, so a blocked port no longer produces a retry loop that burns the user's messages (#169).
 
 ### Fixed
 
@@ -21,18 +34,6 @@
 - Under Name Only visibility, `getAllDetails` now returns the person's display name (`text`), matching what `linkDescriptor` gives for a link to them (#168).
 - `fhBridge.logActivity` no longer moves the caller's pointer: given a Fact or sub-item pointer, it climbs a copy to the owning record, so the same variable can still be used afterwards (#152).
 - The leading-dot Data Reference check no longer rejects a script because a dot-leading literal such as `'. '` follows an earlier, correct `MoveTo(...)`; it now looks only at the same line (#153).
-
-### Added
-
-- `run_lua` guidance for traps that fail silently: no `select`, `gsub` patterns, `table.sort` locale ordering, quarter dates, `Date:SetValueAsText` returning false, unvalidated days, surnames read back in capitals, and setting a witness role (#159).
-- `fhBridge.setNote(ptr, text)`: sets the inline note (NOTE2) on a record, fact or citation, creating it when there is none. Read-write only (#157).
-- `fhBridge.findFact(ptrRecord, tag, match)`: returns a pointer on exactly one Fact of a record, matched by `year`, `date`, `value` and/or `place`, or raises an error with the count when none or several match. Read-only, available in both modes (#156).
-- User project modules (#150): run_lua scripts can `require("<name>")` Lua helper modules the user
-  installs by hand, from the project's `Plugin Data\AI Connector\modules` folder and then from the
-  user's own folder in FH's per-user Plugin Data. Each module runs in the calling script's sandbox,
-  with nothing a script couldn't do. `describe_project` lists them as `userModules` (whether each
-  loaded, what it exports, its `_DOC` lines), also available as `fhBridge.listModules()`. See
-  `docs/user-modules.md` and ADR 0039.
 
 ## 1.0.5
 
