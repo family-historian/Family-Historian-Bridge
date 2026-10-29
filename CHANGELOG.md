@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.0.0
+
 - Server now writes one stderr line per Bridge connection failure, version block and communication error (error class, host:port, tool, server version and path; no script text or tree data), so Claude Desktop's MCP log shows the cause (#169).
 - A generic "Bridge communication error" result now tells Claude not to retry and to report the message to the user (#169).
 - Bridge dialog shows "N changes applied this Session - not saved to the project" once a read-write call has committed (#165).
