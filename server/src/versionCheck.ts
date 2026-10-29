@@ -4,6 +4,7 @@ import {
   interpretBridgeResponse,
   textResult,
 } from "./bridgeResponse.js";
+import { logBridgeFailure } from "./bridgeLog.js";
 import { SERVER_ROOT } from "./serverVersion.js";
 
 // Bridge/server version-mismatch detection: resolved design at
@@ -181,16 +182,23 @@ export async function checkBridgeVersion(
   queryBridgeVersion: () => Promise<string>,
   serverVersion: string,
   serverPath: string = SERVER_ROOT,
+  tool?: string,
 ): Promise<CheckBridgeVersionResult> {
   let raw: string;
   try {
     raw = await queryBridgeVersion();
   } catch (err) {
-    return { block: describeBridgeConnectionError(err), reason: "connection-error" };
+    return { block: describeBridgeConnectionError(err, tool), reason: "connection-error" };
   }
 
   const outcome = interpretVersionResponse(raw, serverVersion);
   if (outcome.status === "block") {
+    logBridgeFailure(
+      "version-block",
+      undefined,
+      tool,
+      `Bridge v${outcome.bridgeVersion} vs server v${serverVersion}`,
+    );
     return {
       block: textResult(
         `Bridge and server have incompatible major versions (Bridge v${outcome.bridgeVersion} vs server v${serverVersion}, running from ${serverPath}) — refusing to run the script. Tell the user to update the Bridge plugin and/or the server so their major versions match.`,
@@ -263,8 +271,14 @@ export async function checkVersionThenRunScript(
   serverVersion: string,
   script: string,
   assistant?: string | null,
+  tool?: string,
 ): Promise<VersionCheckedScriptRun> {
-  const versionCheck = await checkBridgeVersion(deps.queryBridgeVersion, serverVersion);
+  const versionCheck = await checkBridgeVersion(
+    deps.queryBridgeVersion,
+    serverVersion,
+    SERVER_ROOT,
+    tool,
+  );
   if (versionCheck.block) return { block: versionCheck.block };
 
   let raw: string;
@@ -273,7 +287,7 @@ export async function checkVersionThenRunScript(
       ? await deps.runLuaOnBridge(script, { assistant })
       : await deps.runLuaOnBridge(script);
   } catch (err) {
-    return { block: describeBridgeConnectionError(err) };
+    return { block: describeBridgeConnectionError(err, tool) };
   }
 
   return { block: null, versionCheck, raw };
@@ -284,8 +298,9 @@ export async function runVersionCheckedScript(
   serverVersion: string,
   script: string,
   assistant?: string | null,
+  tool?: string,
 ): Promise<CallToolResult> {
-  const run = await checkVersionThenRunScript(deps, serverVersion, script, assistant);
+  const run = await checkVersionThenRunScript(deps, serverVersion, script, assistant, tool);
   if (run.block) return run.block;
 
   return appendVersionNote(interpretBridgeResponse(run.raw), run.versionCheck.note);

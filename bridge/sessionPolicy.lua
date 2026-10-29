@@ -47,4 +47,13 @@ function M.shouldConfirmBeforeExit(sessionRunning, lastRequestHandledTime, now, 
   return now - lastRequestHandledTime < confirmWindowSeconds
 end
 
+-- Status-label line shown once a read-write call has committed changes this Session; nil
+-- before that. The plugin can't save the project (saving is FH's own action), so the
+-- wording says the changes are applied but not saved.
+function M.changesAppliedMarker(commitCount)
+  if not commitCount or commitCount < 1 then return nil end
+  local noun = commitCount == 1 and "change" or "changes"
+  return commitCount .. " " .. noun .. " applied this Session - not saved to the project"
+end
+
 return M

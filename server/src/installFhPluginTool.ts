@@ -9,7 +9,7 @@ import {
   type RunLuaOnBridgeOptions,
 } from "./bridgeClient.js";
 import { describeBridgeConnectionError, interpretBridgeResponse } from "./bridgeResponse.js";
-import { SERVER_VERSION } from "./serverVersion.js";
+import { SERVER_ROOT, SERVER_VERSION } from "./serverVersion.js";
 import { appendVersionNote, checkBridgeVersion } from "./versionCheck.js";
 
 export interface InstallFhPluginDeps {
@@ -42,7 +42,12 @@ async function resolvePluginsFolder(
   // exact same connection attempt and already has its own tailored no-Session message and
   // explicit-path fallback, so that's left to handle it rather than surfacing a second,
   // less specific error first.
-  const versionCheck = await checkBridgeVersion(deps.queryBridgeVersion, SERVER_VERSION);
+  const versionCheck = await checkBridgeVersion(
+    deps.queryBridgeVersion,
+    SERVER_VERSION,
+    SERVER_ROOT,
+    "install_fh_plugin",
+  );
   if (versionCheck.block && versionCheck.reason === "version-mismatch") {
     return { errorResult: versionCheck.block };
   }
@@ -63,7 +68,7 @@ async function resolvePluginsFolder(
         ),
       };
     }
-    return { errorResult: describeBridgeConnectionError(err) };
+    return { errorResult: describeBridgeConnectionError(err, "install_fh_plugin") };
   }
 
   const bridgeResult = interpretBridgeResponse(raw);

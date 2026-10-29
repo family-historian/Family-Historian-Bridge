@@ -177,17 +177,18 @@ local dlg = iup.dialog{
 -- than a system-wide topmost -- this keeps the dialog above Family Historian specifically,
 -- not above every other application on screen.
 iup.SetAttribute(dlg, "NATIVEPARENT", fhGetContextInfo("CI_PARENT_HWND"))
--- lblStatus can later grow to 3 lines ("Listening.../Last request.../a version-mismatch
--- line) but starts as a single short line ("Not listening.") -- if MINSIZE below is
--- captured from *that* rastersize, the dialog can never grow to fit the 3-line case later
--- (IUP doesn't auto-grow past a fixed MINSIZE), truncating the status text. Seed a
--- worst-case 3-line placeholder before mapping, purely so MINSIZE reserves enough height/
--- width, then reset it to the real initial text once MINSIZE is captured. Widens/heightens
--- the dialog's floor permanently (even when no mismatch is in play), which is the deliberate
--- trade-off here.
+-- lblStatus can later grow to 4 lines ("Listening.../Last request.../a version-mismatch
+-- line/the changes-applied marker) but starts as a single short line ("Not listening.")
+-- -- if MINSIZE below is captured from *that* rastersize, the dialog can never grow to fit
+-- the 4-line case later (IUP doesn't auto-grow past a fixed MINSIZE), truncating the
+-- status text. Seed a worst-case 4-line placeholder before mapping, purely so MINSIZE
+-- reserves enough height/width, then reset it to the real initial text once MINSIZE is
+-- captured. Widens/heightens the dialog's floor permanently (even when no mismatch is in
+-- play), which is the deliberate trade-off here.
 lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (read-write)" ..
     "\nLast request handled at 00:00:00" ..
-    "\nVersion mismatch: Bridge 99.99.99 vs server 99.99.99 (major version differs)"
+    "\nVersion mismatch: Bridge 99.99.99 vs server 99.99.99 (major version differs)" ..
+    "\n" .. sessionPolicy.changesAppliedMarker(99)
 -- Map first so RASTERSIZE is populated, then use that as the floor for MINSIZE --
 -- otherwise a user could resize the dialog small enough to push the Start/Stop buttons
 -- off-screen.
@@ -435,6 +436,8 @@ function timPoll:action_cb()
     dlg.bgcolor = statusColorForMode(currentAccessMode())
     lblStatus.title = "Listening on 127.0.0.1:" .. PORT .. " (" .. currentAccessMode() .. ")" ..
         "\nLast request handled at " .. os.date("%H:%M:%S") .. (currentVersionWarning or "")
+    local changesMarker = sessionPolicy.changesAppliedMarker(commitCount)
+    if changesMarker then lblStatus.title = lblStatus.title .. "\n" .. changesMarker end
 
     -- Send-then-rethrow: a write-mode runtime error is already reported to the client
     -- above. To give FH's own auto-undo an actual chance to fire, the whole plugin has to

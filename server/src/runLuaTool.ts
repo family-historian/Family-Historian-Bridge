@@ -40,7 +40,7 @@ export async function handleRunLua(
   clientName?: string | null,
 ): Promise<CallToolResult> {
   const assistant = resolveAssistantName(input.assistant, clientName);
-  return runVersionCheckedScript(deps, SERVER_VERSION, input.script, assistant);
+  return runVersionCheckedScript(deps, SERVER_VERSION, input.script, assistant, "run_lua");
 }
 
 export function registerRunLuaTool(

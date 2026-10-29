@@ -1,5 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
+import { logBridgeFailure } from "./bridgeLog.js";
 
 // Shared response handling for any tool that sends a script to the Bridge over
 // runLuaOnBridge and gets back its raw wire response — currently run_lua and
@@ -44,16 +45,25 @@ function isLuaErrorShape(
   return keys.length === 2 && obj.writeSessionRolledBack === true;
 }
 
-/** Maps a thrown error from runLuaOnBridge to the tool result Claude should see. */
-export function describeBridgeConnectionError(err: unknown): CallToolResult {
+/**
+ * Maps a thrown error from runLuaOnBridge to the tool result Claude should see, and logs
+ * it to stderr (the only thing Claude Desktop's MCP log captures). `tool` names the
+ * calling tool in that log line.
+ */
+export function describeBridgeConnectionError(err: unknown, tool?: string): CallToolResult {
   if (err instanceof BridgeConnectionRefusedError) {
+    logBridgeFailure("connection-failure", err, tool);
     return textResult(
       "No FH Bridge Session is running — ask the user to click Start in the FH Bridge dialog before retrying.",
       true,
     );
   }
   const message = err instanceof Error ? err.message : String(err);
-  return textResult(`Bridge communication error: ${message}`, true);
+  logBridgeFailure("communication-error", err, tool);
+  return textResult(
+    `Bridge communication error: ${message}\n\nDo not retry this call — report the message above to the user and let them decide.`,
+    true,
+  );
 }
 
 // mergeIntoResult: describe_project's own way to fold bridgeState into its

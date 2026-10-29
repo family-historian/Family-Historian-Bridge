@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Server now writes one stderr line per Bridge connection failure, version block and communication error (error class, host:port, tool, server version and path; no script text or tree data), so Claude Desktop's MCP log shows the cause (#169).
+- A generic "Bridge communication error" result now tells Claude not to retry and to report the message to the user (#169).
+- Bridge dialog shows "N changes applied this Session - not saved to the project" once a read-write call has committed (#165).
+
 ### Added
 
 - `fhBridge.getPersonEvents(ptrIndividual, opts)` returns everything a person is recorded as involved in (their own, family and witnessed facts, optionally close relatives' timeline facts) as one chronological list, with each fact's principals, notes, citations and media (#160).

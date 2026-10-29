@@ -375,7 +375,13 @@ return {
 export async function handleDescribeProject(
   deps: DescribeProjectDeps = defaultDeps,
 ): Promise<CallToolResult> {
-  const run = await checkVersionThenRunScript(deps, SERVER_VERSION, DESCRIBE_PROJECT_SCRIPT);
+  const run = await checkVersionThenRunScript(
+    deps,
+    SERVER_VERSION,
+    DESCRIBE_PROJECT_SCRIPT,
+    undefined,
+    "describe_project",
+  );
   if (run.block) return run.block;
 
   return interpretBridgeResponse(

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BridgeConnectionRefusedError } from "./bridgeClient.js";
 import {
   describeBridgeConnectionError,
@@ -23,6 +23,25 @@ describe("textResult", () => {
 });
 
 describe("describeBridgeConnectionError", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("tells Claude not to retry a generic error and to report the message to the user", () => {
+    const result = describeBridgeConnectionError(new Error("socket reset"));
+    const text = result.content[0]?.text ?? "";
+    expect(text).toContain("Bridge communication error: socket reset");
+    expect(text).toMatch(/do not retry/i);
+    expect(text).toMatch(/report .*to the user/i);
+  });
+
+  it("logs each failure to stderr with the tool name", () => {
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    describeBridgeConnectionError(new BridgeConnectionRefusedError(), "run_lua");
+    describeBridgeConnectionError(new Error("socket reset"), "describe_project");
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(String(write.mock.calls[0]?.[0])).toContain("tool=run_lua");
+    expect(String(write.mock.calls[1]?.[0])).toContain("tool=describe_project");
+  });
+
   it("gives a specific 'no Session running' message for BridgeConnectionRefusedError", () => {
     const result = describeBridgeConnectionError(new BridgeConnectionRefusedError());
     expect(result.isError).toBe(true);
@@ -32,12 +51,12 @@ describe("describeBridgeConnectionError", () => {
   it("wraps a generic Error's message", () => {
     const result = describeBridgeConnectionError(new Error("socket reset"));
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toBe("Bridge communication error: socket reset");
+    expect(result.content[0]?.text).toContain("Bridge communication error: socket reset");
   });
 
   it("stringifies a thrown non-Error value", () => {
     const result = describeBridgeConnectionError("plain string failure");
-    expect(result.content[0]?.text).toBe("Bridge communication error: plain string failure");
+    expect(result.content[0]?.text).toContain("Bridge communication error: plain string failure");
   });
 });
 

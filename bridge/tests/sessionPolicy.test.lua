@@ -53,6 +53,16 @@ check(sessionPolicy.shouldConfirmBeforeExit(true, 100, 110, 10) == false,
 check(sessionPolicy.shouldConfirmBeforeExit(true, 100, 111, 10) == false,
   'no confirm prompt once the last request is older than the confirm window')
 
+-- changesAppliedMarker
+
+check(sessionPolicy.changesAppliedMarker(0) == nil, 'no marker before any committed call')
+check(sessionPolicy.changesAppliedMarker(nil) == nil, 'no marker for a missing count')
+check(sessionPolicy.changesAppliedMarker(1) == '1 change applied this Session - not saved to the project',
+  'singular wording for one committed call')
+check(sessionPolicy.changesAppliedMarker(3) == '3 changes applied this Session - not saved to the project',
+  'plural wording for several committed calls')
+
+
 if failures > 0 then
   print(string.format('\n%d assertion(s) failed', failures))
   os.exit(1)
