@@ -143,7 +143,10 @@ local btnStop   = iup.button{title="Stop", padding="4x4", active="NO"}
 -- regardless of Session state.
 local btnExit   = iup.button{title="Exit", padding="4x4"}
 
-lblStatus.expand = "HORIZONTAL"
+-- Expands both ways, top-aligned: the label is sized once from its title at map time, so
+-- without vertical expansion later, longer text (the marker line) is clipped at the bottom.
+lblStatus.expand = "YES"
+lblStatus.alignment = "ALEFT:ATOP"
 -- Without an explicit expand this label maps at near-zero width and never grows to fit
 -- text set into it later -- IUP sizes a label once, at map time, from whatever title it
 -- had then.
@@ -159,10 +162,9 @@ local dlg = iup.dialog{
             iup.hbox{radAccessMode, iup.fill{}},
             title="Mode", padding="8x8", expand="HORIZONTAL"
         },
-        lblStatus,
-        -- Expanding filler: soaks up any extra height so the button row stays pinned to the
+        -- lblStatus soaks up any extra height, so the button row stays pinned to the
         -- bottom edge when the dialog is resized taller.
-        iup.fill{},
+        lblStatus,
         -- lblTimeLeft rides alongside the buttons rather than owning its own row -- it's
         -- blank most of the time this dialog is on screen, and a dedicated row costs a
         -- full row height even while empty.
