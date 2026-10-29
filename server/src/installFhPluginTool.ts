@@ -9,7 +9,7 @@ import {
   type RunLuaOnBridgeOptions,
 } from "./bridgeClient.js";
 import { describeBridgeConnectionError, interpretBridgeResponse } from "./bridgeResponse.js";
-import { SERVER_ROOT, SERVER_VERSION } from "./serverVersion.js";
+import { SERVER_VERSION } from "./serverVersion.js";
 import { appendVersionNote, checkBridgeVersion } from "./versionCheck.js";
 
 export interface InstallFhPluginDeps {
@@ -45,7 +45,7 @@ async function resolvePluginsFolder(
   const versionCheck = await checkBridgeVersion(
     deps.queryBridgeVersion,
     SERVER_VERSION,
-    SERVER_ROOT,
+    undefined,
     "install_fh_plugin",
   );
   if (versionCheck.block && versionCheck.reason === "version-mismatch") {

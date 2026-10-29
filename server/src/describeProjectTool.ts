@@ -376,11 +376,9 @@ export async function handleDescribeProject(
   deps: DescribeProjectDeps = defaultDeps,
 ): Promise<CallToolResult> {
   const run = await checkVersionThenRunScript(
-    deps,
+    { ...deps, tool: "describe_project" },
     SERVER_VERSION,
     DESCRIBE_PROJECT_SCRIPT,
-    undefined,
-    "describe_project",
   );
   if (run.block) return run.block;
 
